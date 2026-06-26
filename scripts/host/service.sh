@@ -4,6 +4,7 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 COMPOSE_FILE="${PROJECT_ROOT}/docker/axis_server/compose.yaml"
+ENV_FILE="${PROJECT_ROOT}/.env"
 SERVICE_NAME="ros-cia402-axis-server.service"
 LEGACY_SERVICE_NAME="ros2-cia402-pysoem.service"
 SERVICE_FILE="/etc/systemd/system/${SERVICE_NAME}"
@@ -21,6 +22,13 @@ require_root() {
 install_service() {
   require_root
 
+  if [[ ! -f "${ENV_FILE}" ]]; then
+    echo "Missing ${ENV_FILE}"
+    echo "Create it from .env.example, then edit AXIS_SERVER_BACKEND and PYSOEM_AXIS_COUNT."
+    echo "  cp .env.example .env"
+    exit 1
+  fi
+
   systemctl disable --now "${LEGACY_SERVICE_NAME}" 2>/dev/null || true
   rm -f "${LEGACY_SERVICE_FILE}"
 
@@ -37,8 +45,8 @@ RemainAfterExit=yes
 WorkingDirectory=${PROJECT_ROOT}
 ExecStartPre=-/usr/bin/docker rm -f ros_cia402_axis_server
 ExecStartPre=-/usr/bin/docker rm -f ros2_cia402_pysoem_host
-ExecStart=/usr/bin/docker compose -f ${COMPOSE_FILE} up -d axis_server
-ExecStop=/usr/bin/docker compose -f ${COMPOSE_FILE} down
+ExecStart=/usr/bin/docker compose -f ${COMPOSE_FILE} --env-file ${ENV_FILE} up -d axis_server
+ExecStop=/usr/bin/docker compose -f ${COMPOSE_FILE} --env-file ${ENV_FILE} down
 TimeoutStartSec=0
 
 [Install]
@@ -46,7 +54,7 @@ WantedBy=multi-user.target
 EOF
 
   cd "${PROJECT_ROOT}"
-  docker compose -f "${COMPOSE_FILE}" build axis_server
+  docker compose -f "${COMPOSE_FILE}" --env-file "${ENV_FILE}" build axis_server
   docker rm -f ros_cia402_axis_server 2>/dev/null || true
   docker rm -f ros2_cia402_pysoem_host 2>/dev/null || true
 

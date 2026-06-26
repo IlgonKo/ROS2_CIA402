@@ -46,6 +46,13 @@ bash scripts/host/adapters.sh
 bash scripts/host/start.sh
 ```
 
+`scripts/host/start.sh` starts the existing Axis Server image. Rebuild the
+server image only after changing the Axis Server Dockerfile or dependencies:
+
+```bash
+bash scripts/host/start.sh --build
+```
+
 Runtime settings are stored in `.env`:
 
 ```text
@@ -57,8 +64,19 @@ PYSOEM_CYCLE_TIME=0.01
 PYSOEM_CSP_COUNTS_PER_UNIT=1.0
 PYSOEM_DERIVED_VELOCITY_ALPHA=0.2
 PYSOEM_MOTION_MODE=pp
-PYSOEM_START_CONTROL_PANEL=1
 ```
+
+On Linux, `.env` is a hidden file. In the Files app, press `Ctrl+H` to show it,
+or check it from a terminal:
+
+```bash
+ls -la
+cat .env
+```
+
+The host scripts pass this file explicitly to Docker Compose with
+`--env-file .env`. When `scripts/host/start.sh` runs, it prints the backend,
+axis count, and interface values it read from `.env`.
 
 For a mock backend, use:
 
@@ -81,9 +99,11 @@ bash scripts/host/start.sh
 docker logs -f ros_cia402_axis_server
 ```
 
-The Dockerized PySOEM server uses host networking and privileged raw Ethernet
+The Dockerized Axis Server uses host networking and privileged raw Ethernet
 access so the container can send EtherCAT frames through the Ubuntu PC NIC.
-Its Docker assets live under `docker/axis_server/`.
+The Axis Server image is intentionally separate from the GUI image. The server
+image contains PySOEM and EtherCAT access only; the panel image contains Tk GUI
+dependencies and connects to the server through TCP.
 
 Linux local Axis Server control and visualization:
 
@@ -91,14 +111,26 @@ Linux local Axis Server control and visualization:
 bash scripts/host/panel.sh
 ```
 
-By default, `PYSOEM_START_CONTROL_PANEL=1` starts the Axis Server Control Panel
-automatically when the container starts. The manual script above can be used to
-open another panel later. The panel runs inside the `ros_cia402_axis_server`
-container, connects directly to the local Axis Server TCP port from `.env`, and
-does not require ROS2. It can send target positions, apply profile
-velocity/accel/decel limits, send alarm ack, run two-point repeat motion, and
-show position/velocity traces. It also provides manual CiA402 controlword
-commands after the server's automatic startup sequence has enabled the drive.
+The panel runs in a separate `axis_panel` container, connects directly to the
+local Axis Server TCP port from `.env`, and does not require ROS2. It can send
+target positions, apply profile velocity/accel/decel limits, send alarm ack,
+run two-point repeat motion, and show position/velocity traces. It also
+provides manual CiA402 controlword commands after the server's automatic
+startup sequence has enabled the drive.
+
+The panel container is intentionally short-lived: closing the GUI exits and
+removes the container. The image is not rebuilt every time. Rebuild it only
+after changing the panel Dockerfile or dependencies:
+
+```bash
+bash scripts/host/panel.sh --build
+```
+
+The Axis Server accepts multiple TCP clients. Command messages require command
+authority: a client must request authority from the panel before sending motion
+commands, manual controlwords, limit changes, mode changes, jogs, or alarm ack.
+If another client already holds authority, the server rejects the request and
+reports the current owner. Feedback remains broadcast to all connected clients.
 
 Motion modes:
 
@@ -144,9 +176,9 @@ shows and traces the drive's actual velocity feedback.
 `PYSOEM_DERIVED_VELOCITY_ALPHA` filters the derived velocity display. Smaller
 values are smoother; `1.0` disables filtering.
 
-The automatic panel needs an active Linux desktop/X11 session. If the boot
-service starts before a user logs in, the Axis Server still starts, but the GUI
-window may not appear until started manually.
+The panel needs an active Linux desktop/X11 session. The boot service starts
+only the Axis Server container; open the panel manually with
+`bash scripts/host/panel.sh` after logging into the desktop.
 
 To start the Dockerized PySOEM server automatically when the Ubuntu PC boots:
 
@@ -218,10 +250,179 @@ Windows PowerShell, only when the EtherCAT device is connected to Windows:
 ROS Docker bash:
 
 ```bash
-docker compose -f docker/ros/compose.yaml up -d --build ros2_dev
-docker exec -it ros2_cia402_dev bash
-bash scripts/ros/bridge.sh
-bash scripts/ros/panel.sh
+bash scripts/ros/start.sh --build
+bash scripts/ros/control_panel.sh --build
+```
+
+After the image exists, normal startup does not rebuild it:
+
+```bash
+bash scripts/ros/start.sh
+bash scripts/ros/control_panel.sh
+```
+
+`ros_bridge` runs in the background as an Axis Server TCP client.
+`ros_control_panel` runs only while the GUI is open. They use separate Docker
+images: the Bridge image has only ROS messaging/runtime dependencies, while the
+ROS Control Panel image also contains Tk/X11 GUI dependencies. The compose
+services are separated so the bridge can keep running when the panel is closed.
+
+MoveIt is prepared as a third ROS image so planning dependencies do not bloat
+the Bridge or Control Panel images:
+
+```bash
+bash scripts/ros/moveit.sh --build
+bash scripts/ros/moveit.sh --check
+```
+
+Build the local MoveIt test description package before opening the Setup
+Assistant. This installs `ros2_cia402_cartesian_description` into
+`install/moveit`, so the Setup Assistant can resolve the package through the
+ament index:
+
+```bash
+bash scripts/ros/moveit.sh --build-workspace
+```
+
+For the first 3-axis Cartesian test, load this xacro in the Setup Assistant:
+
+```text
+/workspace/ros_moveit/ros2_cia402_cartesian_description/urdf/cartesian_3axis.urdf.xacro
+```
+
+Then open the MoveIt Setup Assistant:
+
+```bash
+bash scripts/ros/moveit.sh --setup-assistant
+```
+
+The model uses prismatic joints named `X`, `Y`, and `Z`, matching the default
+Bridge joint names. To display the description package before using the Setup
+Assistant:
+
+```bash
+bash scripts/ros/moveit.sh --display-cartesian
+```
+
+If the Setup Assistant crashes while loading RViz preview in Windows Docker/X11,
+use the hand-written MoveIt config package instead:
+
+```bash
+bash scripts/ros/moveit.sh --build-workspace
+bash scripts/ros/moveit.sh --move-group
+```
+
+The MoveIt container uses the same compose project and `ROS_DOMAIN_ID` as the
+Bridge and ROS Control Panel. The ROS Bridge provides a MoveIt-compatible
+`FollowJointTrajectory` action server:
+
+```text
+/cia402_joint_trajectory_controller/follow_joint_trajectory
+```
+
+Action completion is controlled by `.env`:
+
+```text
+CIA402_ACTION_GOAL_TOLERANCE=0.01
+CIA402_ACTION_RESULT_TIMEOUT=0.0
+```
+
+`CIA402_ACTION_RESULT_TIMEOUT=0.0` means the Bridge waits until all axes are
+inside tolerance or the goal is canceled. Increase
+`CIA402_ACTION_GOAL_TOLERANCE` if the drive feedback unit is coarse or if small
+settling errors should still count as reached.
+
+Rebuild the Bridge image after action-server changes:
+
+```bash
+bash scripts/ros/start.sh --build
+```
+
+Then start `move_group` with the hand-written config:
+
+```bash
+bash scripts/ros/moveit.sh --build-workspace
+bash scripts/ros/moveit.sh --move-group
+```
+
+The ROS Bridge Axis Server endpoint is configured in `.env`:
+
+```text
+CIA402_AXIS_SERVER_HOST=192.168.0.12
+CIA402_AXIS_SERVER_PORT=15000
+CIA402_AUTO_REQUEST_AUTHORITY=1
+```
+
+Use `192.168.0.12` when the Axis Server runs on the Ubuntu EtherCAT host from a
+Windows ROS container. Use `127.0.0.1` when ROS and Axis Server containers run
+on the same Linux host with host networking.
+
+By default, the ROS Bridge requests Axis Server command authority automatically
+after connecting. Set `CIA402_AUTO_REQUEST_AUTHORITY=0` if command authority
+should be managed by another client such as the local Axis Panel.
+
+Standard ROS motion command:
+
+```text
+/joint_trajectory            trajectory_msgs/JointTrajectory, standard position command
+```
+
+Project-specific management topics:
+
+```text
+/motion_mode                  std_msgs/String, "pp" or JSON {"axis":0,"mode":"csp"}
+/controlword                  std_msgs/Int32MultiArray, [cw] or [axis, cw]
+/jog_position                 std_msgs/Float64MultiArray, [axis, distance]
+/alarm_ack                    std_msgs/Empty
+/command_authority/request    std_msgs/Empty
+/command_authority/release    std_msgs/Empty
+```
+
+The ROS Control Panel Command tab can select the command transport:
+
+```text
+Action Controller  -> /cia402_joint_trajectory_controller/follow_joint_trajectory
+Topic Debug        -> /joint_trajectory
+```
+
+`Action Controller` is the recommended default because it exercises the same
+`FollowJointTrajectory` interface that MoveIt uses. `Topic Debug` remains as a
+simple fire-and-forget compatibility path. Repeat motion follows the selected
+transport and supports 2 to 8 points. For example, with 3 points configured the
+panel repeats `A -> B -> C -> A`. The authority request/release buttons remain
+in the ROS Control Panel as project-specific control ownership management, not
+as motion commands.
+
+Axis limit/configuration values are exposed as ROS parameters on
+`/ros_command_bridge`, because max velocity, acceleration, deceleration, and
+Kp are configuration data rather than normal motion command data:
+
+```text
+axis_0.max_velocity
+axis_0.acceleration
+axis_0.deceleration
+axis_0.kp
+```
+
+The same parameter pattern is repeated for each axis. The legacy
+`/target_positions`, `/motion_limits`, and `/repeat_motion_command` topics are
+still accepted by the Bridge for compatibility with earlier test tools, but new
+integrations and the ROS Control Panel should prefer parameters and standard
+trajectory commands.
+
+Core ROS feedback topics:
+
+```text
+/joint_states
+/target_position_feedback
+/actual_positions
+/actual_velocities
+/statuswords
+/drive_diagnostics
+/motion_limits_feedback
+/motion_modes_feedback
+/command_authority/status
+/command_rejected
 ```
 
 ## Sync to Ubuntu EtherCAT host
@@ -258,7 +459,11 @@ The PySOEM Docker image runs Python with bytecode generation disabled so new
 axis_server/         Axis Server TCP API, backend selection, local panel, and host entrypoint
 diagnostics/         Adapter listing, PDO dump, and smoke-test utilities
 docker/axis_server/  Axis Server Dockerfile and compose file
-docker/ros/          ROS Dockerfile and compose file
+docker/axis_panel/   Axis Server Control Panel Dockerfile
+docker/ros/          ROS Compose file
+docker/ros_bridge/   ROS Bridge Dockerfile
+docker/ros_control_panel/ ROS Control Panel Dockerfile
+docker/ros_moveit/   ROS MoveIt Dockerfile
 scripts/host/        Ubuntu EtherCAT host commands: start, stop, panel, service, adapters
 scripts/ros/         ROS container launch helpers
 scripts/windows/     Windows sync helper and optional direct Axis Server launcher

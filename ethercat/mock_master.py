@@ -46,6 +46,13 @@ class MockMaster:
             generator.target_position = actual_position
             generator.command_velocity = 0.0
 
+    def sync_trajectory_to_actual_position(self, axis_index):
+        generator = self.trajectory_generators[axis_index]
+        actual_position = float(self.slaves[axis_index].txpdo.actual_position)
+        generator.command_position = actual_position
+        generator.target_position = actual_position
+        generator.command_velocity = 0.0
+
     def set_controlword_all(self, controlword):
         for slave in self.slaves:
             slave.rxpdo.controlword = controlword

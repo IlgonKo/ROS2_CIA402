@@ -11,7 +11,7 @@ from tkinter import messagebox
 from tkinter import ttk
 
 
-PROJECT_ROOT = Path(__file__).resolve().parents[2]
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
 GUI_PERIOD_MS = 50
 RECONNECT_PERIOD = 1.0
 HISTORY_SIZE = 500
@@ -110,7 +110,13 @@ class AxisServerClient:
             "motion_limits": [0.0 for _ in range(axis_count * 4)],
             "motion_mode": "pp",
             "diagnostics": [],
+            "command_authority": {
+                "owner": None,
+                "owned_by_this_client": False,
+                "available": True,
+            },
         }
+        self.last_notice = ""
         self.thread = threading.Thread(target=self._connection_loop, daemon=True)
 
     def start(self):
@@ -163,14 +169,22 @@ class AxisServerClient:
             message = json.loads(line)
             if message.get("type") == "feedback":
                 self._store_feedback(message)
+            elif message.get("type") in {"command_authority", "command_rejected"}:
+                self._store_notice(message)
 
     def _store_feedback(self, message):
         with self.lock:
             self.feedback = message
 
+    def _store_notice(self, message):
+        with self.lock:
+            self.last_notice = str(message.get("message", ""))
+
     def get_snapshot(self):
         with self.lock:
-            return self.connected, self.last_error, dict(self.feedback)
+            notice = self.last_notice
+            self.last_notice = ""
+            return self.connected, self.last_error, dict(self.feedback), notice
 
     def send_json(self, message):
         payload = (json.dumps(message) + "\n").encode("utf-8")
@@ -198,13 +212,15 @@ class AxisServerClient:
             }
         )
 
-    def send_motion_mode(self, mode):
-        self.send_json(
-            {
-                "type": "motion_mode",
-                "mode": str(mode).lower(),
-            }
-        )
+    def send_motion_mode(self, mode, axis_index=None):
+        message = {
+            "type": "motion_mode",
+            "mode": str(mode).lower(),
+        }
+        if axis_index is not None:
+            message["axis"] = int(axis_index)
+
+        self.send_json(message)
 
     def send_controlword(self, controlword, axis_index=None):
         message = {
@@ -227,6 +243,12 @@ class AxisServerClient:
 
     def send_alarm_ack(self):
         self.send_json({"type": "alarm_ack"})
+
+    def request_command_authority(self):
+        self.send_json({"type": "command_authority_request"})
+
+    def release_command_authority(self):
+        self.send_json({"type": "command_authority_release"})
 
 
 class TraceCanvas:
@@ -340,33 +362,43 @@ class AxisServerControlPanel:
         self.axis_count = len(axis_names)
         self.root = tk.Tk()
         self.root.title("Axis Server Control Panel")
-        self.root.geometry(f"1280x{620 + self.axis_count * 62}")
+        self.root.geometry("1180x820")
         self.root.protocol("WM_DELETE_WINDOW", self.close)
 
-        self.limit_vars = []
-        self.command_vars = []
-        self.target_vars = []
-        self.actual_position_vars = []
-        self.actual_velocity_vars = []
-        self.command_velocity_vars = []
-        self.statusword_vars = []
-        self.error_code_vars = []
-        self.error_register_vars = []
+        self.limit_vars = [tk.StringVar(value="0.0") for _ in range(4)]
+        self.command_var = tk.StringVar(value="0.0")
+        self.target_var = tk.StringVar(value="0.0")
+        self.actual_position_var = tk.StringVar(value="0.0")
+        self.actual_velocity_var = tk.StringVar(value="0.0")
+        self.command_velocity_var = tk.StringVar(value="0.0")
+        self.statusword_var = tk.StringVar(value="0x0000")
+        self.error_code_var = tk.StringVar(value="0x0000")
+        self.error_register_var = tk.StringVar(value="0x00")
         self.kp_entries = []
-        self.repeat_point_a_vars = []
-        self.repeat_point_b_vars = []
+        self.repeat_point_a_var = tk.StringVar(value="0.0")
+        self.repeat_point_b_var = tk.StringVar(value="0.0")
         self.repeat_period_var = tk.StringVar(value="2.0")
         self.selected_axis_var = tk.StringVar(value="0")
         self.selected_axis_label_var = tk.StringVar(value=self.axis_names[0])
         self.jog_step_var = tk.StringVar(value="100.0")
         self.connection_var = tk.StringVar(value="Disconnected")
+        self.command_authority_var = tk.StringVar(value="Authority: available")
+        self.command_authority_button_var = tk.StringVar(value="Request Authority")
         self.scale_var = tk.StringVar(value="CSP scale: 1.0 count/unit")
         self.motion_mode_var = tk.StringVar(value="pp")
         self.server_motion_mode = "pp"
         self.dirty_vars = set()
         self.statusword_lamps = []
+        self.latest_target_positions = [0.0 for _ in range(self.axis_count)]
+        self.latest_actual_positions = [0.0 for _ in range(self.axis_count)]
+        self.latest_motion_limits = [
+            [0.0, 0.0, 0.0, 0.0]
+            for _ in range(self.axis_count)
+        ]
+        self.latest_motion_modes = ["pp" for _ in range(self.axis_count)]
 
         self.repeat_enabled = False
+        self.repeat_axis_index = 0
         self.repeat_points = None
         self.repeat_index = 0
         self.repeat_wait_until = 0.0
@@ -401,6 +433,15 @@ class AxisServerControlPanel:
             text="Axis Server Control Panel",
             font=("TkDefaultFont", 12, "bold"),
         ).pack(side="left", padx=(14, 0))
+        ttk.Button(
+            header,
+            textvariable=self.command_authority_button_var,
+            command=self.toggle_command_authority,
+        ).pack(side="left", padx=(14, 4))
+        ttk.Label(header, textvariable=self.command_authority_var).pack(
+            side="left",
+            padx=4,
+        )
         ttk.Label(header, textvariable=self.connection_var).pack(side="right")
         ttk.Label(header, textvariable=self.scale_var).pack(side="right", padx=12)
 
@@ -454,102 +495,52 @@ class AxisServerControlPanel:
             text="CSV is available through the TCP protocol only.",
         ).pack(side="left", padx=12, pady=5)
 
-        table = ttk.Frame(outer)
-        table.pack(fill="x")
+        detail = ttk.LabelFrame(outer, text="Selected Axis Command / Feedback")
+        detail.pack(fill="x")
 
-        headers = [
-            "Axis",
-            "Max Velocity",
-            "Accel",
-            "Decel",
-            "Kp",
-            "Command Position",
-            "Target Position",
-            "Actual Position",
-            "Actual Velocity",
-            "Command Velocity",
-            "Statusword",
-            "Error",
-            "Err Reg",
+        fields = [
+            ("Selected Axis", self.selected_axis_label_var, "label"),
+            ("Max Velocity", self.limit_vars[0], "entry"),
+            ("Accel", self.limit_vars[1], "entry"),
+            ("Decel", self.limit_vars[2], "entry"),
+            ("Kp", self.limit_vars[3], "entry_kp"),
+            ("Command Position", self.command_var, "entry"),
+            ("Target Position", self.target_var, "label"),
+            ("Actual Position", self.actual_position_var, "label"),
+            ("Actual Velocity", self.actual_velocity_var, "label"),
+            ("Command Velocity", self.command_velocity_var, "label"),
+            ("Statusword", self.statusword_var, "label"),
+            ("Error", self.error_code_var, "label"),
+            ("Err Reg", self.error_register_var, "label"),
         ]
-        for column, header_text in enumerate(headers):
-            ttk.Label(table, text=header_text, anchor="center").grid(
-                row=0,
-                column=column,
-                padx=4,
-                pady=4,
-                sticky="ew",
-            )
-            table.columnconfigure(column, weight=1)
-
-        for row, axis_name in enumerate(self.axis_names, start=1):
-            ttk.Label(table, text=axis_name, anchor="center").grid(
+        for index, (label, var, kind) in enumerate(fields):
+            row = index // 4
+            column = (index % 4) * 2
+            ttk.Label(detail, text=label).grid(
                 row=row,
-                column=0,
-                padx=4,
-                pady=4,
-                sticky="ew",
+                column=column,
+                padx=5,
+                pady=5,
+                sticky="e",
             )
-
-            axis_limit_vars = []
-            for column in range(1, 5):
-                var = tk.StringVar(value="0.0")
-                entry = ttk.Entry(table, textvariable=var, justify="right", width=10)
-                entry.grid(row=row, column=column, padx=4, pady=4, sticky="ew")
+            if kind.startswith("entry"):
+                entry = ttk.Entry(detail, textvariable=var, justify="right", width=14)
                 entry.bind(
                     "<KeyRelease>",
                     lambda _event, watched_var=var: self.mark_dirty(watched_var),
                 )
-                axis_limit_vars.append(var)
-                if column == 4:
+                entry.grid(row=row, column=column + 1, padx=5, pady=5, sticky="ew")
+                if kind == "entry_kp":
                     self.kp_entries.append(entry)
-
-            command_var = tk.StringVar(value="0.0")
-            ttk.Entry(table, textvariable=command_var, justify="right", width=12).grid(
-                row=row,
-                column=5,
-                padx=4,
-                pady=4,
-                sticky="ew",
-            )
-
-            target_var = tk.StringVar(value="0.0")
-            actual_position_var = tk.StringVar(value="0.0")
-            actual_velocity_var = tk.StringVar(value="0.0")
-            statusword_var = tk.StringVar(value="0x0000")
-            error_code_var = tk.StringVar(value="0x0000")
-            error_register_var = tk.StringVar(value="0x00")
-
-            command_velocity_var = tk.StringVar(value="0.0")
-
-            for column, var in [
-                (6, target_var),
-                (7, actual_position_var),
-                (8, actual_velocity_var),
-                (9, command_velocity_var),
-                (10, statusword_var),
-                (11, error_code_var),
-                (12, error_register_var),
-            ]:
-                ttk.Label(table, textvariable=var, anchor="e").grid(
+            else:
+                ttk.Label(detail, textvariable=var, anchor="e", width=16).grid(
                     row=row,
-                    column=column,
-                    padx=4,
-                    pady=4,
+                    column=column + 1,
+                    padx=5,
+                    pady=5,
                     sticky="ew",
                 )
-
-            self.limit_vars.append(axis_limit_vars)
-            self.command_vars.append(command_var)
-            self.target_vars.append(target_var)
-            self.actual_position_vars.append(actual_position_var)
-            self.actual_velocity_vars.append(actual_velocity_var)
-            self.command_velocity_vars.append(command_velocity_var)
-            self.statusword_vars.append(statusword_var)
-            self.error_code_vars.append(error_code_var)
-            self.error_register_vars.append(error_register_var)
-            self.repeat_point_a_vars.append(tk.StringVar(value="0.0"))
-            self.repeat_point_b_vars.append(tk.StringVar(value="0.0"))
+            detail.columnconfigure(column + 1, weight=1)
         buttons = ttk.Frame(outer)
         buttons.pack(fill="x", pady=(12, 8))
         ttk.Button(buttons, text="Apply Limits", command=self.apply_limits).pack(
@@ -610,81 +601,109 @@ class AxisServerControlPanel:
 
         repeat = ttk.LabelFrame(outer, text="Repeat Motion")
         repeat.pack(fill="x", pady=(4, 10))
-        ttk.Label(repeat, text="Axis").grid(row=0, column=0, padx=5, pady=4)
-        ttk.Label(repeat, text="Point A").grid(row=0, column=1, padx=5, pady=4)
-        ttk.Label(repeat, text="Point B").grid(row=0, column=2, padx=5, pady=4)
-        for row, axis_name in enumerate(self.axis_names, start=1):
-            ttk.Label(repeat, text=axis_name).grid(row=row, column=0, padx=5, pady=4)
-            ttk.Entry(
-                repeat,
-                textvariable=self.repeat_point_a_vars[row - 1],
-                justify="right",
-                width=14,
-            ).grid(row=row, column=1, padx=5, pady=4)
-            ttk.Entry(
-                repeat,
-                textvariable=self.repeat_point_b_vars[row - 1],
-                justify="right",
-                width=14,
-            ).grid(row=row, column=2, padx=5, pady=4)
-
-        ttk.Label(repeat, text="Period (s)").grid(row=1, column=3, padx=5, pady=4)
+        ttk.Label(repeat, text="Selected Axis").grid(row=0, column=0, padx=5, pady=4)
+        ttk.Label(repeat, textvariable=self.selected_axis_label_var).grid(
+            row=0,
+            column=1,
+            padx=5,
+            pady=4,
+            sticky="w",
+        )
+        ttk.Label(repeat, text="Point A").grid(row=0, column=2, padx=5, pady=4)
+        ttk.Entry(
+            repeat,
+            textvariable=self.repeat_point_a_var,
+            justify="right",
+            width=14,
+        ).grid(row=0, column=3, padx=5, pady=4)
+        ttk.Label(repeat, text="Point B").grid(row=0, column=4, padx=5, pady=4)
+        ttk.Entry(
+            repeat,
+            textvariable=self.repeat_point_b_var,
+            justify="right",
+            width=14,
+        ).grid(row=0, column=5, padx=5, pady=4)
+        ttk.Label(repeat, text="Period (s)").grid(row=0, column=6, padx=5, pady=4)
         ttk.Entry(
             repeat,
             textvariable=self.repeat_period_var,
             justify="right",
             width=10,
-        ).grid(row=1, column=4, padx=5, pady=4)
+        ).grid(row=0, column=7, padx=5, pady=4)
         ttk.Button(repeat, text="Start Repeat", command=self.start_repeat).grid(
-            row=1,
-            column=5,
+            row=0,
+            column=8,
             padx=5,
             pady=4,
         )
         ttk.Button(repeat, text="Stop Repeat", command=self.stop_repeat).grid(
-            row=1,
-            column=6,
+            row=0,
+            column=9,
             padx=5,
             pady=4,
         )
 
         traces = ttk.Frame(outer)
         traces.pack(fill="both", expand=True)
-        self.position_trace = TraceCanvas(traces, self.axis_names, "Actual Position")
-        self.velocity_trace = TraceCanvas(traces, self.axis_names, "Actual Velocity", 3)
+        self.position_trace = TraceCanvas(traces, [self.axis_names[0]], "Actual Position")
+        self.velocity_trace = TraceCanvas(traces, [self.axis_names[0]], "Actual Velocity", 3)
 
     def mark_dirty(self, var):
         self.dirty_vars.add(id(var))
 
     def apply_limits(self):
-        limits = self.read_limit_values()
-        if limits is None:
+        axis_limits = self.read_selected_limit_values()
+        if axis_limits is None:
             return
+        axis_index = self.selected_axis()
+        limits = [list(values) for values in self.latest_motion_limits]
+        limits[axis_index] = axis_limits
         self.try_send(lambda: self.client.send_motion_limits(limits))
-        for axis_limit_vars in self.limit_vars:
-            for var in axis_limit_vars:
-                self.dirty_vars.discard(id(var))
+        for var in self.limit_vars:
+            self.dirty_vars.discard(id(var))
 
     def send_command(self):
-        targets = self.read_command_values()
-        if targets is None:
+        target_position = self.read_selected_command_value()
+        if target_position is None:
             return
+        axis_index = self.selected_axis()
+        targets = list(self.latest_target_positions)
+        targets[axis_index] = target_position
         self.try_send(lambda: self.client.send_target_positions(targets))
 
     def apply_limits_and_send(self):
-        limits = self.read_limit_values()
-        targets = self.read_command_values()
-        if limits is None or targets is None:
+        axis_limits = self.read_selected_limit_values()
+        target_position = self.read_selected_command_value()
+        if axis_limits is None or target_position is None:
             return
+        axis_index = self.selected_axis()
+        limits = [list(values) for values in self.latest_motion_limits]
+        targets = list(self.latest_target_positions)
+        limits[axis_index] = axis_limits
+        targets[axis_index] = target_position
         self.try_send(lambda: self.client.send_motion_limits(limits))
         self.try_send(lambda: self.client.send_target_positions(targets))
 
     def alarm_ack(self):
         self.try_send(self.client.send_alarm_ack)
 
+    def toggle_command_authority(self):
+        _, _, feedback, _ = self.client.get_snapshot()
+        authority = feedback.get("command_authority", {})
+        if authority.get("owned_by_this_client", False):
+            self.try_send(self.client.release_command_authority)
+        else:
+            self.try_send(self.client.request_command_authority)
+
     def update_selected_axis_label(self):
+        self.stop_repeat()
+        self.position_trace.history = [[]]
+        self.velocity_trace.history = [[]]
         axis_index = self.selected_axis()
         self.selected_axis_label_var.set(self.axis_names[axis_index])
+        self.position_trace.axis_names = [self.axis_names[axis_index]]
+        self.velocity_trace.axis_names = [self.axis_names[axis_index]]
+        self.dirty_vars.clear()
 
     def update_statusword_lamps(self, statusword):
         for lamp, (bit, _label) in zip(self.statusword_lamps, STATUSWORD_BITS):
@@ -745,10 +764,11 @@ class AxisServerControlPanel:
     def apply_motion_mode(self):
         mode = self.motion_mode_var.get()
         if mode == "csv":
-            self.motion_mode_var.set(self.server_motion_mode)
+            self.motion_mode_var.set(self.latest_motion_modes[self.selected_axis()])
             return
 
-        self.try_send(lambda: self.client.send_motion_mode(mode))
+        axis_index = self.selected_axis()
+        self.try_send(lambda: self.client.send_motion_mode(mode, axis_index))
 
     def start_repeat(self):
         repeat_config = self.read_repeat_values()
@@ -756,6 +776,7 @@ class AxisServerControlPanel:
             return
         point_a, point_b, period = repeat_config
         self.repeat_enabled = True
+        self.repeat_axis_index = self.selected_axis()
         self.repeat_points = [point_a, point_b]
         self.repeat_period = period
         self.repeat_index = 0
@@ -768,12 +789,9 @@ class AxisServerControlPanel:
         self.last_sent_repeat_target = None
         self.repeat_waiting_to_send = False
 
-    def read_limit_values(self):
+    def read_selected_limit_values(self):
         try:
-            return [
-                [float(var.get()) for var in axis_limit_vars]
-                for axis_limit_vars in self.limit_vars
-            ]
+            return [float(var.get()) for var in self.limit_vars]
         except ValueError:
             messagebox.showerror(
                 "Invalid Input",
@@ -781,28 +799,25 @@ class AxisServerControlPanel:
             )
             return None
 
-    def read_command_values(self):
+    def read_selected_command_value(self):
         try:
-            return [
-                float(var.get())
-                for var in self.command_vars
-            ]
+            return float(self.command_var.get())
         except ValueError:
             messagebox.showerror(
                 "Invalid Input",
-                "Command Position must be numeric values.",
+                "Command Position must be numeric.",
             )
             return None
 
     def read_repeat_values(self):
         try:
-            point_a = [float(var.get()) for var in self.repeat_point_a_vars]
-            point_b = [float(var.get()) for var in self.repeat_point_b_vars]
+            point_a = float(self.repeat_point_a_var.get())
+            point_b = float(self.repeat_point_b_var.get())
             period = float(self.repeat_period_var.get())
         except ValueError:
             messagebox.showerror(
                 "Invalid Input",
-                "Repeat points and period must be numeric values.",
+                "Repeat points and period must be numeric.",
             )
             return None
         if period <= 0:
@@ -820,12 +835,14 @@ class AxisServerControlPanel:
             messagebox.showerror("Send Failed", str(exc))
 
     def update_gui(self):
-        connected, error, feedback = self.client.get_snapshot()
+        connected, error, feedback, notice = self.client.get_snapshot()
         self.connection_var.set(
             f"Connected {self.client.host}:{self.client.port}"
             if connected
             else f"Disconnected {error}"
         )
+        if notice:
+            messagebox.showinfo("Axis Server", notice)
 
         target_positions = self._values(feedback, "target_positions", 0.0)
         actual_positions = self._values(feedback, "actual_positions", 0.0)
@@ -834,45 +851,67 @@ class AxisServerControlPanel:
         statuswords = self._values(feedback, "statuswords", 0)
         diagnostics = feedback.get("diagnostics", [])
         motion_mode = str(feedback.get("motion_mode", self.server_motion_mode)).lower()
+        motion_modes = [
+            str(value).lower()
+            for value in feedback.get("motion_modes", [])
+        ]
+        while len(motion_modes) < self.axis_count:
+            motion_modes.append(motion_mode)
         csp_counts_per_unit = float(feedback.get("csp_counts_per_unit", 1.0))
         motion_limits = self._motion_limits(feedback)
+        self.latest_target_positions = target_positions
+        self.latest_actual_positions = actual_positions
+        self.latest_motion_limits = motion_limits
+        self.latest_motion_modes = motion_modes[:self.axis_count]
+        self.update_command_authority(feedback.get("command_authority", {}))
         self.scale_var.set(f"CSP scale: {csp_counts_per_unit:g} count/unit")
         selected_axis = self.selected_axis()
         self.update_statusword_lamps(int(statuswords[selected_axis]))
 
-        if motion_mode in {"pp", "csp", "csv"}:
-            self.server_motion_mode = motion_mode
-            if self.motion_mode_var.get() != motion_mode:
-                self.motion_mode_var.set(motion_mode)
+        selected_motion_mode = self.latest_motion_modes[selected_axis]
+        if selected_motion_mode in {"pp", "csp", "csv"}:
+            self.server_motion_mode = selected_motion_mode
+            if self.motion_mode_var.get() != selected_motion_mode:
+                self.motion_mode_var.set(selected_motion_mode)
             self.update_mode_dependent_controls()
 
-        for index in range(self.axis_count):
-            self.target_vars[index].set(f"{target_positions[index]:.3f}")
-            self.actual_position_vars[index].set(f"{actual_positions[index]:.3f}")
-            self.actual_velocity_vars[index].set(f"{actual_velocities[index]:.3f}")
-            self.command_velocity_vars[index].set(f"{command_velocities[index]:.3f}")
-            self.statusword_vars[index].set(
-                self.statusword_state_text(int(statuswords[index]))
-            )
+        self.target_var.set(f"{target_positions[selected_axis]:.3f}")
+        self.actual_position_var.set(f"{actual_positions[selected_axis]:.3f}")
+        self.actual_velocity_var.set(f"{actual_velocities[selected_axis]:.3f}")
+        self.command_velocity_var.set(f"{command_velocities[selected_axis]:.3f}")
+        self.statusword_var.set(
+            self.statusword_state_text(int(statuswords[selected_axis]))
+        )
 
-            diag = diagnostics[index] if index < len(diagnostics) else {}
-            self.error_code_vars[index].set(self._format_diag(diag, "error_code", 4))
-            self.error_register_vars[index].set(
-                self._format_diag(diag, "error_register", 2)
-            )
+        diag = diagnostics[selected_axis] if selected_axis < len(diagnostics) else {}
+        self.error_code_var.set(self._format_diag(diag, "error_code", 4))
+        self.error_register_var.set(self._format_diag(diag, "error_register", 2))
 
-            for limit_index in range(4):
-                var = self.limit_vars[index][limit_index]
-                if id(var) not in self.dirty_vars:
-                    var.set(f"{motion_limits[index][limit_index]:.3f}")
+        for limit_index in range(4):
+            var = self.limit_vars[limit_index]
+            if id(var) not in self.dirty_vars:
+                var.set(f"{motion_limits[selected_axis][limit_index]:.3f}")
 
-        self.position_trace.add_sample(actual_positions)
-        self.velocity_trace.add_sample(actual_velocities)
+        self.position_trace.add_sample([actual_positions[selected_axis]])
+        self.velocity_trace.add_sample([actual_velocities[selected_axis]])
         self.position_trace.draw()
         self.velocity_trace.draw()
 
         self.update_repeat(actual_positions)
         self.root.after(GUI_PERIOD_MS, self.update_gui)
+
+    def update_command_authority(self, authority):
+        owner = authority.get("owner", None)
+        owned_by_this_client = bool(authority.get("owned_by_this_client", False))
+        if owned_by_this_client:
+            self.command_authority_var.set("Authority: owned by this panel")
+            self.command_authority_button_var.set("Release Authority")
+        elif owner is None:
+            self.command_authority_var.set("Authority: available")
+            self.command_authority_button_var.set("Request Authority")
+        else:
+            self.command_authority_var.set(f"Authority: held by client {owner}")
+            self.command_authority_button_var.set("Request Authority")
 
     def update_mode_dependent_controls(self):
         kp_state = "normal" if self.server_motion_mode == "csp" else "disabled"
@@ -884,19 +923,22 @@ class AxisServerControlPanel:
             return
 
         now = time.monotonic()
-        target = self.repeat_points[self.repeat_index]
+        axis_index = self.repeat_axis_index
+        target = self._target_vector_for_axis(
+            axis_index,
+            self.repeat_points[self.repeat_index],
+        )
         if self.last_sent_repeat_target is None:
             self.try_send(lambda: self.client.send_target_positions(target))
-            self.last_sent_repeat_target = list(target)
+            self.last_sent_repeat_target = target[axis_index]
             return
 
         if self.repeat_waiting_to_send or now < self.repeat_wait_until:
             return
 
-        reached = all(
-            abs(actual_positions[index] - self.last_sent_repeat_target[index])
+        reached = (
+            abs(actual_positions[axis_index] - self.last_sent_repeat_target)
             <= REPEAT_TOLERANCE
-            for index in range(self.axis_count)
         )
         if not reached:
             return
@@ -907,15 +949,21 @@ class AxisServerControlPanel:
         self.repeat_waiting_to_send = True
         self.root.after(
             int(self.repeat_period * 1000),
-            lambda: self._send_repeat_target(next_target),
+            lambda: self._send_repeat_target(axis_index, next_target),
         )
 
-    def _send_repeat_target(self, target):
+    def _send_repeat_target(self, axis_index, target_position):
         if not self.repeat_enabled:
             return
+        target = self._target_vector_for_axis(axis_index, target_position)
         self.try_send(lambda: self.client.send_target_positions(target))
-        self.last_sent_repeat_target = list(target)
+        self.last_sent_repeat_target = target_position
         self.repeat_waiting_to_send = False
+
+    def _target_vector_for_axis(self, axis_index, target_position):
+        targets = list(self.latest_target_positions)
+        targets[axis_index] = float(target_position)
+        return targets
 
     def _values(self, feedback, key, default):
         values = list(feedback.get(key, []))

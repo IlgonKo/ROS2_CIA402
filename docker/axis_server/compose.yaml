@@ -14,12 +14,10 @@ services:
 
     volumes:
       - ../..:/workspace
-      - /tmp/.X11-unix:/tmp/.X11-unix:rw
 
     environment:
       PYTHONPATH: /workspace
       PYTHONDONTWRITEBYTECODE: "1"
-      DISPLAY: ${DISPLAY:-:0}
       AXIS_SERVER_BACKEND: ${AXIS_SERVER_BACKEND:-pysoem}
       PYSOEM_INTERFACE: ${PYSOEM_INTERFACE:-enp1s0}
       PYSOEM_AXIS_COUNT: ${PYSOEM_AXIS_COUNT:-1}
@@ -28,10 +26,41 @@ services:
       PYSOEM_CSP_COUNTS_PER_UNIT: ${PYSOEM_CSP_COUNTS_PER_UNIT:-1.0}
       PYSOEM_DERIVED_VELOCITY_ALPHA: ${PYSOEM_DERIVED_VELOCITY_ALPHA:-0.2}
       PYSOEM_MOTION_MODE: ${PYSOEM_MOTION_MODE:-pp}
-      PYSOEM_START_CONTROL_PANEL: ${PYSOEM_START_CONTROL_PANEL:-1}
 
     command:
       - bash
-      - /workspace/axis_server/start_with_panel.sh
+      - /workspace/axis_server/start_server.sh
 
     restart: unless-stopped
+
+  axis_panel:
+    build:
+      context: ../..
+      dockerfile: docker/axis_panel/Dockerfile
+
+    image: ros2_cia402_axis_panel:dev
+
+    network_mode: host
+
+    working_dir: /workspace
+
+    volumes:
+      - ../..:/workspace
+      - /tmp/.X11-unix:/tmp/.X11-unix:rw
+
+    environment:
+      PYTHONPATH: /workspace
+      PYTHONDONTWRITEBYTECODE: "1"
+      DISPLAY: ${DISPLAY:-:0}
+      PYSOEM_SERVER_HOST: ${PYSOEM_SERVER_HOST:-127.0.0.1}
+      PYSOEM_AXIS_SERVER_PORT: ${PYSOEM_AXIS_SERVER_PORT:-15000}
+      PYSOEM_AXIS_COUNT: ${PYSOEM_AXIS_COUNT:-1}
+      PYSOEM_AXIS_NAMES: ${PYSOEM_AXIS_NAMES:-}
+
+    command:
+      - python3
+      - -B
+      - /workspace/axis_server/control_panel.py
+
+    profiles:
+      - panel

@@ -1,0 +1,124 @@
+<?xml version="1.0"?>
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro" name="ros2_cia402_cartesian_3axis">
+  <xacro:property name="rail_length" value="1.2"/>
+  <xacro:property name="rail_thickness" value="0.04"/>
+  <xacro:property name="carriage_size" value="0.08"/>
+  <xacro:property name="tool_size" value="0.05"/>
+  <xacro:property name="travel_min" value="-0.5"/>
+  <xacro:property name="travel_max" value="0.5"/>
+  <xacro:property name="velocity_limit" value="0.2"/>
+  <xacro:property name="effort_limit" value="100.0"/>
+
+  <material name="base_gray">
+    <color rgba="0.35 0.37 0.39 1.0"/>
+  </material>
+  <material name="x_red">
+    <color rgba="0.80 0.12 0.12 1.0"/>
+  </material>
+  <material name="y_green">
+    <color rgba="0.12 0.55 0.22 1.0"/>
+  </material>
+  <material name="tool_dark">
+    <color rgba="0.08 0.08 0.10 1.0"/>
+  </material>
+
+  <xacro:macro name="simple_inertial" params="mass">
+    <inertial>
+      <mass value="${mass}"/>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <inertia ixx="0.001" ixy="0.0" ixz="0.0" iyy="0.001" iyz="0.0" izz="0.001"/>
+    </inertial>
+  </xacro:macro>
+
+  <link name="base_link">
+    <visual>
+      <origin xyz="0 0 -0.04" rpy="0 0 0"/>
+      <geometry>
+        <box size="${rail_length} 0.08 0.04"/>
+      </geometry>
+      <material name="base_gray"/>
+    </visual>
+    <collision>
+      <origin xyz="0 0 -0.04" rpy="0 0 0"/>
+      <geometry>
+        <box size="${rail_length} 0.08 0.04"/>
+      </geometry>
+    </collision>
+    <xacro:simple_inertial mass="5.0"/>
+  </link>
+
+  <link name="x_link">
+    <visual>
+      <origin xyz="0 0 0.02" rpy="0 0 0"/>
+      <geometry>
+        <box size="${carriage_size} ${rail_length} ${rail_thickness}"/>
+      </geometry>
+      <material name="x_red"/>
+    </visual>
+    <collision>
+      <origin xyz="0 0 0.02" rpy="0 0 0"/>
+      <geometry>
+        <box size="${carriage_size} ${rail_length} ${rail_thickness}"/>
+      </geometry>
+    </collision>
+    <xacro:simple_inertial mass="2.0"/>
+  </link>
+
+  <joint name="X" type="prismatic">
+    <parent link="base_link"/>
+    <child link="x_link"/>
+    <origin xyz="0 0 0" rpy="0 0 0"/>
+    <axis xyz="1 0 0"/>
+    <limit lower="${travel_min}" upper="${travel_max}" effort="${effort_limit}" velocity="${velocity_limit}"/>
+  </joint>
+
+  <link name="y_link">
+    <visual>
+      <origin xyz="0 0 0.10" rpy="0 0 0"/>
+      <geometry>
+        <box size="${carriage_size} ${carriage_size} ${rail_length}"/>
+      </geometry>
+      <material name="y_green"/>
+    </visual>
+    <collision>
+      <origin xyz="0 0 0.10" rpy="0 0 0"/>
+      <geometry>
+        <box size="${carriage_size} ${carriage_size} ${rail_length}"/>
+      </geometry>
+    </collision>
+    <xacro:simple_inertial mass="1.5"/>
+  </link>
+
+  <joint name="Y" type="prismatic">
+    <parent link="x_link"/>
+    <child link="y_link"/>
+    <origin xyz="0 0 0.06" rpy="0 0 0"/>
+    <axis xyz="0 1 0"/>
+    <limit lower="${travel_min}" upper="${travel_max}" effort="${effort_limit}" velocity="${velocity_limit}"/>
+  </joint>
+
+  <link name="tool0">
+    <visual>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry>
+        <box size="${tool_size} ${tool_size} ${tool_size}"/>
+      </geometry>
+      <material name="tool_dark"/>
+    </visual>
+    <collision>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry>
+        <box size="${tool_size} ${tool_size} ${tool_size}"/>
+      </geometry>
+    </collision>
+    <xacro:simple_inertial mass="0.5"/>
+  </link>
+
+  <joint name="Z" type="prismatic">
+    <parent link="y_link"/>
+    <child link="tool0"/>
+    <origin xyz="0 0 0.10" rpy="0 0 0"/>
+    <axis xyz="0 0 1"/>
+    <limit lower="${travel_min}" upper="${travel_max}" effort="${effort_limit}" velocity="${velocity_limit}"/>
+  </joint>
+</robot>

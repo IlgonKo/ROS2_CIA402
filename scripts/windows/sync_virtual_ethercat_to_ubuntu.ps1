@@ -40,6 +40,9 @@ $ExcludePatterns = @(
     ".pytest_cache",
     ".mypy_cache",
     ".ruff_cache",
+    "build",
+    "install",
+    "log",
     ".venv",
     "venv",
     ".git"
@@ -126,7 +129,7 @@ $pending = $false
 
 $action = {
     $path = $Event.SourceEventArgs.FullPath
-    if ($path -match "\\(__pycache__|\.git|\.venv|venv)(\\|$)") {
+    if ($path -match "\\(__pycache__|\.git|\.venv|venv|build|install|log)(\\|$)") {
         return
     }
 

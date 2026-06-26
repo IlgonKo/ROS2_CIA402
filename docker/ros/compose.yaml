@@ -1,10 +1,118 @@
 services:
+  ros_bridge:
+    build:
+      context: ../..
+      dockerfile: docker/ros_bridge/Dockerfile
+
+    image: ros2_cia402_bridge:dev
+    container_name: ros2_cia402_bridge
+
+    working_dir: /workspace
+
+    volumes:
+      - ../..:/workspace
+
+    environment:
+      ROS_DOMAIN_ID: "10"
+      PYTHONPATH: "/workspace"
+      RCUTILS_COLORIZED_OUTPUT: "1"
+      CIA402_AXIS_SERVER_HOST: ${CIA402_AXIS_SERVER_HOST:-192.168.0.12}
+      CIA402_AXIS_SERVER_PORT: ${CIA402_AXIS_SERVER_PORT:-15000}
+      CIA402_AUTO_REQUEST_AUTHORITY: ${CIA402_AUTO_REQUEST_AUTHORITY:-1}
+      CIA402_ACTION_GOAL_TOLERANCE: ${CIA402_ACTION_GOAL_TOLERANCE:-0.01}
+      CIA402_ACTION_RESULT_TIMEOUT: ${CIA402_ACTION_RESULT_TIMEOUT:-10.0}
+      PYSOEM_AXIS_COUNT: ${PYSOEM_AXIS_COUNT:-1}
+      ROS2_CIA402_AXIS_NAMES: ${ROS2_CIA402_AXIS_NAMES:-}
+
+    command:
+      - bash
+      - /workspace/scripts/ros/bridge.sh
+
+    restart: unless-stopped
+
+  ros_control_panel:
+    build:
+      context: ../..
+      dockerfile: docker/ros_control_panel/Dockerfile
+
+    image: ros2_cia402_control_panel:dev
+    container_name: ros2_cia402_control_panel
+
+    stdin_open: true
+    tty: true
+
+    working_dir: /workspace
+
+    volumes:
+      - ../..:/workspace
+
+    environment:
+      ROS_DOMAIN_ID: "10"
+      PYTHONPATH: "/workspace"
+      RCUTILS_COLORIZED_OUTPUT: "1"
+      PYSOEM_AXIS_COUNT: ${PYSOEM_AXIS_COUNT:-1}
+      ROS2_CIA402_AXIS_NAMES: ${ROS2_CIA402_AXIS_NAMES:-}
+
+      DISPLAY: "host.docker.internal:0.0"
+      XDG_RUNTIME_DIR: "/tmp/runtime-root"
+      QT_QPA_PLATFORM: "xcb"
+      QT_X11_NO_MITSHM: "1"
+      LIBGL_ALWAYS_INDIRECT: "1"
+
+    command:
+      - bash
+      - /workspace/scripts/ros/control_panel_entrypoint.sh
+
+    profiles:
+      - panel
+
+  ros_moveit:
+    build:
+      context: ../..
+      dockerfile: docker/ros_moveit/Dockerfile
+
+    image: ros2_cia402_moveit:dev
+    container_name: ros2_cia402_moveit
+
+    stdin_open: true
+    tty: true
+
+    working_dir: /workspace
+
+    volumes:
+      - ../..:/workspace
+
+    environment:
+      ROS_DOMAIN_ID: "10"
+      PYTHONPATH: "/workspace"
+      RCUTILS_COLORIZED_OUTPUT: "1"
+      PYSOEM_AXIS_COUNT: ${PYSOEM_AXIS_COUNT:-1}
+      ROS2_CIA402_AXIS_NAMES: ${ROS2_CIA402_AXIS_NAMES:-}
+
+      DISPLAY: "host.docker.internal:0.0"
+      XDG_RUNTIME_DIR: "/tmp/runtime-root"
+      QT_QPA_PLATFORM: "xcb"
+      QT_OPENGL: "software"
+      QT_X11_NO_MITSHM: "1"
+      LIBGL_ALWAYS_INDIRECT: "0"
+      LIBGL_ALWAYS_SOFTWARE: "1"
+      LIBGL_DRI3_DISABLE: "1"
+      MESA_GL_VERSION_OVERRIDE: "3.3"
+      MESA_GLSL_VERSION_OVERRIDE: "330"
+      OGRE_RTT_MODE: "Copy"
+      QT_XCB_GL_INTEGRATION: "none"
+
+    command: /bin/bash
+
+    profiles:
+      - moveit
+
   ros2_dev:
     build:
       context: ../..
-      dockerfile: docker/ros/Dockerfile
+      dockerfile: docker/ros_control_panel/Dockerfile
 
-    image: ros2_cia402_jazzy:dev
+    image: ros2_cia402_control_panel:dev
     container_name: ros2_cia402_dev
 
     stdin_open: true
@@ -19,6 +127,8 @@ services:
       ROS_DOMAIN_ID: "10"
       PYTHONPATH: "/workspace"
       RCUTILS_COLORIZED_OUTPUT: "1"
+      PYSOEM_AXIS_COUNT: ${PYSOEM_AXIS_COUNT:-1}
+      ROS2_CIA402_AXIS_NAMES: ${ROS2_CIA402_AXIS_NAMES:-}
 
       DISPLAY: "host.docker.internal:0.0"
       QT_QPA_PLATFORM: "xcb"
@@ -26,3 +136,5 @@ services:
       LIBGL_ALWAYS_INDIRECT: "1"
 
     command: /bin/bash
+    profiles:
+      - dev

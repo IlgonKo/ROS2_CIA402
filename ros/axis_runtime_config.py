@@ -1,4 +1,8 @@
 import os
+from pathlib import Path
+
+
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
 
 
 DEFAULT_AXIS_CONFIGS = [
@@ -26,19 +30,30 @@ DEFAULT_AXIS_CONFIGS = [
 ]
 
 
-def get_master_backend():
-    backend = os.environ.get("ROS2_CIA402_MASTER")
-    if backend:
-        return backend.strip().lower()
+def load_env_file(path):
+    values = {}
+    if not path.exists():
+        return values
 
-    if get_pysoem_interface():
-        return "pysoem"
+    for line in path.read_text(encoding="utf-8").splitlines():
+        stripped = line.strip()
+        if not stripped or stripped.startswith("#") or "=" not in stripped:
+            continue
+        key, value = stripped.split("=", 1)
+        values[key.strip()] = value.strip().strip('"').strip("'")
 
-    return "mock"
+    return values
+
+
+def runtime_env():
+    values = load_env_file(PROJECT_ROOT / ".env")
+    values.update(os.environ)
+    return values
 
 
 def get_axis_names():
-    names = os.environ.get("ROS2_CIA402_AXIS_NAMES")
+    env = runtime_env()
+    names = env.get("ROS2_CIA402_AXIS_NAMES")
     if names:
         return [
             name.strip()
@@ -46,12 +61,17 @@ def get_axis_names():
             if name.strip()
         ]
 
-    if get_master_backend() == "pysoem":
-        return ["X"]
-
-    return [
+    axis_count = int(env.get("PYSOEM_AXIS_COUNT", "3"))
+    base_names = [
         config["name"]
         for config in DEFAULT_AXIS_CONFIGS
+    ]
+    if axis_count <= len(base_names):
+        return base_names[:axis_count]
+
+    return base_names + [
+        f"A{index + 1}"
+        for index in range(len(base_names), axis_count)
     ]
 
 
@@ -82,4 +102,5 @@ def get_axis_count():
 
 
 def get_pysoem_interface():
-    return os.environ.get("ROS2_CIA402_INTERFACE", "").strip()
+    env = runtime_env()
+    return env.get("ROS2_CIA402_INTERFACE", env.get("PYSOEM_INTERFACE", "")).strip()

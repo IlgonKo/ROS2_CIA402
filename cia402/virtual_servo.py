@@ -16,6 +16,9 @@ class VirtualCiA402Servo(ServoInterface):
         self.kp = 5.0
         self.target_reached = False
         self.window_counter = 0
+        self.previous_controlword = 0
+        self.pp_active = False
+        self.pp_target_position = self.actual_position
 
         #self.init_object_dictionary()
 
@@ -32,7 +35,11 @@ class VirtualCiA402Servo(ServoInterface):
         self.process_cycle()
 
     def set_mode(self,mode):
-        self.od.write(0x6060,int(mode))
+        next_mode = int(mode)
+        current_mode = int(self.od.read(0x6060))
+        if next_mode != current_mode:
+            self.stop_at_current_position()
+        self.od.write(0x6060,next_mode)
 
     def set_target_position(self, position):        
         current_target = self.od.read(0x607A)
@@ -74,6 +81,16 @@ class VirtualCiA402Servo(ServoInterface):
     def is_target_reached(self):
         return self.target_reached
 
+    def stop_at_current_position(self):
+        self.actual_velocity = 0.0
+        self.pp_active = False
+        self.pp_target_position = self.actual_position
+        self.od.write(0x607A, self.actual_position)
+        self.od.write(0x6064, self.actual_position)
+        self.od.write(0x606C, self.actual_velocity)
+        self.window_counter = 0
+        self.target_reached = True
+
     # ---------------------------------
     # CiA402
     # ---------------------------------
@@ -107,8 +124,12 @@ class VirtualCiA402Servo(ServoInterface):
 
     def process_cycle(self):
         controlword = self.od.read(0x6040)
+        was_operation_enabled = self.sm.get_statusword() == 0x0027
 
         self.sm.process(controlword)
+        is_operation_enabled = self.sm.get_statusword() == 0x0027
+        if was_operation_enabled and not is_operation_enabled:
+            self.stop_at_current_position()
 
         mode = self.od.read(0x6060)
 
@@ -125,13 +146,114 @@ class VirtualCiA402Servo(ServoInterface):
             statusword |= (1 << 10)
 
         self.od.write(0x6041, statusword)
+        self.previous_controlword = controlword
+
+    # ---------------------------------
+    # PP
+    # ---------------------------------
+
+    def process_pp(self):
+        if self.sm.get_statusword() != 0x0027:
+            return
+
+        controlword = self.od.read(0x6040)
+        new_setpoint = (
+            bool(controlword & (1 << 4)) and
+            not bool(self.previous_controlword & (1 << 4))
+        )
+
+        if new_setpoint:
+            self.pp_target_position = self.od.read(0x607A)
+            self.pp_active = True
+            self.target_reached = False
+            self.window_counter = 0
+
+        if not self.pp_active:
+            self._decelerate_to_stop()
+            self._write_actual_feedback()
+            self.update_target_reached()
+            return
+
+        target = self.pp_target_position
+        max_vel = abs(float(self.od.read(0x607F)))
+        accel = abs(float(self.od.read(0x6083)))
+        decel = abs(float(self.od.read(0x6084)))
+        window = abs(float(self.od.read(0x6067)))
+        dt = self.cycle_time
+
+        error = target - self.actual_position
+        distance = abs(error)
+        if distance <= window and abs(self.actual_velocity) <= max(decel * dt, 1e-9):
+            self.actual_position = target
+            self.actual_velocity = 0.0
+            self.pp_active = False
+            self._write_actual_feedback()
+            self.update_target_reached()
+            return
+
+        direction = 1.0 if error >= 0.0 else -1.0
+        velocity_toward_target = self.actual_velocity * direction
+        stopping_distance = (
+            max(velocity_toward_target, 0.0) ** 2 / (2.0 * decel)
+            if decel > 0.0
+            else 0.0
+        )
+
+        if velocity_toward_target < 0.0:
+            desired_velocity = 0.0
+            velocity_limit = decel
+        elif distance <= stopping_distance:
+            desired_velocity = 0.0
+            velocity_limit = decel
+        else:
+            desired_velocity = direction * max_vel
+            velocity_limit = accel
+
+        self.actual_velocity = self._move_towards(
+            self.actual_velocity,
+            desired_velocity,
+            velocity_limit * dt,
+        )
+        next_position = self.actual_position + self.actual_velocity * dt
+
+        if (
+            (target - self.actual_position) == 0.0 or
+            (target - self.actual_position) * (target - next_position) <= 0.0
+        ):
+            self.actual_position = target
+            self.actual_velocity = 0.0
+            self.pp_active = False
+        else:
+            self.actual_position = next_position
+
+        self._write_actual_feedback()
+        self.update_target_reached()
+
+    def _decelerate_to_stop(self):
+        decel = abs(float(self.od.read(0x6084)))
+        self.actual_velocity = self._move_towards(
+            self.actual_velocity,
+            0.0,
+            decel * self.cycle_time,
+        )
+
+    def _move_towards(self, current, target, max_delta):
+        if max_delta <= 0.0:
+            return current
+
+        delta = target - current
+        if abs(delta) <= max_delta:
+            return target
+
+        return current + max_delta * (1.0 if delta > 0.0 else -1.0)
+
+    def _write_actual_feedback(self):
+        self.od.write(0x6064, self.actual_position)
+        self.od.write(0x606C, self.actual_velocity)
 
     # ---------------------------------
     # CSP
     # ---------------------------------
-
-    def process_pp(self):
-        self.process_csp()
 
     def process_csp(self):
 

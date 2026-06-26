@@ -207,31 +207,44 @@ def mode_code(mode_name):
     return MOTION_MODES[mode_name]
 
 
-def configure_motion_mode(master, mode_name):
+def configure_motion_mode(master, mode_name, axis_index=None):
     code = mode_code(mode_name)
     if mode_name == "csp":
-        configure_csp_interpolation_time(master)
+        configure_csp_interpolation_time(master, axis_index)
 
-    master.set_mode_of_operation_all(code)
-    for axis_index in range(axis_count(master)):
-        master.sdo_write_int8(axis_index, 0x6060, 0, code)
+    axis_indices = (
+        range(axis_count(master))
+        if axis_index is None
+        else [axis_index]
+    )
+    if axis_index is None:
+        master.set_mode_of_operation_all(code)
+
+    for current_axis in axis_indices:
+        master.slaves[current_axis].rxpdo.mode_of_operation = code
+        master.sdo_write_int8(current_axis, 0x6060, 0, code)
     exchange(master, cycles=5)
 
 
-def configure_csp_interpolation_time(master):
+def configure_csp_interpolation_time(master, axis_index=None):
     period_ms = max(1, int(round(master.cycle_time * 1000.0)))
-    for axis_index in range(axis_count(master)):
+    axis_indices = (
+        range(axis_count(master))
+        if axis_index is None
+        else [axis_index]
+    )
+    for current_axis in axis_indices:
         try:
-            master.sdo_write_uint8(axis_index, 0x60C2, 1, period_ms)
-            master.sdo_write_int8(axis_index, 0x60C2, 2, -3)
+            master.sdo_write_uint8(current_axis, 0x60C2, 1, period_ms)
+            master.sdo_write_int8(current_axis, 0x60C2, 2, -3)
             print(
-                f"Axis {axis_index}: CSP interpolation time set to "
+                f"Axis {current_axis}: CSP interpolation time set to "
                 f"{period_ms} ms",
                 flush=True,
             )
         except Exception as exc:
             print(
-                f"Axis {axis_index}: CSP interpolation time object 0x60C2 "
+                f"Axis {current_axis}: CSP interpolation time object 0x60C2 "
                 f"is not available; continuing without it ({exc})",
                 flush=True,
             )
@@ -269,7 +282,8 @@ def initialize_drive(master, motion_mode):
             )
 
 
-def feedback_message(master, state):
+def feedback_message(master, state, client_id=None):
+    owner = state.get("command_authority_owner")
     return {
         "type": "feedback",
         "target_positions": state["target_positions"],
@@ -292,8 +306,14 @@ def feedback_message(master, state):
         ],
         "motion_limits": flatten_motion_limits(state["motion_limits"]),
         "motion_mode": state["motion_mode"],
+        "motion_modes": state["motion_modes"],
         "csp_counts_per_unit": master.csp_counts_per_unit,
         "diagnostics": master.last_diagnostics,
+        "command_authority": {
+            "owner": owner,
+            "owned_by_this_client": owner is not None and owner == client_id,
+            "available": owner is None,
+        },
     }
 
 
@@ -310,6 +330,14 @@ def actual_positions(master):
         float(slave.txpdo.actual_position)
         for slave in master.slaves
     ]
+
+
+def hold_axis_at_actual_position(master, state, axis_index):
+    actual_position = float(master.slaves[axis_index].txpdo.actual_position)
+    state["target_positions"][axis_index] = actual_position
+    master.slaves[axis_index].rxpdo.target_position = int(actual_position)
+    if hasattr(master, "sync_trajectory_to_actual_position"):
+        master.sync_trajectory_to_actual_position(axis_index)
 
 
 def hold_faulted_axes(master, state):
@@ -350,21 +378,35 @@ def handle_target_positions(message, master, state):
         return
 
     state["target_positions"] = positions[:axis_count(master)]
-    if state["motion_mode"] == "pp":
-        command_profile_positions(master, state["target_positions"])
-    elif state["motion_mode"] == "csp":
-        command_csp_positions(master, state["target_positions"])
-    else:
+    pp_axes = [
+        axis_index
+        for axis_index, mode_name in enumerate(state["motion_modes"])
+        if mode_name == "pp"
+    ]
+    csp_axes = [
+        axis_index
+        for axis_index, mode_name in enumerate(state["motion_modes"])
+        if mode_name == "csp"
+    ]
+    csv_axes = [
+        axis_index
+        for axis_index, mode_name in enumerate(state["motion_modes"])
+        if mode_name == "csv"
+    ]
+    if csv_axes:
         print(
-            "Ignored target_positions because motion mode is CSV. "
-            "Use target_velocities instead.",
+            "Ignored target_positions for CSV axes. "
+            f"csv_axes={csv_axes}",
             flush=True,
         )
-        return
+    if pp_axes:
+        command_profile_positions(master, state["target_positions"], pp_axes)
+    if csp_axes:
+        command_csp_positions(master, state["target_positions"], csp_axes)
 
     print(
         "Received target_positions: "
-        f"mode={state['motion_mode']} "
+        f"modes={state['motion_modes']} "
         f"targets={state['target_positions']} "
         f"current_actual={actual_positions(master)}",
         flush=True,
@@ -434,22 +476,46 @@ def handle_motion_mode(message, master, state):
         print(f"Ignored invalid motion mode: {requested_mode}", flush=True)
         return
 
-    if requested_mode == state["motion_mode"]:
+    axis_value = message.get("axis", None)
+    if axis_value is None:
+        axis_indices = list(range(axis_count(master)))
+    else:
+        try:
+            axis_index = int(axis_value)
+        except (TypeError, ValueError):
+            print(f"Ignored motion mode for invalid axis: {axis_value}", flush=True)
+            return
+        if axis_index < 0 or axis_index >= axis_count(master):
+            print(f"Ignored motion mode for invalid axis: {axis_index}", flush=True)
+            return
+        axis_indices = [axis_index]
+
+    if all(state["motion_modes"][axis_index] == requested_mode for axis_index in axis_indices):
         return
 
-    if requested_mode == "csp":
-        state["target_positions"] = actual_positions(master)
-        master.set_target_positions(state["target_positions"])
-        master.sync_trajectory_to_actual_positions()
+    for axis_index in axis_indices:
+        hold_axis_at_actual_position(master, state, axis_index)
+    master.set_target_positions(state["target_positions"])
 
     if requested_mode == "csv":
-        state["target_velocities"] = [0.0 for _ in range(axis_count(master))]
-        for slave in master.slaves:
-            slave.rxpdo.target_velocity = 0
+        for axis_index in axis_indices:
+            state["target_velocities"][axis_index] = 0.0
+            master.slaves[axis_index].rxpdo.target_velocity = 0
 
-    configure_motion_mode(master, requested_mode)
-    state["motion_mode"] = requested_mode
-    print(f"Motion mode changed to {requested_mode.upper()}", flush=True)
+    for axis_index in axis_indices:
+        configure_motion_mode(master, requested_mode, axis_index)
+        state["motion_modes"][axis_index] = requested_mode
+
+    state["motion_mode"] = (
+        requested_mode
+        if len(set(state["motion_modes"])) == 1
+        else "mixed"
+    )
+    print(
+        f"Motion mode changed axes={axis_indices} "
+        f"to {requested_mode.upper()} modes={state['motion_modes']}",
+        flush=True,
+    )
 
 
 def handle_target_velocities(message, master, state):
@@ -493,7 +559,8 @@ def handle_alarm_ack(master, state):
     master.sync_trajectory_to_actual_positions()
     exchange(master, cycles=10)
 
-    configure_motion_mode(master, state["motion_mode"])
+    for axis_index, motion_mode in enumerate(state["motion_modes"]):
+        configure_motion_mode(master, motion_mode, axis_index)
 
     master.set_controlword_all(0x0000)
     exchange(master, cycles=10)
@@ -546,7 +613,11 @@ def handle_alarm_ack(master, state):
     )
 
 
-def handle_controlword(message, master):
+def is_operation_enabled_controlword(controlword):
+    return (int(controlword) & 0x008F) in {0x000F, 0x001F}
+
+
+def handle_controlword(message, master, state):
     try:
         controlword = int(str(message.get("controlword")), 0)
     except (TypeError, ValueError):
@@ -555,6 +626,7 @@ def handle_controlword(message, master):
 
     axis_value = message.get("axis", None)
     if axis_value is None:
+        axis_indices = list(range(axis_count(master)))
         for slave in master.slaves:
             slave.rxpdo.controlword = controlword
         target_text = "all axes"
@@ -569,8 +641,14 @@ def handle_controlword(message, master):
             print(f"Ignored controlword for invalid axis: {axis_index}", flush=True)
             return
 
+        axis_indices = [axis_index]
         master.slaves[axis_index].rxpdo.controlword = controlword
         target_text = f"axis {axis_index}"
+
+    if not is_operation_enabled_controlword(controlword):
+        for axis_index in axis_indices:
+            hold_axis_at_actual_position(master, state, axis_index)
+        master.set_target_positions(state["target_positions"])
 
     print(
         f"Manual controlword applied to {target_text}: 0x{controlword:04X}",
@@ -578,8 +656,106 @@ def handle_controlword(message, master):
     )
 
 
-def handle_message(message, master, state):
+COMMAND_MESSAGE_TYPES = {
+    "target_positions",
+    "jog_position",
+    "motion_limits",
+    "motion_mode",
+    "target_velocities",
+    "alarm_ack",
+    "controlword",
+}
+
+
+def handle_command_authority_request(client, state):
+    owner = state.get("command_authority_owner")
+    if owner is None or owner == client["id"]:
+        state["command_authority_owner"] = client["id"]
+        send_client_message(
+            client,
+            {
+                "type": "command_authority",
+                "granted": True,
+                "owner": client["id"],
+                "message": "Command authority granted.",
+            },
+        )
+        print(f"Command authority granted to client {client['id']}", flush=True)
+        return
+
+    send_client_message(
+        client,
+        {
+            "type": "command_authority",
+            "granted": False,
+            "owner": owner,
+            "message": f"Command authority is already held by client {owner}.",
+        },
+    )
+    print(
+        f"Command authority denied to client {client['id']}; owner={owner}",
+        flush=True,
+    )
+
+
+def handle_command_authority_release(client, state):
+    owner = state.get("command_authority_owner")
+    if owner == client["id"]:
+        state["command_authority_owner"] = None
+        message = "Command authority released."
+        print(f"Command authority released by client {client['id']}", flush=True)
+    else:
+        message = "This client does not hold command authority."
+
+    send_client_message(
+        client,
+        {
+            "type": "command_authority",
+            "granted": False,
+            "owner": state.get("command_authority_owner"),
+            "message": message,
+        },
+    )
+
+
+def client_has_command_authority(client, state):
+    return state.get("command_authority_owner") == client["id"]
+
+
+def reject_command_without_authority(client, message, state):
+    owner = state.get("command_authority_owner")
+    send_client_message(
+        client,
+        {
+            "type": "command_rejected",
+            "command": message.get("type"),
+            "owner": owner,
+            "message": (
+                "Command authority is required."
+                if owner is None
+                else f"Command authority is held by client {owner}."
+            ),
+        },
+    )
+
+
+def handle_message(message, master, state, client):
     message_type = message.get("type")
+
+    if message_type == "command_authority_request":
+        handle_command_authority_request(client, state)
+        return
+
+    if message_type == "command_authority_release":
+        handle_command_authority_release(client, state)
+        return
+
+    if (
+        message_type in COMMAND_MESSAGE_TYPES and
+        not client_has_command_authority(client, state)
+    ):
+        reject_command_without_authority(client, message, state)
+        return
 
     if message_type == "target_positions":
         handle_target_positions(message, master, state)
@@ -594,40 +770,57 @@ def handle_message(message, master, state):
     elif message_type == "alarm_ack":
         handle_alarm_ack(master, state)
     elif message_type == "controlword":
-        handle_controlword(message, master)
+        handle_controlword(message, master, state)
 
 
-def service_client(conn, buffer, master, state):
+def send_client_message(client, message):
+    client["conn"].sendall((json.dumps(message) + "\n").encode("utf-8"))
+
+
+def service_client(client, master, state):
+    conn = client["conn"]
     readable, _, _ = select.select([conn], [], [], 0.0)
     if not readable:
-        return conn, buffer
+        return True
 
     chunk = conn.recv(4096)
     if not chunk:
-        print("Client disconnected", flush=True)
-        conn.close()
-        return None, ""
+        return False
 
-    buffer += chunk.decode("utf-8")
-    while "\n" in buffer:
-        line, buffer = buffer.split("\n", 1)
+    client["buffer"] += chunk.decode("utf-8")
+    while "\n" in client["buffer"]:
+        line, client["buffer"] = client["buffer"].split("\n", 1)
         if line.strip():
-            handle_message(json.loads(line), master, state)
+            handle_message(json.loads(line), master, state, client)
 
-    return conn, buffer
+    return True
 
 
-def send_feedback_if_due(conn, master, state, last_feedback_time):
-    if conn is None:
-        return last_feedback_time
-
+def send_feedback_if_due(client, master, state):
     now = time.monotonic()
-    if now - last_feedback_time < FEEDBACK_PERIOD:
-        return last_feedback_time
+    if now - client["last_feedback_time"] < FEEDBACK_PERIOD:
+        return
 
-    update_derived_velocities(master, state, now)
-    conn.sendall((json.dumps(feedback_message(master, state)) + "\n").encode("utf-8"))
-    return now
+    send_client_message(
+        client,
+        feedback_message(master, state, client["id"]),
+    )
+    client["last_feedback_time"] = now
+
+
+def close_client(client, state):
+    client_id = client["id"]
+    if state.get("command_authority_owner") == client_id:
+        state["command_authority_owner"] = None
+        print(
+            f"Command authority released because client {client_id} disconnected",
+            flush=True,
+        )
+    try:
+        client["conn"].close()
+    except OSError:
+        pass
+    print(f"Client disconnected: id={client_id}", flush=True)
 
 
 def update_derived_velocities(master, state, now):
@@ -666,7 +859,7 @@ def log_status_if_due(master, state, last_status_log_time):
     for axis_index, slave in enumerate(master.slaves):
         axis_statuses.append(
             f"A{axis_index}:"
-            f"MODE={state['motion_mode'].upper()} "
+            f"MODE={state['motion_modes'][axis_index].upper()} "
             f"SW=0x{slave.txpdo.statusword:04X} "
             f"TP={slave.rxpdo.target_position:.3f} "
             f"CMD={state['target_positions'][axis_index]:.3f} "
@@ -687,26 +880,30 @@ def log_status_if_due(master, state, last_status_log_time):
     return now
 
 
-def command_profile_positions(master, target_positions):
-    for axis_index, target_position in enumerate(target_positions):
+def command_profile_positions(master, target_positions, axis_indices):
+    for axis_index in axis_indices:
+        target_position = target_positions[axis_index]
         slave = master.slaves[axis_index]
         slave.rxpdo.mode_of_operation = PROFILE_POSITION_MODE
         slave.rxpdo.target_position = int(target_position)
         slave.rxpdo.profile_velocity = int(slave.motion_limits.max_velocity)
         write_profile_motion_limits(master, axis_index)
 
-    master.set_controlword_all(0x000F)
+    for axis_index in axis_indices:
+        master.slaves[axis_index].rxpdo.controlword = 0x000F
     exchange(master, cycles=2)
 
-    for slave in master.slaves:
-        slave.rxpdo.controlword = 0x001F
+    for axis_index in axis_indices:
+        master.slaves[axis_index].rxpdo.controlword = 0x001F
     exchange(master, cycles=2)
 
-    master.set_controlword_all(0x000F)
+    for axis_index in axis_indices:
+        master.slaves[axis_index].rxpdo.controlword = 0x000F
 
 
-def command_csp_positions(master, target_positions):
-    for axis_index, target_position in enumerate(target_positions):
+def command_csp_positions(master, target_positions, axis_indices):
+    for axis_index in axis_indices:
+        target_position = target_positions[axis_index]
         slave = master.slaves[axis_index]
         slave.rxpdo.mode_of_operation = CSP_MODE
         slave.rxpdo.controlword = 0x000F
@@ -737,40 +934,63 @@ def write_profile_motion_limits(master, axis_index):
     )
 
 
+def allocate_client_id(clients):
+    used_ids = {client["id"] for client in clients}
+    client_id = 1
+    while client_id in used_ids:
+        client_id += 1
+    return client_id
+
+
 def run_server_loop(server, master, state):
     server.setblocking(False)
-    conn = None
-    buffer = ""
-    last_feedback_time = 0.0
+    clients = []
+    last_feedback_update_time = 0.0
     last_status_log_time = 0.0
 
     while True:
-        if conn is None:
+        while True:
             try:
                 conn, addr = server.accept()
                 conn.setblocking(False)
-                buffer = ""
-                print(f"Client connected: {addr}", flush=True)
+                client_id = allocate_client_id(clients)
+                client = {
+                    "id": client_id,
+                    "addr": addr,
+                    "conn": conn,
+                    "buffer": "",
+                    "last_feedback_time": 0.0,
+                }
+                clients.append(client)
+                print(
+                    f"Client connected: id={client['id']} addr={addr}",
+                    flush=True,
+                )
             except BlockingIOError:
-                pass
+                break
 
         hold_faulted_axes(master, state)
         exchange(master)
 
-        if conn is not None:
+        now = time.monotonic()
+        if clients and now - last_feedback_update_time >= FEEDBACK_PERIOD:
+            update_derived_velocities(master, state, now)
+            last_feedback_update_time = now
+
+        for client in list(clients):
             try:
-                conn, buffer = service_client(conn, buffer, master, state)
-                last_feedback_time = send_feedback_if_due(
-                    conn,
-                    master,
-                    state,
-                    last_feedback_time,
-                )
+                if not service_client(client, master, state):
+                    close_client(client, state)
+                    clients.remove(client)
+                    continue
+                send_feedback_if_due(client, master, state)
             except OSError as exc:
-                print(f"Client connection error: {exc}", flush=True)
-                conn.close()
-                conn = None
-                buffer = ""
+                print(
+                    f"Client connection error: id={client['id']} error={exc}",
+                    flush=True,
+                )
+                close_client(client, state)
+                clients.remove(client)
 
         last_status_log_time = log_status_if_due(
             master,
@@ -832,6 +1052,11 @@ def main():
                 for _ in range(args.axis_count)
             ],
             "motion_mode": args.motion_mode,
+            "motion_modes": [
+                args.motion_mode
+                for _ in range(args.axis_count)
+            ],
+            "command_authority_owner": None,
         }
 
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as server:

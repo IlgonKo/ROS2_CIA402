@@ -20,31 +20,62 @@ class CiA402StateMachine:
         self.state = CiA402State.SWITCH_ON_DISABLED
 
     def process(self, controlword):
+        controlword = int(controlword)
+
+        if controlword & 0x0080:
+            if self.state == CiA402State.FAULT:
+                self.state = CiA402State.SWITCH_ON_DISABLED
+            return
+
+        if (controlword & 0x0087) == 0x0000:
+            self.state = CiA402State.SWITCH_ON_DISABLED
+            return
 
         if self.state == CiA402State.SWITCH_ON_DISABLED:
 
-            if controlword == 0x0006:
+            if (controlword & 0x0087) == 0x0006:
 
                 self.state = \
                     CiA402State.READY_TO_SWITCH_ON
 
         elif self.state == CiA402State.READY_TO_SWITCH_ON:
 
-            if controlword == 0x0007:
+            if (controlword & 0x008F) == 0x0007:
 
                 self.state = \
                     CiA402State.SWITCHED_ON
+            elif (controlword & 0x0087) == 0x0000:
+                self.state = \
+                    CiA402State.SWITCH_ON_DISABLED
 
         elif self.state == CiA402State.SWITCHED_ON:
 
-            if controlword == 0x000F:
+            if (controlword & 0x008F) == 0x000F:
 
                 self.state = \
                     CiA402State.OPERATION_ENABLED
+            elif (controlword & 0x0087) == 0x0006:
+                self.state = \
+                    CiA402State.READY_TO_SWITCH_ON
+            elif (controlword & 0x0087) == 0x0000:
+                self.state = \
+                    CiA402State.SWITCH_ON_DISABLED
+
+        elif self.state == CiA402State.OPERATION_ENABLED:
+
+            if (controlword & 0x008F) == 0x0007:
+                self.state = \
+                    CiA402State.SWITCHED_ON
+            elif (controlword & 0x0087) == 0x0006:
+                self.state = \
+                    CiA402State.READY_TO_SWITCH_ON
+            elif (controlword & 0x0087) == 0x0000:
+                self.state = \
+                    CiA402State.SWITCH_ON_DISABLED
 
         elif self.state == CiA402State.FAULT:
 
-            if controlword == 0x0080:
+            if controlword & 0x0080:
 
                 self.state = \
                     CiA402State.SWITCH_ON_DISABLED
