@@ -6,6 +6,7 @@ class ObjectDictionary:
 
             0x6040: 0,       # Controlword
             0x6041: 0x0040,  # Statusword
+            (0x2145, 0x0C): 0x00000000,  # CMMT most serious error
 
             0x6060: 8,       # Mode of operation
             0x6061: 8,       # Mode Display
@@ -21,9 +22,9 @@ class ObjectDictionary:
             0x6067: 20,      # Position Window
             0x6068: 20,      # Position Window Time(ms)
 
-            0x607F: 1000,     # max Velocity(mm/sec)
-            0x6083 : 500,    # Profile Acceleration(mm/sec^2)
-            0x6084 : 500     # Profile Deceleration(mm/sec^2)
+            0x607F: 100,     # max Velocity(mm/sec)
+            0x6083 : 50,    # Profile Acceleration(mm/sec^2)
+            0x6084 : 50     # Profile Deceleration(mm/sec^2)
         }
 
     def read(self, index, subindex=None):

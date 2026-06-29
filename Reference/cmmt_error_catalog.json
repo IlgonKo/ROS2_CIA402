@@ -1,0 +1,2450 @@
+{
+  "16842762": {
+    "code": 16842762,
+    "id": "01 | 01 | 00010",
+    "message": "Short circuit motor phases/ braking resistor",
+    "description": "Short circuit motor phases/braking resistor",
+    "remedy": "Check wiring and rectify short circuit",
+    "classification": "Default: Stop category 0 (4096)"
+  },
+  "16842763": {
+    "code": 16842763,
+    "id": "01 | 01 | 00011",
+    "message": "Over-current monitoring",
+    "description": "Error on over-current monitoring",
+    "remedy": "Check wiring of motor phases (short circuit?); Check wiring of braking resistor (short circuit?); Check commutation angle",
+    "classification": "Default: Stop category 1 (256)"
+  },
+  "16908300": {
+    "code": 16908300,
+    "id": "01 | 02 | 00012",
+    "message": "I²t monitoring: motor warning limit",
+    "description": "I²t monitoring: motor warning limit",
+    "remedy": "Reduce dynamics of movement orders; Check holding brake; Motor/mechanism blocked or stiff?",
+    "classification": "Default: Warning (16)"
+  },
+  "16908301": {
+    "code": 16908301,
+    "id": "01 | 02 | 00013",
+    "message": "I²t monitoring: motor error limit",
+    "description": "I²t monitoring: motor error limit",
+    "remedy": "Motor/mechanics blocked or stiff?; Motor undersized?; Power dimensioning Check drive package; Check holding brake",
+    "classification": "Default: Stop category 1 (256)"
+  },
+  "16908302": {
+    "code": 16908302,
+    "id": "01 | 02 | 00014",
+    "message": "I²t monitoring: output stage warning limit",
+    "description": "I²t monitoring: output stage warning limit",
+    "remedy": "Motor/mechanics blocked or stiff?; Motor undersized?; Power dimensioning Check drive package; Check holding brake",
+    "classification": "Default: Warning (16)"
+  },
+  "16908303": {
+    "code": 16908303,
+    "id": "01 | 02 | 00015",
+    "message": "I²t monitoring: output stage error I limit",
+    "description": "²t monitoring: output stage error limit",
+    "remedy": "Motor/mechanics blocked or stiff?; Motor undersized?; Power dimensioning Check drive package; Check holding brake",
+    "classification": "Default: Stop category 1 (256)"
+  },
+  "16908304": {
+    "code": 16908304,
+    "id": "01 | 02 | 00016",
+    "message": "I²t monitoring: output stage v0 warning limit",
+    "description": "I²t monitoring: output stage in standstill warning limit",
+    "remedy": "Reduce set current / set torque; Reduce downtime; Allow movement >5 Hz electrical rotational frequency",
+    "classification": "Default: Warning (16)"
+  },
+  "16908305": {
+    "code": 16908305,
+    "id": "01 | 02 | 00017",
+    "message": "I²t monitoring: output stage v0 error limit",
+    "description": "I²t monitoring: output stage in standstill error limit",
+    "remedy": "Reduce set current / set torque; Reduce downtime; Allow movement >5 Hz electrical rotational frequency",
+    "classification": "Default: Stop category 1 (256)"
+  },
+  "16908306": {
+    "code": 16908306,
+    "id": "01 | 02 | 00018",
+    "message": "Parameterisation I²t: motor mon- Remedy itoring invalid; Nominal current (Px.7117) and maximum current (Px.7120) of",
+    "description": "Check parameterization for I²t limit value (Px.7144) the Motor plausible?",
+    "remedy": "",
+    "classification": "Default: Stop category 1 (256)"
+  },
+  "16973843": {
+    "code": 16973843,
+    "id": "01 | 03 | 00019",
+    "message": "Warning: pulse energy moni- toring, braking resistor",
+    "description": "Warning: pulse energy monitoring, braking resistor",
+    "remedy": "Reduce deceleration dynamics; Use braking resistor with higher pulse energy",
+    "classification": "Default: Warning (16)"
+  },
+  "16973844": {
+    "code": 16973844,
+    "id": "01 | 03 | 00020",
+    "message": "Error: pulse energy monitoring, braking resistor",
+    "description": "Error: pulse energy monitoring, braking resistor",
+    "remedy": "Reduce deceleration dynamics; Use braking resistor with higher pulse energy",
+    "classification": "Default: Stop category 1 (256)"
+  },
+  "16973845": {
+    "code": 16973845,
+    "id": "01 | 03 | 00021",
+    "message": "Parameterisation braking resistor pulse energy",
+    "description": "Parameterization Pulse energy monitoring Braking resistor outside the valid range",
+    "remedy": "Check parameterization of external braking resistor P0.6512",
+    "classification": "Default: Stop category 1 (256)"
+  },
+  "16974597": {
+    "code": 16974597,
+    "id": "01 | 03 | 00773",
+    "message": "Parameterisation braking resistor pulse energy; Stop category 0 (4096)",
+    "description": "Classification Can be parameterised: Px.102676, value list:; Stop category 1 (256); Stop category 2 (64); Warning (16); Information (4); Ignore (2)",
+    "remedy": "",
+    "classification": ""
+  },
+  "16974598": {
+    "code": 16974598,
+    "id": "01 | 03 | 00774",
+    "message": "Parameterisation braking resistor pulse energy the valid range",
+    "description": "Parameterization Pulse energy monitoring Braking resistor Nominal power outside",
+    "remedy": "Parameterization of external braking resistor Check rated power P0.6511",
+    "classification": "Default: Stop category 1 (256)"
+  },
+  "33619990": {
+    "code": 33619990,
+    "id": "02 | 01 | 00022",
+    "message": "Undervoltage in logic supply 24V Und",
+    "description": "ervoltage in logic supply 24V",
+    "remedy": "Check power supply.",
+    "classification": "Default: Stop category 0 (4096)"
+  },
+  "33619991": {
+    "code": 33619991,
+    "id": "02 | 01 | 00023",
+    "message": "Overvoltage in logic supply 24V",
+    "description": "Overvoltage in logic supply 24V",
+    "remedy": "Check power supply.",
+    "classification": "Default: Stop category 0 (4096)"
+  },
+  "33619992": {
+    "code": 33619992,
+    "id": "02 | 01 | 00024",
+    "message": "Undervoltage in logic supply 5V",
+    "description": "Undervoltage in logic supply 5V internal",
+    "remedy": "Check power supply.",
+    "classification": "Default: Stop category 0 (4096)"
+  },
+  "33619993": {
+    "code": 33619993,
+    "id": "02 | 01 | 00025",
+    "message": "Overvoltage in logic supply 5V",
+    "description": "Overvoltage in logic supply 5V internal",
+    "remedy": "Check power supply.",
+    "classification": "Default: Stop category 0 (4096)"
+  },
+  "33619994": {
+    "code": 33619994,
+    "id": "02 | 01 | 00026",
+    "message": "Undervoltage in logic supply 3.3V",
+    "description": "Classification Can be parameterised: no",
+    "remedy": "",
+    "classification": ""
+  },
+  "33619995": {
+    "code": 33619995,
+    "id": "02 | 01 | 00027",
+    "message": "Overvoltage in logic supply 3.3V Ove internal",
+    "description": "rvoltage in logic supply 3.3V internal",
+    "remedy": "Check power supply.",
+    "classification": "Default: Stop category 0 (4096)"
+  },
+  "33620440": {
+    "code": 33620440,
+    "id": "02 | 01 | 00472",
+    "message": "Voltage error microprocessor",
+    "description": "A supply voltage of the microprocessor has violated the value range.",
+    "remedy": "Restart device; Service case",
+    "classification": "Default: Stop category 0 (4096)"
+  },
+  "33685534": {
+    "code": 33685534,
+    "id": "02 | 02 | 00030",
+    "message": "Overvoltage in DC link",
+    "description": "Overvoltage in DC link",
+    "remedy": "Check braking resistor dimensioning, value too high; Reduce deceleration dynamics; Check limit value for DC link switch-off (P0.4812)",
+    "classification": "Default: Stop category 0 (4096)"
+  },
+  "33685535": {
+    "code": 33685535,
+    "id": "02 | 02 | 00031",
+    "message": "Undervoltage in DC link",
+    "description": "Undervoltage in DC link",
+    "remedy": "Check power supply; Couple DC links, if technically permissible; Check DC link voltage (measure); Check undervoltage monitoring (threshold value) (P0.4814)",
+    "classification": "Default: Stop category 1 (256)"
+  },
+  "33685536": {
+    "code": 33685536,
+    "id": "02 | 02 | 00032",
+    "message": "DC link warning threshold reached",
+    "description": "DC link warning threshold reached",
+    "remedy": "None (info only)",
+    "classification": "Default: Warning (16)"
+  },
+  "33685537": {
+    "code": 33685537,
+    "id": "02 | 02 | 00033",
+    "message": "DC link voltage too low following Classification power failure Can be parameterised: no",
+    "description": "Default: Stop category 1 (256)",
+    "remedy": "",
+    "classification": ""
+  },
+  "33685538": {
+    "code": 33685538,
+    "id": "02 | 02 | 00034",
+    "message": "DC link precharge time exceeded DC l",
+    "description": "ink precharge time exceeded",
+    "remedy": "Check DC link coupling; Check value of the connected braking resistor; Braking resistor Wiring interrupted?; Check value for Lower limit value DC link voltage (P0. 4814).; Device defective?",
+    "classification": "Default: Stop category 0 (4096)"
+  },
+  "33685539": {
+    "code": 33685539,
+    "id": "02 | 02 | 00035",
+    "message": "Rapid discharge not possible",
+    "description": "Residual voltage too high following rapid discharge",
+    "remedy": "Check braking resistor connection; Resistance value too high; DC voltage supply activated (P0.5113))",
+    "classification": "Default: Stop category 0 (4096)"
+  },
+  "33685790": {
+    "code": 33685790,
+    "id": "02 | 02 | 00286",
+    "message": "DC relay does not open",
+    "description": "The DC relay does not open",
+    "remedy": "Restart device; Service case",
+    "classification": "Default: Stop category 0 (4096)"
+  },
+  "33685791": {
+    "code": 33685791,
+    "id": "02 | 02 | 00287",
+    "message": "DC relay does not close",
+    "description": "The DC relay does not close",
+    "remedy": "Restart device; Service case",
+    "classification": "Default: Stop category 0 (4096)"
+  },
+  "33751076": {
+    "code": 33751076,
+    "id": "02 | 03 | 00036",
+    "message": "No load voltage Can be parameterised: Px.502",
+    "description": "Error memory Default: save (1)",
+    "remedy": "",
+    "classification": ""
+  },
+  "33751077": {
+    "code": 33751077,
+    "id": "02 | 03 | 00037",
+    "message": "Load voltage interruption detected",
+    "description": "Load voltage interruption detected",
+    "remedy": "Check Power supply; When using a line choke, distortion of the mains voltage may occur. The sensitivity of the mains voltage monitoring can be adjusted (Px.281520). Increasing the value reduces the sensi- tivity.",
+    "classification": "Default: Warning (16)"
+  },
+  "33751078": {
+    "code": 33751078,
+    "id": "02 | 03 | 00038",
+    "message": "Undervoltage in load voltage",
+    "description": "Undervoltage in load voltage",
+    "remedy": "Check power supply; Power failure detection correctly parameterized (P0.493)",
+    "classification": "Default: Stop category 1 (256)"
+  },
+  "33751079": {
+    "code": 33751079,
+    "id": "02 | 03 | 00039",
+    "message": "Overvoltage in load voltage",
+    "description": "Overvoltage in load voltage",
+    "remedy": "Check power supply; Power failure detection correctly parameterized (P0.494)",
+    "classification": "Default: Stop category 1 (256)"
+  },
+  "33751080": {
+    "code": 33751080,
+    "id": "02 | 03 | 00040",
+    "message": "Phase failure in load voltage",
+    "description": "Phase failure in load voltage",
+    "remedy": "Check Power supply",
+    "classification": "Default: Warning (16)"
+  },
+  "33751081": {
+    "code": 33751081,
+    "id": "02 | 03 | 00041",
+    "message": "Mains voltage signal shape not as configured",
+    "description": "Mains voltage signal shape not as configured",
+    "remedy": "DC voltage supply activated (P0.5113); Check power supply",
+    "classification": "Default: Stop category 0 (4096)"
+  },
+  "33816618": {
+    "code": 33816618,
+    "id": "02 | 04 | 00042",
+    "message": "Encoder supply voltage moni- toring thresholds",
+    "description": "Supply voltage for encoder is outside monitoring thresholds",
+    "remedy": "Check encoder wiring; Parameterization Encoder voltage supply; Service case",
+    "classification": "Default: Stop category 0 (4096)"
+  },
+  "33816619": {
+    "code": 33816619,
+    "id": "02 | 04 | 00043",
+    "message": "Supply voltage correction, encoder",
+    "description": "Encoder supply voltage control failed",
+    "remedy": "Check encoder wiring; Parameterization Encoder voltage supply; Service case",
+    "classification": "Default: Stop category 0 (4096)"
+  },
+  "50397228": {
+    "code": 50397228,
+    "id": "03 | 01 | 00044",
+    "message": "Warning threshold: Insufficient temperature in device",
+    "description": "Warning threshold: Insufficient temperature in device",
+    "remedy": "Check ambient conditions; Check parameterization warning threshold (P0.9312)",
+    "classification": "Default: Warning (16)"
+  },
+  "50397229": {
+    "code": 50397229,
+    "id": "03 | 01 | 00045",
+    "message": "Temperature in device too low",
+    "description": "Temperature in device too low",
+    "remedy": "Check ambient conditions; Check parameterization of switch-off threshold (P0.9313)",
+    "classification": "Default: Stop category 1 (256)"
+  },
+  "50397230": {
+    "code": 50397230,
+    "id": "03 | 01 | 00046",
+    "message": "Warning threshold: Device over- Classification temperature; Warning (16)",
+    "description": "Can be parameterised: Px.936, value list:; Information (4); Ignore (2)",
+    "remedy": "",
+    "classification": ""
+  },
+  "50397231": {
+    "code": 50397231,
+    "id": "03 | 01 | 00047",
+    "message": "Device overtemperature",
+    "description": "Device overtemperature",
+    "remedy": "Check parameterization warning threshold (P0.9311); Unit fan defective?; Device overloaded?; Check installation conditions, filter of control cabinet fan dirty?; Check drive dimensioning (possible overload in continuous oper- ation)",
+    "classification": "Default: Stop category 1 (256)"
+  },
+  "50462768": {
+    "code": 50462768,
+    "id": "03 | 02 | 00048",
+    "message": "Warning threshold: Insufficient temperature in power unit",
+    "description": "Warning threshold: Insufficient temperature in power unit",
+    "remedy": "Check ambient conditions; Check parameterization warning threshold (P0.9316)",
+    "classification": "Default: Warning (16)"
+  },
+  "50462769": {
+    "code": 50462769,
+    "id": "03 | 02 | 00049",
+    "message": "Insufficient temperature in power unit",
+    "description": "Insufficient temperature in output stage",
+    "remedy": "Check ambient conditions; Check parameterization of switch-off threshold (P0.9317)",
+    "classification": "Default: Stop category 1 (256)"
+  },
+  "50462770": {
+    "code": 50462770,
+    "id": "03 | 02 | 00050",
+    "message": "Warning threshold: Power unit overtemperature",
+    "description": "Warning threshold: Power unit overtemperature",
+    "remedy": "Check parameterization warning threshold (P0.9314); Unit fan defective?; Device overloaded?; Check installation conditions, filter of control cabinet fan dirty?; Check drive dimensioning (possible overload in continuous oper- ation)",
+    "classification": "Default: Warning (16)"
+  },
+  "50462771": {
+    "code": 50462771,
+    "id": "03 | 02 | 00051",
+    "message": "Power unit overtemperature; Unit fan defective?",
+    "description": "Remedy; Check parameterization warning threshold (P0.9315); Device overloaded?; Check installation conditions, filter of control cabinet fan dirty?; Check drive dimensioning (possible overload in continuous oper- ation)",
+    "remedy": "",
+    "classification": "Default: Stop category 1 (256)"
+  },
+  "50528308": {
+    "code": 50528308,
+    "id": "03 | 03 | 00052",
+    "message": "Warning threshold: Insufficient temperature in motor",
+    "description": "Warning threshold: Insufficient temperature in motor",
+    "remedy": "Check ambient conditions; Check parameterization warning threshold (Px.945)",
+    "classification": "Default: Warning (16)"
+  },
+  "50528309": {
+    "code": 50528309,
+    "id": "03 | 03 | 00053",
+    "message": "Insufficient temperature in motor In",
+    "description": "sufficient temperature in motor",
+    "remedy": "Check ambient conditions; Check parameterization of switch-off threshold (Px.947)",
+    "classification": "Default: Stop category 1 (256)"
+  },
+  "50528310": {
+    "code": 50528310,
+    "id": "03 | 03 | 00054",
+    "message": "Warning threshold: Motor over- temperature",
+    "description": "Warning threshold: Motor overtemperature",
+    "remedy": "Motor overloaded; Sensor defective or incorrectly parameterized?; Cable break?; Parameterization current controller, check current limit values; Check parameter adjustment of the sensor or the sensor charac- teristic curve; Device defective",
+    "classification": "Default: Warning (16)"
+  },
+  "50528311": {
+    "code": 50528311,
+    "id": "03 | 03 | 00055",
+    "message": "Motor overtemperature; Sensor defective or incorrectly parameterized?",
+    "description": "Remedy; Motor overloaded; Cable break?; Parameterization current controller, check current limit values; Check parameter adjustment of the sensor or the sensor charac- teristic curve; Device defective",
+    "remedy": "",
+    "classification": "Default: Stop category 1 (256)"
+  },
+  "83951672": {
+    "code": 83951672,
+    "id": "05 | 01 | 00056",
+    "message": "Configuration of homing run invalid",
+    "description": "Parameterisation of homing run invalid",
+    "remedy": "Move to hardware limit switch (limit switch configured)",
+    "classification": "Default: Stop category 1 (256)"
+  },
+  "83951673": {
+    "code": 83951673,
+    "id": "05 | 01 | 00057",
+    "message": "Homing: Timeout",
+    "description": "Homing: Timeout",
+    "remedy": "Check timeout for homing (Px.842); At end stop: Check parameters for standstill window (Px.8415) and limit monitoring (Px8414); At stop: Check parameters for standstill window (Px.4627) and limit monitoring (Px4626); Increase dynamic values for homing",
+    "classification": "Default: Stop category 1 (256)"
+  },
+  "83951674": {
+    "code": 83951674,
+    "id": "05 | 01 | 00058",
+    "message": "Homing: Search path exceeded",
+    "description": "Homing: Search path exceeded",
+    "remedy": "Check arrangement slide to limit switch / end stop; Parameterization search path (Px.8412, Px.8413)",
+    "classification": "Default: Stop category 1 (256)"
+  },
+  "83952235": {
+    "code": 83952235,
+    "id": "05 | 01 | 00619",
+    "message": "Unsupported homing method; Stop category 0 (4096)",
+    "description": "Classification Can be parameterised: Px.101348, value list:; Stop category 1 (256); Stop category 2 (64); Warning (16); Information (4); Ignore (2); Intern (1); Invalid (0)",
+    "remedy": "",
+    "classification": ""
+  },
+  "84017211": {
+    "code": 84017211,
+    "id": "05 | 02 | 00059",
+    "message": "Positioning command invalid",
+    "description": "Command invalid",
+    "remedy": "Check parameterization motion task or record",
+    "classification": "Default: Stop category 1 (256)"
+  },
+  "84017212": {
+    "code": 84017212,
+    "id": "05 | 02 | 00060",
+    "message": "Motion task not known",
+    "description": "Unknown motion task pending",
+    "remedy": "Check order, record number or step-on condition",
+    "classification": "Default: Stop category 1 (256)"
+  },
+  "84017213": {
+    "code": 84017213,
+    "id": "05 | 02 | 00061",
+    "message": "Task ignored controller enable failed",
+    "description": "Task could not be executed as the drive control is missing",
+    "remedy": "Set release CTRL-EN; Controller enable via fieldbus missing",
+    "classification": "Default: Stop category 1 (256)"
+  },
+  "84017214": {
+    "code": 84017214,
+    "id": "05 | 02 | 00062",
+    "message": "Task ignored as safety function requested",
+    "description": "Task could not be executed as a safety function is requested",
+    "remedy": "Check inputs of safety function for correct logic level",
+    "classification": "Default: Warning (16)"
+  },
+  "84017216": {
+    "code": 84017216,
+    "id": "05 | 02 | 00064",
+    "message": "Task ignored as DC link coupling Tas not ready detected",
+    "description": "k could not be executed as no DC link voltage is present or this has not yet been",
+    "remedy": "Check mains voltage for present; Check the DC voltage when the DC Power supply Is activated; Check braking resistor for presence, if required",
+    "classification": "Default: Stop category 1 (256)"
+  },
+  "84017217": {
+    "code": 84017217,
+    "id": "05 | 02 | 00065",
+    "message": "Task ignored as device not ready Classification",
+    "description": "Can be parameterised: no",
+    "remedy": "",
+    "classification": ""
+  },
+  "84017218": {
+    "code": 84017218,
+    "id": "05 | 02 | 00066",
+    "message": "Task ignored as encoder not ready",
+    "description": "Task could not be executed as the encoder is not ready",
+    "remedy": "Check encoder cable; Check voltage supply for the encoder",
+    "classification": "Default: Stop category 1 (256)"
+  },
+  "84017219": {
+    "code": 84017219,
+    "id": "05 | 02 | 00067",
+    "message": "Task ignored as referencing missing",
+    "description": "Task could not be executed as the drive is not referenced",
+    "remedy": "Reference drive",
+    "classification": "Default: Stop category 1 (256)"
+  },
+  "84017220": {
+    "code": 84017220,
+    "id": "05 | 02 | 00068",
+    "message": "Task ignored as reinitialisation is required change",
+    "description": "Task could not be executed as a reinitialisation is required due to a parameter",
+    "remedy": "Performing Reinitialization",
+    "classification": "Default: Stop category 1 (256)"
+  },
+  "84017221": {
+    "code": 84017221,
+    "id": "05 | 02 | 00069",
+    "message": "Task ignored as restart is required",
+    "description": "Task could not be executed as a restart is required due to a parameter change",
+    "remedy": "Save configuration and restart the device",
+    "classification": "Default: Stop category 1 (256)"
+  },
+  "84017223": {
+    "code": 84017223,
+    "id": "05 | 02 | 00071",
+    "message": "Trajectory generator error",
+    "description": "An error occurred in the trajectory generator when calculating a movement profile",
+    "remedy": "Check parameterization order or block (complete? unrealistic values?)",
+    "classification": "Default: Stop category 1 (256)"
+  },
+  "84017224": {
+    "code": 84017224,
+    "id": "05 | 02 | 00072",
+    "message": "Invalid position preset of trajec- tory generator",
+    "description": "The position specified for the trajectory generator is invalid",
+    "remedy": "Change position specification to the valid range, see documenta- tion",
+    "classification": "Default: Stop category 1 (256)"
+  },
+  "84017225": {
+    "code": 84017225,
+    "id": "05 | 02 | 00073",
+    "message": "Invalid velocity value of trajec- tory generator Can be parameterised: no",
+    "description": "Classification Default: Stop category 1 (256)",
+    "remedy": "",
+    "classification": ""
+  },
+  "84017226": {
+    "code": 84017226,
+    "id": "05 | 02 | 00074",
+    "message": "Invalid acceleration value of tra- T jectory generator",
+    "description": "he acceleration specified for the trajectory generator is invalid",
+    "remedy": "Change deceleration setting to the valid range, see documenta- tion",
+    "classification": "Default: Stop category 1 (256)"
+  },
+  "84017227": {
+    "code": 84017227,
+    "id": "05 | 02 | 00075",
+    "message": "Invalid deceleration value of tra- T jectory generator",
+    "description": "he deceleration specified for the trajectory generator is invalid",
+    "remedy": "Change acceleration default to the valid range, see documenta- tion",
+    "classification": "Default: Stop category 1 (256)"
+  },
+  "84017228": {
+    "code": 84017228,
+    "id": "05 | 02 | 00076",
+    "message": "Invalid jerk value of trajectory generator",
+    "description": "The jerk specified for the trajectory generator is invalid",
+    "remedy": "Change jerk setting to the valid range, see documentation",
+    "classification": "Default: Stop category 1 (256)"
+  },
+  "84017229": {
+    "code": 84017229,
+    "id": "05 | 02 | 00077",
+    "message": "Trajectory generator error",
+    "description": "An error occurred in the trajectory generator when calculating a movement profile",
+    "remedy": "Adjust dynamic values for the movement order",
+    "classification": "Default: Stop category 1 (256)"
+  },
+  "84017230": {
+    "code": 84017230,
+    "id": "05 | 02 | 00078",
+    "message": "Stop ramp: Timeout",
+    "description": "Stop ramp: Timeout",
+    "remedy": "Check parameterization of standstill monitoring (Px.4610, Px.468)",
+    "classification": "Default: Stop category 0 (4096)"
+  },
+  "84017231": {
+    "code": 84017231,
+    "id": "05 | 02 | 00079",
+    "message": "Torque increase ramp invalid",
+    "description": "The torque increase ramp is invalid",
+    "remedy": "Change parameters for the torque rise ramp to the valid range",
+    "classification": "Default: Stop category 1 (256)"
+  },
+  "84017232": {
+    "code": 84017232,
+    "id": "05 | 02 | 00080",
+    "message": "Simultaneous negative/positive directional lock",
+    "description": "Simultaneous negative/positive directional lock",
+    "remedy": "Check HW limit switch logic",
+    "classification": "Default: Stop category 1 (256)"
+  },
+  "84017430": {
+    "code": 84017430,
+    "id": "05 | 02 | 00278",
+    "message": "Task ignored because directional Tas lock active",
+    "description": "k could not be executed because a directional lock is active",
+    "remedy": "Observe further diagnostic messages and eliminate the cause of the directional lock; Carry out movement into the valid work area.",
+    "classification": "Default: Stop category 0 (4096)"
+  },
+  "84017431": {
+    "code": 84017431,
+    "id": "05 | 02 | 00279",
+    "message": "Fixed stop not detected",
+    "description": "Fixed stop was not detected",
+    "remedy": "Check if workpiece Is in front of the target position",
+    "classification": "Default: Information (4)"
+  },
+  "84017432": {
+    "code": 84017432,
+    "id": "05 | 02 | 00280",
+    "message": "Monitoring window of fixed stop Moni left",
+    "description": "toring window of fixed stop left",
+    "remedy": "Check if workpiece was not lost",
+    "classification": "Default: Information (4)"
+  },
+  "84017434": {
+    "code": 84017434,
+    "id": "05 | 02 | 00282",
+    "message": "Encoder not ready",
+    "description": "Selected encoder not ready for brake test",
+    "remedy": "Check whether selection of encoder interface valid; Check whether encoder errors are present",
+    "classification": "Default: Stop category 1 (256)"
+  },
+  "84017435": {
+    "code": 84017435,
+    "id": "05 | 02 | 00283",
+    "message": "Brake test failed",
+    "description": "Brake test failed",
+    "remedy": "Check brake wear; Check monitoring window stroke (Px.103117.x.0)",
+    "classification": "Default: Stop category 1 (256)"
+  },
+  "84017436": {
+    "code": 84017436,
+    "id": "05 | 02 | 00284",
+    "message": "Torque failed brake test",
+    "description": "Torque for brake test cannot be built up",
+    "remedy": "Check brake wear; Check Torque monitoring window (Px103118.x.0)",
+    "classification": "Default: Stop category 1 (256)"
+  },
+  "84017516": {
+    "code": 84017516,
+    "id": "05 | 02 | 00364",
+    "message": "Profile velocity = 0 target position.",
+    "description": "The preset profile velocity is 0. The drive does not move and does not reach its",
+    "remedy": "Check profile speed (record table / direct operation); Check speed override (Px.1309, Px.11280611); Check application limitation (Px.1304, Px.1310)",
+    "classification": "Default: Warning (16)"
+  },
+  "84017548": {
+    "code": 84017548,
+    "id": "05 | 02 | 00396",
+    "message": "Gear In failed",
+    "description": "The slave axis could not be synchronized up to the Master Sync Position.",
+    "remedy": "Check speed, acceleration and jerk for synchronisation (Px.85604, Px.85605, Px.85606)",
+    "classification": "Default: Stop category 1 (256)"
+  },
+  "84017549": {
+    "code": 84017549,
+    "id": "05 | 02 | 00397",
+    "message": "Gear Out failed; Stop category 0 (4096)",
+    "description": "Classification Can be parameterised: Px.85620, value list:; Stop category 1 (256); Stop category 2 (64); Warning (16); Information (4)",
+    "remedy": "",
+    "classification": ""
+  },
+  "84017583": {
+    "code": 84017583,
+    "id": "05 | 02 | 00431",
+    "message": "Invalid limit value Application limitation",
+    "description": "At least one limit value (Px.1304 ... Px.1312) is outside its validity range",
+    "remedy": "Check values for limitations (min value < max value)?",
+    "classification": "Default: Stop category 2 (64)"
+  },
+  "84017584": {
+    "code": 84017584,
+    "id": "05 | 02 | 00432",
+    "message": "Motion job error due to firmware A m update",
+    "description": "otion job cannot be executed because a firmware update is in progress.",
+    "remedy": "Wait until firmware update Is completed",
+    "classification": "Default: Stop category 1 (256)"
+  },
+  "84083327": {
+    "code": 84083327,
+    "id": "05 | 03 | 00639",
+    "message": "Number of interpolation points exceeded interpolator extrapolated.",
+    "description": "The number of interpolation points for the fine interpolator was exceeded, the fine",
+    "remedy": "None",
+    "classification": "Default: Information (4)"
+  },
+  "100663366": {
+    "code": 100663366,
+    "id": "06 | 00 | 00070",
+    "message": "Invalid record table parameter",
+    "description": "A record table parameter is invalid",
+    "remedy": "Check record table parameters",
+    "classification": "Default: Stop category 1 (256)"
+  },
+  "100663377": {
+    "code": 100663377,
+    "id": "06 | 00 | 00081",
+    "message": "Controller operating mode invalid the parameterisation",
+    "description": "The operating mode of the controller (position, velocity, force, stop) does not match",
+    "remedy": "Check the parameterization of the controller (Px.4001, Px.4005, Px.40069",
+    "classification": "Default: Stop category 1 (256)"
+  },
+  "100663378": {
+    "code": 100663378,
+    "id": "06 | 00 | 00082",
+    "message": "Notch filter frequency invalid",
+    "description": "The parameterisation of the notch filter frequency is invalid",
+    "remedy": "Check parameterization notch filter frequency, notch filter fre- quency is greater than half the sampling frequency (Px.40.0.x)",
+    "classification": "Default: Stop category 1 (256)"
+  },
+  "100663379": {
+    "code": 100663379,
+    "id": "06 | 00 | 00083",
+    "message": "Record table incorrect",
+    "description": "Record table incorrect",
+    "remedy": "Check motion record number",
+    "classification": "Default: Stop category 1 (256)"
+  },
+  "100663380": {
+    "code": 100663380,
+    "id": "06 | 00 | 00084",
+    "message": "Parameterisation switching fre- quency",
+    "description": "Parameterisation of switching frequency invalid",
+    "remedy": "Check parameter set, matches the device?; Check parameterization PWM frequency (P0.670)",
+    "classification": "Default: Stop category 0 (4096)"
+  },
+  "100663381": {
+    "code": 100663381,
+    "id": "06 | 00 | 00085",
+    "message": "Digital I/O configuration invalid",
+    "description": "The configuration of the digital inputs or outputs is invalid",
+    "remedy": "Check configuration of the digital I/O for double function assign- ment",
+    "classification": "Default: Stop category 1 (256)"
+  },
+  "100663544": {
+    "code": 100663544,
+    "id": "06 | 00 | 00248",
+    "message": "Motor type is not supported",
+    "description": "Error memory Can be parameterised: Px.71433",
+    "remedy": "",
+    "classification": ""
+  },
+  "100663609": {
+    "code": 100663609,
+    "id": "06 | 00 | 00313",
+    "message": "Invalid parameterization variable Th message function",
+    "description": "e variable message function is incorrectly parameterized.",
+    "remedy": "Check input parameters for data trigger (Px.1174201 … 1174207)",
+    "classification": "Default: Warning (16)"
+  },
+  "100664122": {
+    "code": 100664122,
+    "id": "06 | 00 | 00826",
+    "message": "Invalid gearbox configuration uration",
+    "description": "The combination of numerator and denominator results in an invalid gearbox config-",
+    "remedy": "Geriebe factor numerator or denominator large 14 bits?; Feed constant numerator or denominator large 17 bits?; Gear factor greater than 1:1000?",
+    "classification": "Default: Stop category 0 (4096)"
+  },
+  "100794454": {
+    "code": 100794454,
+    "id": "06 | 02 | 00086",
+    "message": "Sign limits",
+    "description": "The target torque and the velocity limit are uncorrelated.",
+    "remedy": "Check torque and current limitations, signs and limitations must match (symmetrical?)",
+    "classification": "Default: Stop category 1 (256)"
+  },
+  "100794455": {
+    "code": 100794455,
+    "id": "06 | 02 | 00087",
+    "message": "Velocity control limitation invalid",
+    "description": "Velocity control limitation invalid",
+    "remedy": "Check configuration of control limitation (Px.850, Px.851)",
+    "classification": "Default: Stop category 0 (4096)"
+  },
+  "100794456": {
+    "code": 100794456,
+    "id": "06 | 02 | 00088",
+    "message": "Torque control limitation invalid",
+    "description": "Torque control limitation invalid",
+    "remedy": "Check configuration of control limitation (Px.852, Px.853)",
+    "classification": "Default: Stop category 0 (4096)"
+  },
+  "100794457": {
+    "code": 100794457,
+    "id": "06 | 02 | 00089",
+    "message": "Current control limitation invalid Classification; Stop category 0 (4096)",
+    "description": "Can be parameterised: Px.6110, value list:; Stop category 1 (256); Stop category 2 (64)",
+    "remedy": "",
+    "classification": ""
+  },
+  "100794458": {
+    "code": 100794458,
+    "id": "06 | 02 | 00090",
+    "message": "Maximum peak current control limitation invalid",
+    "description": "Maximum peak current control limitation invalid",
+    "remedy": "Check configuration of control limitation (Px.856)",
+    "classification": "Default: Stop category 0 (4096)"
+  },
+  "100794459": {
+    "code": 100794459,
+    "id": "06 | 02 | 00091",
+    "message": "Parameterisation of currents",
+    "description": "Parameterisation of nominal current/maximum peak current of motor invalid",
+    "remedy": "Check parameterization for rated current (Px.7117) and max- imum current (Px.7120) (consistency)",
+    "classification": "Default: Stop category 1 (256)"
+  },
+  "100794641": {
+    "code": 100794641,
+    "id": "06 | 02 | 00273",
+    "message": "Change of control structure not permissible",
+    "description": "The change of the control structure is not permissible",
+    "remedy": "Wait until current movement order is completed; Check movement order",
+    "classification": "Default: Warning (16)"
+  },
+  "100794642": {
+    "code": 100794642,
+    "id": "06 | 02 | 00274",
+    "message": "Motion command not permis- sible",
+    "description": "The motion command is not permissible in open-loop operation",
+    "remedy": "Check movement order",
+    "classification": "Default: Stop category 0 (4096)"
+  },
+  "100794643": {
+    "code": 100794643,
+    "id": "06 | 02 | 00275",
+    "message": "Change to closed loop operation Chan not permissible not valid",
+    "description": "ge to closed loop operation not permissible because the commutation angle is",
+    "remedy": "Perform commutation angle determination",
+    "classification": "Default: Stop category 0 (4096)"
+  },
+  "100794927": {
+    "code": 100794927,
+    "id": "06 | 02 | 00559",
+    "message": "Input frequency A/B signals too high; Warning (16)",
+    "description": "Classification Can be parameterised: Px.101127, value list:; Information (4)",
+    "remedy": "",
+    "classification": ""
+  },
+  "100991073": {
+    "code": 100991073,
+    "id": "06 | 05 | 00097",
+    "message": "Parameter set not found",
+    "description": "Parameter set not found",
+    "remedy": "Check selection of parameter set",
+    "classification": "Default: Stop category 1 (256)"
+  },
+  "100991074": {
+    "code": 100991074,
+    "id": "06 | 05 | 00098",
+    "message": "Parameter set invalid",
+    "description": "Parameter set invalid",
+    "remedy": "Overwrite (save) parameter set",
+    "classification": "Default: Stop category 1 (256)"
+  },
+  "100991075": {
+    "code": 100991075,
+    "id": "06 | 05 | 00099",
+    "message": "Parameter set incompatible",
+    "description": "Parameter set incompatible",
+    "remedy": "Delete parameter set; Overwrite (save) parameter set",
+    "classification": "Default: Stop category 1 (256)"
+  },
+  "100991078": {
+    "code": 100991078,
+    "id": "06 | 05 | 00102",
+    "message": "Transmission error in parameter Tran set",
+    "description": "smission error in parameter set",
+    "remedy": "Repeat transmission; Check connection",
+    "classification": "Default: Warning (16)"
+  },
+  "100991079": {
+    "code": 100991079,
+    "id": "06 | 05 | 00103",
+    "message": "Parameter set: store failed",
+    "description": "Parameter set: store failed",
+    "remedy": "Repeat saving; Service case",
+    "classification": "Default: Warning (16)"
+  },
+  "100991080": {
+    "code": 100991080,
+    "id": "06 | 05 | 00104",
+    "message": "Parameter set: delete failed",
+    "description": "Parameter set: delete failed",
+    "remedy": "Parameter set available?; Repeat deletion; Service case",
+    "classification": "Default: Warning (16)"
+  },
+  "100991081": {
+    "code": 100991081,
+    "id": "06 | 05 | 00105",
+    "message": "Factory parameter not found Can be parameterised: no",
+    "description": "Classification Default: Warning (16)",
+    "remedy": "",
+    "classification": ""
+  },
+  "100991082": {
+    "code": 100991082,
+    "id": "06 | 05 | 00106",
+    "message": "Factory parameter set invalid",
+    "description": "The factory parameter set is invalid",
+    "remedy": "None (info only)",
+    "classification": "Default: Warning (16)"
+  },
+  "100991083": {
+    "code": 100991083,
+    "id": "06 | 05 | 00107",
+    "message": "Factory parameter set not found The",
+    "description": "factory parameter set was not found",
+    "remedy": "None (info only)",
+    "classification": "Default: Warning (16)"
+  },
+  "100991084": {
+    "code": 100991084,
+    "id": "06 | 05 | 00108",
+    "message": "Factory parameter set incompat- The ible",
+    "description": "factory parameter set is incompatible",
+    "remedy": "None (info only)",
+    "classification": "Default: Warning (16)"
+  },
+  "100991266": {
+    "code": 100991266,
+    "id": "06 | 05 | 00290",
+    "message": "Parameter set with older version Par",
+    "description": "ameter set was created with an older firmware version",
+    "remedy": "Save parameter set again",
+    "classification": "Default: Warning (16)"
+  },
+  "100991267": {
+    "code": 100991267,
+    "id": "06 | 05 | 00291",
+    "message": "Parameter set with newer ver- sion",
+    "description": "Parameter set was created with a newer firmware version",
+    "remedy": "Save parameter set again",
+    "classification": "Default: Warning (16)"
+  },
+  "100991596": {
+    "code": 100991596,
+    "id": "06 | 05 | 00620",
+    "message": "Parameter set stored CRC1 0..63 Para",
+    "description": "meter set stored. Return CRC1 0..63",
+    "remedy": "None (info only)",
+    "classification": "Default: Information (4)"
+  },
+  "100991597": {
+    "code": 100991597,
+    "id": "06 | 05 | 00621",
+    "message": "Parameter set stored CRC1 64..127",
+    "description": "Parameter set stored. Return CRC1 64..127",
+    "remedy": "None (info only)",
+    "classification": "Default: Information (4)"
+  },
+  "100991600": {
+    "code": 100991600,
+    "id": "06 | 05 | 00624",
+    "message": "Parameter not found Px.y.-.-",
+    "description": "Parameter not found. Return parameters System/Axis and ID",
+    "remedy": "Delete parameter set; Overwrite (save) parameter set",
+    "classification": "Default: Stop category 1 (256)"
+  },
+  "100991601": {
+    "code": 100991601,
+    "id": "06 | 05 | 00625",
+    "message": "Parameter not found P-.-.x.y",
+    "description": "Parameter not found. Return parameters instance and index",
+    "remedy": "Delete parameter set; Overwrite (save) parameter set",
+    "classification": "Default: Stop category 1 (256)"
+  },
+  "100991602": {
+    "code": 100991602,
+    "id": "06 | 05 | 00626",
+    "message": "Parameter not writable Px.y.-.-",
+    "description": "Parameter not writable. Return parameters System/Axis and ID",
+    "remedy": "Delete parameter set; Overwrite (save) parameter set",
+    "classification": "Default: Warning (16)"
+  },
+  "100991603": {
+    "code": 100991603,
+    "id": "06 | 05 | 00627",
+    "message": "Parameter not writable P-.-.x.y",
+    "description": "Parameter not writable. Return parameters instance and index",
+    "remedy": "Delete parameter set; Overwrite (save) parameter set",
+    "classification": "Default: Warning (16)"
+  },
+  "100991786": {
+    "code": 100991786,
+    "id": "06 | 05 | 00810",
+    "message": "Safety Parameter set saved by User:",
+    "description": "Parameter set saved by:",
+    "remedy": "None (info only)",
+    "classification": "Default: Information (4)"
+  },
+  "100991792": {
+    "code": 100991792,
+    "id": "06 | 05 | 00816",
+    "message": "Factory parameter set activated",
+    "description": "Factory parameter set activated",
+    "remedy": "None (info only)",
+    "classification": "Default: Information (4)"
+  },
+  "117506157": {
+    "code": 117506157,
+    "id": "07 | 01 | 00109",
+    "message": "Negative software limit position; Stop category 0 (4096)",
+    "description": "Classification Can be parameterised: Px.4632, value list:; Stop category 1 (256); Stop category 2 (64); Warning (16); Information (4); Ignore (2)",
+    "remedy": "",
+    "classification": ""
+  },
+  "117506158": {
+    "code": 117506158,
+    "id": "07 | 01 | 00110",
+    "message": "Positive software limit position",
+    "description": "Positive software limit position reached",
+    "remedy": "Check movement trajectory (close to end position)?; Check values for software end positions (Px.4630); Check whether automatic braking is active (Px.4631); Parameters of stop ramp (Px.12101, Px.12111) lower than tra- jectory parameters, increase stop ramp parameters",
+    "classification": "Default: Stop category 1 (256)"
+  },
+  "117506159": {
+    "code": 117506159,
+    "id": "07 | 01 | 00111",
+    "message": "Limitation negative direction",
+    "description": "Limitation of direction of movement owing to negative software limit position",
+    "remedy": "Check movement order",
+    "classification": "Default: Warning (16)"
+  },
+  "117506160": {
+    "code": 117506160,
+    "id": "07 | 01 | 00112",
+    "message": "Limitation positive direction",
+    "description": "Limitation of direction of movement owing to positive software limit position",
+    "remedy": "Check movement order",
+    "classification": "Default: Warning (16)"
+  },
+  "117506161": {
+    "code": 117506161,
+    "id": "07 | 01 | 00113",
+    "message": "Parameterisation of software limit positions",
+    "description": "Parameterisation of software limit positions invalid",
+    "remedy": "Check values for software end positions (consistency, negative Px.4629 < positive end position Px4630)",
+    "classification": "Default: Stop category 1 (256)"
+  },
+  "117506162": {
+    "code": 117506162,
+    "id": "07 | 01 | 00114",
+    "message": "Negative hardware limit switch reached Can be parameterised: Px.101102, value list:",
+    "description": "Classification Default: Stop category 1 (256); Stop category 0 (4096); Stop category 1 (256); Stop category 2 (64); Warning (16); Information (4); Ignore (2)",
+    "remedy": "",
+    "classification": ""
+  },
+  "117506163": {
+    "code": 117506163,
+    "id": "07 | 01 | 00115",
+    "message": "Positive hardware limit switch reached",
+    "description": "Positive hardware limit switch reached",
+    "remedy": "Check movement order",
+    "classification": "Default: Stop category 1 (256)"
+  },
+  "117506164": {
+    "code": 117506164,
+    "id": "07 | 01 | 00116",
+    "message": "Limitation by negative hardware Limi limit switch",
+    "description": "tation of direction of movement owing to negative hardware limit switch",
+    "remedy": "Check movement order",
+    "classification": "Default: Warning (16)"
+  },
+  "117506165": {
+    "code": 117506165,
+    "id": "07 | 01 | 00117",
+    "message": "Limitation by positive hardware limit switch",
+    "description": "Limitation of direction of movement owing to positive hardware limit switch",
+    "remedy": "Check movement order",
+    "classification": "Default: Warning (16)"
+  },
+  "117506166": {
+    "code": 117506166,
+    "id": "07 | 01 | 00118",
+    "message": "Error: both hardware limit switches activated",
+    "description": "Error memory Can be parameterised: Px.101111",
+    "remedy": "",
+    "classification": ""
+  },
+  "117506167": {
+    "code": 117506167,
+    "id": "07 | 01 | 00119",
+    "message": "Negative stroke limit reached",
+    "description": "Negative stroke limit reached",
+    "remedy": "Check movement order; Check parameterization stroke limit (Px.10368)",
+    "classification": "Default: Stop category 1 (256)"
+  },
+  "117506168": {
+    "code": 117506168,
+    "id": "07 | 01 | 00120",
+    "message": "Positive stroke limit reached",
+    "description": "Positive stroke limit reached",
+    "remedy": "Check movement order; Check parameterization stroke limit (Px.10369)",
+    "classification": "Default: Stop category 1 (256)"
+  },
+  "117571705": {
+    "code": 117571705,
+    "id": "07 | 02 | 00121",
+    "message": "Target position reached",
+    "description": "Target position reached",
+    "remedy": "None (info only)",
+    "classification": "Default: Information (4)"
+  },
+  "117571706": {
+    "code": 117571706,
+    "id": "07 | 02 | 00122",
+    "message": "Target velocity reached",
+    "description": "Target velocity reached",
+    "remedy": "None (info only)",
+    "classification": "Default: Information (4)"
+  },
+  "117571707": {
+    "code": 117571707,
+    "id": "07 | 02 | 00123",
+    "message": "Target torque reached",
+    "description": "Remedy; None (info only)",
+    "remedy": "",
+    "classification": "Default: Information (4)"
+  },
+  "117571708": {
+    "code": 117571708,
+    "id": "07 | 02 | 00124",
+    "message": "Standstill reached",
+    "description": "Standstill reached",
+    "remedy": "None (info only)",
+    "classification": "Default: Information (4)"
+  },
+  "117571709": {
+    "code": 117571709,
+    "id": "07 | 02 | 00125",
+    "message": "Standstill reached and in stand- still window",
+    "description": "Standstill reached and in standstill window",
+    "remedy": "None (info only)",
+    "classification": "Default: Information (4)"
+  },
+  "117571710": {
+    "code": 117571710,
+    "id": "07 | 02 | 00126",
+    "message": "Position: following error",
+    "description": "Position: following error",
+    "remedy": "Investigate causes of contouring errors (Trace); Reduce dynamic values; Check error window (Px.463)",
+    "classification": "Default: Stop category 1 (256)"
+  },
+  "117571711": {
+    "code": 117571711,
+    "id": "07 | 02 | 00127",
+    "message": "Velocity: following error; Stop category 0 (4096)",
+    "description": "Classification Can be parameterised: Px.4624, value list:; Stop category 1 (256); Stop category 2 (64); Warning (16); Information (4); Ignore (2)",
+    "remedy": "",
+    "classification": ""
+  },
+  "117571712": {
+    "code": 117571712,
+    "id": "07 | 02 | 00128",
+    "message": "Velocity too high",
+    "description": "RPM monitoring reports velocity too high",
+    "remedy": "Check maximum velocity configuration (Px.4660); Reduce set velocity; Check offset angle, perform commutation angle determination",
+    "classification": "Default: Stop category 1 (256)"
+  },
+  "117571713": {
+    "code": 117571713,
+    "id": "07 | 02 | 00129",
+    "message": "Out of target range",
+    "description": "Drive has left the target range",
+    "remedy": "Check target range window and settling time (Px.4665 ... Px.4667); Monitoring makes sense for application? Possibly deactivate monitoring (Px.4669)",
+    "classification": "Default: Warning (16)"
+  },
+  "117571714": {
+    "code": 117571714,
+    "id": "07 | 02 | 00130",
+    "message": "Reverse feed monitoring",
+    "description": "Reverse feed monitoring reports error",
+    "remedy": "Check parameterization (Px.4663, Px.4664); Monitoring makes sense for application? Possibly deactivate monitoring (Px.4671)",
+    "classification": "Default: Stop category 0 (4096)"
+  },
+  "117571715": {
+    "code": 117571715,
+    "id": "07 | 02 | 00131",
+    "message": "Residual distance too low Can be parameterised: Px.4686, value list:",
+    "description": "Classification Default: Information (4); Stop category 0 (4096); Stop category 1 (256); Stop category 2 (64); Warning (16); Information (4); Ignore (2)",
+    "remedy": "",
+    "classification": ""
+  },
+  "117571716": {
+    "code": 117571716,
+    "id": "07 | 02 | 00132",
+    "message": "Trajectory completed",
+    "description": "Trajectory completed (setpoint value reached)",
+    "remedy": "None (info only)",
+    "classification": "Default: Information (4)"
+  },
+  "117571717": {
+    "code": 117571717,
+    "id": "07 | 02 | 00133",
+    "message": "Position difference encoder 1 to encoder 2 too large",
+    "description": "The position difference encoder 1 to encoder 2 too large",
+    "remedy": "Calibrate feed constant encoder 1 to encoder 2, see documenta- tion; Check error threshold (Px.4642, Px.4643); Check encoder cable",
+    "classification": "Default: Ignore (2)"
+  },
+  "117572218": {
+    "code": 117572218,
+    "id": "07 | 02 | 00634",
+    "message": "Velocity difference encoder 1 to encoder 2 too large",
+    "description": "The velocity difference encoder 1 to encoder 2 too large",
+    "remedy": "Set velocity filter; Check error threshold; Check encoder line",
+    "classification": "Default: Internal (1)"
+  },
+  "117572242": {
+    "code": 117572242,
+    "id": "07 | 02 | 00658",
+    "message": "Acceleration following error; Reduce dynamic values",
+    "description": "Remedy; Investigate causes of contouring errors (Trace); Check error window (Px.101735)",
+    "remedy": "",
+    "classification": "Default: Stop category 0 (4096)"
+  },
+  "117637254": {
+    "code": 117637254,
+    "id": "07 | 03 | 00134",
+    "message": "Voltage limitation active",
+    "description": "Voltage limitation active",
+    "remedy": "Reduce velocity; Reduce torque",
+    "classification": "Default: Information (4)"
+  },
+  "117637255": {
+    "code": 117637255,
+    "id": "07 | 03 | 00135",
+    "message": "Limit for velocity or current active",
+    "description": "A limit for the velocity or current is active",
+    "remedy": "Reduce dynamic values for the motion task; Check parameters for velocity limitation (Px.850, Px.851); Check parameters for current limitation (Px.854 ... Px.856)",
+    "classification": "Default: Information (4)"
+  },
+  "117702792": {
+    "code": 117702792,
+    "id": "07 | 04 | 00136",
+    "message": "Commutation finding failed",
+    "description": "Commutation finding failed",
+    "remedy": "Check encoder (valid values / connected); For vertical axes with load: reduce load mass; Enlarge monitoring window (Px.6693); Reduce step size (Px.664); Reduce dynamic values (Px.669, Px.6691, Px.6692)",
+    "classification": "Default: Stop category 0 (4096)"
+  },
+  "117702793": {
+    "code": 117702793,
+    "id": "07 | 04 | 00137",
+    "message": "Commutation finding direction error; Increase current injection for commutation angle finding",
+    "description": "Remedy; Motor shaft freewheeling? (Px.270); Axle jammed?; Adjust dynamic values for commutation angle finding (Px.669, Px.6691, Px.6692); Check whether the direction of rotation of the encoder (P0.1171.0.0) and that of the motor (Px.1172) match.",
+    "remedy": "",
+    "classification": "Default: Stop category 0 (4096)"
+  },
+  "117768330": {
+    "code": 117768330,
+    "id": "07 | 05 | 00138",
+    "message": "Analogue setpoint specification limit exceeded",
+    "description": "Limits for analogue setpoint specification exceeded",
+    "remedy": "Check limit values (Px.998, Px.999); Check scaling (Px.995)",
+    "classification": "Default: Warning (16)"
+  },
+  "118162173": {
+    "code": 118162173,
+    "id": "07 | 11 | 00765",
+    "message": "Calculation mass/friction value estimate not completed",
+    "description": "Calculation mass/friction value estimate not completed",
+    "remedy": "Increase pause time between movements",
+    "classification": "Default: Warning (16)"
+  },
+  "134217867": {
+    "code": 134217867,
+    "id": "08 | 00 | 00139",
+    "message": "Fieldbus not supported",
+    "description": "Fieldbus not supported",
+    "remedy": "Installing a suitable FW-Package for the device",
+    "classification": "Default: Stop category 1 (256)"
+  },
+  "134217868": {
+    "code": 134217868,
+    "id": "08 | 00 | 00140",
+    "message": "Failure of fieldbus synchronisa- tion signal; Stop category 0 (4096)",
+    "description": "Classification Can be parameterised: Px.801, value list:; Stop category 1 (256); Stop category 2 (64); Warning (16); Information (4); Ignore (2)",
+    "remedy": "",
+    "classification": ""
+  },
+  "134217971": {
+    "code": 134217971,
+    "id": "08 | 00 | 00243",
+    "message": "Invalid cycle time",
+    "description": "Cycle time is not an integral multiple of 1 ms",
+    "remedy": "Check the cycle time is an integer multiple of 1 ms",
+    "classification": "Default: Stop category 1 (256)"
+  },
+  "134414477": {
+    "code": 134414477,
+    "id": "08 | 03 | 00141",
+    "message": "Invalid process data",
+    "description": "The process data is invalid",
+    "remedy": "Check mapping of process data",
+    "classification": "Default: Stop category 1 (256)"
+  },
+  "134414709": {
+    "code": 134414709,
+    "id": "08 | 03 | 00373",
+    "message": "Failure of synchronization signal Th Fieldbus",
+    "description": "e maximum number of failed synchronization signals was exceeded.",
+    "remedy": "Check wiring; Check PLC configuration",
+    "classification": "Default: Stop category 1 (256)"
+  },
+  "134414727": {
+    "code": 134414727,
+    "id": "08 | 03 | 00391",
+    "message": "Process data communication failed",
+    "description": "PROFINET process data communication failed",
+    "remedy": "Check communication (connector, master) etc...",
+    "classification": "Default: Stop category 1 (256)"
+  },
+  "134414953": {
+    "code": 134414953,
+    "id": "08 | 03 | 00617",
+    "message": "Incompatible device configura- tion PROFINET IRT; Stop category 0 (4096)",
+    "description": "Classification Can be parameterised: Px.101296, value list:; Stop category 1 (256); Stop category 2 (64); Warning (16); Information (4); Ignore (2); Intern (1); Invalid (0)",
+    "remedy": "",
+    "classification": ""
+  },
+  "134480014": {
+    "code": 134480014,
+    "id": "08 | 04 | 00142",
+    "message": "EtherCAT process data invalid",
+    "description": "Parameterisation of process data invalid",
+    "remedy": "Check parameterization EtherCAT communication",
+    "classification": "Default: Stop category 1 (256)"
+  },
+  "134480015": {
+    "code": 134480015,
+    "id": "08 | 04 | 00143",
+    "message": "EtherCAT process data communi- Ether cation failed",
+    "description": "CAT process data communication failed",
+    "remedy": "Check communication EtherCAT (connector, master) etc...",
+    "classification": "Default: Stop category 1 (256)"
+  },
+  "134480153": {
+    "code": 134480153,
+    "id": "08 | 04 | 00281",
+    "message": "Process data not received at Sync time nently saved",
+    "description": "Process data not received at Sync time. Changes in classification are not perma-",
+    "remedy": "Check connection between process data and Sync time in the controller",
+    "classification": "Default: Warning (16)"
+  },
+  "134611581": {
+    "code": 134611581,
+    "id": "08 | 06 | 00637",
+    "message": "Incorrect IP address settings",
+    "description": "No valid IP addresses setting",
+    "remedy": "Change IP address to a valid value",
+    "classification": "Default: Warning (16)"
+  },
+  "134807696": {
+    "code": 134807696,
+    "id": "08 | 09 | 00144",
+    "message": "Required application class not supported",
+    "description": "Error memory Can be parameterised: Px.11280111",
+    "remedy": "",
+    "classification": ""
+  },
+  "134807697": {
+    "code": 134807697,
+    "id": "08 | 09 | 00145",
+    "message": "Telegram not supported",
+    "description": "The required telegram is not supported",
+    "remedy": "request Only the telegrams supported by the device (see docu- mentation)",
+    "classification": "Default: Warning (16)"
+  },
+  "134807840": {
+    "code": 134807840,
+    "id": "08 | 09 | 00288",
+    "message": "PROFIdrive test error message 1 PROF",
+    "description": "Idrive test error message 1",
+    "remedy": "Cancel error test message via PNU",
+    "classification": "Default: Stop category 0 (4096)"
+  },
+  "134807841": {
+    "code": 134807841,
+    "id": "08 | 09 | 00289",
+    "message": "PROFIdrive test error message 2 PROF",
+    "description": "Idrive test error message 2",
+    "remedy": "Cancel error test message via PNU",
+    "classification": "Default: Stop category 0 (4096)"
+  },
+  "134807846": {
+    "code": 134807846,
+    "id": "08 | 09 | 00294",
+    "message": "PLC Control is not set",
+    "description": "The PLC Control bit is not set",
+    "remedy": "Set PLC control bit (STW1.Bit10)",
+    "classification": "Default: Stop category 0 (4096)"
+  },
+  "134807851": {
+    "code": 134807851,
+    "id": "08 | 09 | 00299",
+    "message": "Error Sign of Life",
+    "description": "The number of failed Sign of Life signals was exceeded.",
+    "remedy": "Check PROFINET communication; Check whether the life sign is sent correctly by the controller (e.g. create trace with STW2.12 ... STW2.15 and trigger signal ZSW1.3).; Check the permissible failure rate of the telegrams (PNU 925).; Check bus or controller for utilization.",
+    "classification": "Default: Stop category 0 (4096)"
+  },
+  "134807934": {
+    "code": 134807934,
+    "id": "08 | 09 | 00382",
+    "message": "Invalid configuration Extended process data; Stop category 0 (4096)",
+    "description": "Classification Can be parameterised: Px.424201, value list:; Stop category 1 (256); Stop category 2 (64); Warning (16); Information (4); Ignore (2)",
+    "remedy": "",
+    "classification": ""
+  },
+  "135004410": {
+    "code": 135004410,
+    "id": "08 | 12 | 00250",
+    "message": "Invalid mode of operation",
+    "description": "An invalid mode of operation was requested",
+    "remedy": "Check requested CiA402 operating mode",
+    "classification": "Default: Stop category 2 (64)"
+  },
+  "135004432": {
+    "code": 135004432,
+    "id": "08 | 12 | 00272",
+    "message": "Resolution of position fac- torgroup invalid",
+    "description": "The resolution of the position factorgroup is invalid",
+    "remedy": "Adjust parameterization position factor group (Px.7841 ... Px.7844)",
+    "classification": "Default: Warning (16)"
+  },
+  "135069697": {
+    "code": 135069697,
+    "id": "08 | 13 | 00001",
+    "message": "The requested telegram is not supported",
+    "description": "The requested telegram is not supported",
+    "remedy": "Request Only the telegrams supported by the device (see docu- mentation)",
+    "classification": "Default: Warning (16)"
+  },
+  "135070090": {
+    "code": 135070090,
+    "id": "08 | 13 | 00394",
+    "message": "Invalid process data Can be parameterised: no",
+    "description": "Classification Default: Stop category 1 (256)",
+    "remedy": "",
+    "classification": ""
+  },
+  "135135776": {
+    "code": 135135776,
+    "id": "08 | 14 | 00544",
+    "message": "Error communication RTE",
+    "description": "Error in the communication to the RTE module.",
+    "remedy": "Update Firmware; Service case",
+    "classification": "Default: Stop category 0 (4096)"
+  },
+  "135135979": {
+    "code": 135135979,
+    "id": "08 | 14 | 00747",
+    "message": "Error intern communication RTE",
+    "description": "Error in the communication to the RTE module.",
+    "remedy": "Contact Festo service",
+    "classification": "Default: Stop category 0 (4096)"
+  },
+  "150995090": {
+    "code": 150995090,
+    "id": "09 | 00 | 00146",
+    "message": "Safety function requested",
+    "description": "Safety function requested",
+    "remedy": "None (info only)",
+    "classification": "Default: Information (4)"
+  },
+  "150995091": {
+    "code": 150995091,
+    "id": "09 | 00 | 00147",
+    "message": "Plausibility check of safety feed- E back signals",
+    "description": "rror during plausibility check of safety feedback signals",
+    "remedy": "Restart device; Service case",
+    "classification": "Default: Stop category 0 (4096)"
+  },
+  "151060628": {
+    "code": 151060628,
+    "id": "09 | 01 | 00148",
+    "message": "STO: Discrepancy time exceeded Discr",
+    "description": "epancy time for #STO-A/B exceeded",
+    "remedy": "Timing Check input signals STO; Configuration Check discrepancy time (Px.391)",
+    "classification": "Default: Stop category 0 (4096)"
+  },
+  "151060629": {
+    "code": 151060629,
+    "id": "09 | 01 | 00149",
+    "message": "Plausibility check #STO-A/B",
+    "description": "Error memory Can be parameterised: no",
+    "remedy": "",
+    "classification": ""
+  },
+  "151060630": {
+    "code": 151060630,
+    "id": "09 | 01 | 00150",
+    "message": "Sequence monitoring #STO-A/B Sequenc",
+    "description": "e monitoring, #STO-A/B inputs",
+    "remedy": "Timing and sequence Check input signals STO",
+    "classification": "Default: Stop category 0 (4096)"
+  },
+  "151126167": {
+    "code": 151126167,
+    "id": "09 | 02 | 00151",
+    "message": "Plausibility check #SBC-A/B",
+    "description": "Plausibility check of #SBC-A/B input effective",
+    "remedy": "Check holding brake output for short circuit; Restart device; Service case",
+    "classification": "Default: Stop category 1 (256)"
+  },
+  "151126168": {
+    "code": 151126168,
+    "id": "09 | 02 | 00152",
+    "message": "SBC: Discrepancy time exceeded Discr",
+    "description": "epancy time for #SBC-A/B exceeded",
+    "remedy": "Timing Check input signals SBC; Configuration Check discrepancy time (Px.437)",
+    "classification": "Default: Stop category 1 (256)"
+  },
+  "167772987": {
+    "code": 167772987,
+    "id": "10 | 00 | 00827",
+    "message": "Invalid device parameter",
+    "description": "One or more device parameters are out of range",
+    "remedy": "Service case",
+    "classification": "Default: Stop category 0 (4096)"
+  },
+  "167837851": {
+    "code": 167837851,
+    "id": "10 | 01 | 00155",
+    "message": "Error: fan faulty",
+    "description": "Error: fan faulty",
+    "remedy": "Fan check, blocked? Check connection",
+    "classification": "Default: Stop category 1 (256)"
+  },
+  "167837852": {
+    "code": 167837852,
+    "id": "10 | 01 | 00156",
+    "message": "Common error power output stage",
+    "description": "Error power output stage",
+    "remedy": "Restart device; Service case",
+    "classification": "Default: Stop category 0 (4096)"
+  },
+  "167837853": {
+    "code": 167837853,
+    "id": "10 | 01 | 00157",
+    "message": "FPGA does not start up Can be parameterised: no",
+    "description": "Error memory Default: save (1)",
+    "remedy": "",
+    "classification": ""
+  },
+  "167837854": {
+    "code": 167837854,
+    "id": "10 | 01 | 00158",
+    "message": "FPGA version invalid",
+    "description": "FPGA version invalid",
+    "remedy": "Restart device; Perform firmware update; Service case",
+    "classification": "Default: Stop category 0 (4096)"
+  },
+  "167837895": {
+    "code": 167837895,
+    "id": "10 | 01 | 00199",
+    "message": "Synchronisation with FPGA failed Syn",
+    "description": "chronisation with FPGA failed",
+    "remedy": "Restart device; Perform firmware update; Service case",
+    "classification": "Default: Stop category 0 (4096)"
+  },
+  "184550065": {
+    "code": 184550065,
+    "id": "11 | 00 | 00689",
+    "message": "System starts",
+    "description": "System starts",
+    "remedy": "None",
+    "classification": "Default: Information (4)"
+  },
+  "184615071": {
+    "code": 184615071,
+    "id": "11 | 01 | 00159",
+    "message": "Data directory memory full",
+    "description": "Data directory memory full",
+    "remedy": "Restart device; Perform firmware update; Service case",
+    "classification": "Default: Stop category 0 (4096)"
+  },
+  "184615072": {
+    "code": 184615072,
+    "id": "11 | 01 | 00160",
+    "message": "Data directory indexed twice",
+    "description": "Data directory indexed twice",
+    "remedy": "Restart device; Perform firmware update; Service case",
+    "classification": "Default: Stop category 0 (4096)"
+  },
+  "184615073": {
+    "code": 184615073,
+    "id": "11 | 01 | 00161",
+    "message": "Overflow diagnostic register",
+    "description": "Overflow in diagnostic register, actual messages not acknowledged",
+    "remedy": "Acknowledge messages causes for currently pending messages",
+    "classification": "Default: Stop category 1 (256)"
+  },
+  "184615074": {
+    "code": 184615074,
+    "id": "11 | 01 | 00162",
+    "message": "Overflow buffer diagnostic reg- ister",
+    "description": "Overflow buffer in diagnostic register, actual messages not acknowledged",
+    "remedy": "Acknowledge messages causes for currently pending messages",
+    "classification": "Default: Stop category 1 (256)"
+  },
+  "184615075": {
+    "code": 184615075,
+    "id": "11 | 01 | 00163",
+    "message": "User unit error",
+    "description": "An error has occurred when changing the user unit",
+    "remedy": "Perform reinitialization again",
+    "classification": "Default: Stop category 0 (4096)"
+  },
+  "184680612": {
+    "code": 184680612,
+    "id": "11 | 02 | 00164",
+    "message": "Process runtime exceeded",
+    "description": "Process runtime exceeded",
+    "remedy": "Service case",
+    "classification": "Default: Stop category 0 (4096)"
+  },
+  "184680613": {
+    "code": 184680613,
+    "id": "11 | 02 | 00165",
+    "message": "Timeout process level 0",
+    "description": "Timeout has occurred in process level 0",
+    "remedy": "Service case",
+    "classification": "Default: Stop category 0 (4096)"
+  },
+  "184680614": {
+    "code": 184680614,
+    "id": "11 | 02 | 00166",
+    "message": "Timeout process level 1",
+    "description": "Timeout has occurred in process level 1",
+    "remedy": "Service case",
+    "classification": "Default: Stop category 0 (4096)"
+  },
+  "184680615": {
+    "code": 184680615,
+    "id": "11 | 02 | 00167",
+    "message": "Timeout process level 2",
+    "description": "Timeout has occurred in process level 2",
+    "remedy": "Service case",
+    "classification": "Default: Stop category 0 (4096)"
+  },
+  "184680616": {
+    "code": 184680616,
+    "id": "11 | 02 | 00168",
+    "message": "Timeout process level 3",
+    "description": "Timeout has occurred in process level 3",
+    "remedy": "Service case",
+    "classification": "Default: Stop category 0 (4096)"
+  },
+  "184680617": {
+    "code": 184680617,
+    "id": "11 | 02 | 00169",
+    "message": "Timeout process level 4 Can be parameterised: no",
+    "description": "Error memory Default: save (1)",
+    "remedy": "",
+    "classification": ""
+  },
+  "184680618": {
+    "code": 184680618,
+    "id": "11 | 02 | 00170",
+    "message": "Timeout process level 5",
+    "description": "Timeout has occurred in process level 5",
+    "remedy": "Service case",
+    "classification": "Default: Stop category 0 (4096)"
+  },
+  "184680619": {
+    "code": 184680619,
+    "id": "11 | 02 | 00171",
+    "message": "Timeout process level 6",
+    "description": "Timeout has occurred in process level 6",
+    "remedy": "Service case",
+    "classification": "Default: Stop category 0 (4096)"
+  },
+  "184680620": {
+    "code": 184680620,
+    "id": "11 | 02 | 00172",
+    "message": "Timeout process level 7",
+    "description": "Timeout has occurred in process level 7",
+    "remedy": "Service case",
+    "classification": "Default: Stop category 0 (4096)"
+  },
+  "184746157": {
+    "code": 184746157,
+    "id": "11 | 03 | 00173",
+    "message": "File system faulty",
+    "description": "File system faulty",
+    "remedy": "Service case",
+    "classification": "Default: Stop category 0 (4096)"
+  },
+  "184746158": {
+    "code": 184746158,
+    "id": "11 | 03 | 00174",
+    "message": "File: user file (backup) invalid",
+    "description": "The user file backup file is invalid",
+    "remedy": "Restart device; Service case",
+    "classification": "Default: Information (4)"
+  },
+  "184746159": {
+    "code": 184746159,
+    "id": "11 | 03 | 00175",
+    "message": "Creation of user file (backup) not T possible",
+    "description": "he creation of a backup file for the user file has failed",
+    "remedy": "Restart device; Service case",
+    "classification": "Default: Information (4)"
+  },
+  "184746160": {
+    "code": 184746160,
+    "id": "11 | 03 | 00176",
+    "message": "CRC error in user file",
+    "description": "A CRC error was detected in the user file",
+    "remedy": "Restart device; Contact support",
+    "classification": "Default: Information (4)"
+  },
+  "184746161": {
+    "code": 184746161,
+    "id": "11 | 03 | 00177",
+    "message": "File: user file invalid",
+    "description": "The user file is invalid",
+    "remedy": "Restart device; Service case",
+    "classification": "Default: Information (4)"
+  },
+  "184746162": {
+    "code": 184746162,
+    "id": "11 | 03 | 00178",
+    "message": "New user file has been created",
+    "description": "A new user file has been generated",
+    "remedy": "None (info only)",
+    "classification": "Default: Information (4)"
+  },
+  "184746163": {
+    "code": 184746163,
+    "id": "11 | 03 | 00179",
+    "message": "Writing to user file not possible",
+    "description": "It was not possible to write to the user file",
+    "remedy": "Restart device; Service case",
+    "classification": "Default: Information (4)"
+  },
+  "184746164": {
+    "code": 184746164,
+    "id": "11 | 03 | 00180",
+    "message": "Unknown user file error",
+    "description": "An unknown error was triggered for the user file",
+    "remedy": "Restart device; Service case",
+    "classification": "Default: Information (4)"
+  },
+  "184811701": {
+    "code": 184811701,
+    "id": "11 | 04 | 00181",
+    "message": "Writing of firmware failed",
+    "description": "Writing of firmware failed",
+    "remedy": "Repeat transfer of firmware package.",
+    "classification": "Default: Warning (16)"
+  },
+  "184811702": {
+    "code": 184811702,
+    "id": "11 | 04 | 00182",
+    "message": "Reading of firmware failed",
+    "description": "Reading of firmware failed",
+    "remedy": "Repeat transfer of firmware package.",
+    "classification": "Default: Warning (16)"
+  },
+  "184811703": {
+    "code": 184811703,
+    "id": "11 | 04 | 00183",
+    "message": "Firmware invalid",
+    "description": "Firmware invalid",
+    "remedy": "Repeat transfer of firmware package.",
+    "classification": "Default: Warning (16)"
+  },
+  "184811704": {
+    "code": 184811704,
+    "id": "11 | 04 | 00184",
+    "message": "Firmware incompatible; Repeat transfer of firmware package",
+    "description": "Remedy; Version Check hardware and firmware version",
+    "remedy": "",
+    "classification": "Default: Warning (16)"
+  },
+  "184811705": {
+    "code": 184811705,
+    "id": "11 | 04 | 00185",
+    "message": "Firmware save location invalid",
+    "description": "Firmware save location invalid",
+    "remedy": "Restart device; Service case",
+    "classification": "Default: Warning (16)"
+  },
+  "184811706": {
+    "code": 184811706,
+    "id": "11 | 04 | 00186",
+    "message": "Firmware save location empty",
+    "description": "Firmware save location empty",
+    "remedy": "Restart device; Service case",
+    "classification": "Default: Warning (16)"
+  },
+  "184811707": {
+    "code": 184811707,
+    "id": "11 | 04 | 00187",
+    "message": "Firmware update not allowed",
+    "description": "Firmware update not allowed",
+    "remedy": "Power stage switched off",
+    "classification": "Default: Warning (16)"
+  },
+  "184811708": {
+    "code": 184811708,
+    "id": "11 | 04 | 00188",
+    "message": "Firmware package in use",
+    "description": "Firmware package in use",
+    "remedy": "Repeat transfer of firmware package.",
+    "classification": "Default: Warning (16)"
+  },
+  "184811709": {
+    "code": 184811709,
+    "id": "11 | 04 | 00189",
+    "message": "System error during firmware update",
+    "description": "System error occurred during firmware update",
+    "remedy": "Repeat transfer of firmware package; Service case",
+    "classification": "Default: Stop category 1 (256)"
+  },
+  "184811710": {
+    "code": 184811710,
+    "id": "11 | 04 | 00190",
+    "message": "Firmware update failed",
+    "description": "Firmware update failed",
+    "remedy": "Repeat transfer of firmware package; Service case",
+    "classification": "Default: Stop category 1 (256)"
+  },
+  "184877247": {
+    "code": 184877247,
+    "id": "11 | 05 | 00191",
+    "message": "Calibration data incorrect: Safety Classification Can be parameterised: no",
+    "description": "Default: Stop category 0 (4096)",
+    "remedy": "",
+    "classification": ""
+  },
+  "184877248": {
+    "code": 184877248,
+    "id": "11 | 05 | 00192",
+    "message": "Device data incorrect",
+    "description": "Device data incorrect",
+    "remedy": "Repeat transfer of firmware package; Service case",
+    "classification": "Default: Stop category 0 (4096)"
+  },
+  "184877249": {
+    "code": 184877249,
+    "id": "11 | 05 | 00193",
+    "message": "Device data incorrect: control unit",
+    "description": "Device data incorrect: control unit",
+    "remedy": "Service case",
+    "classification": "Default: Stop category 0 (4096)"
+  },
+  "184877250": {
+    "code": 184877250,
+    "id": "11 | 05 | 00194",
+    "message": "Device data incorrect: communi- Devi cation unit",
+    "description": "ce data incorrect: communication unit",
+    "remedy": "Service case",
+    "classification": "Default: Stop category 0 (4096)"
+  },
+  "184877251": {
+    "code": 184877251,
+    "id": "11 | 05 | 00195",
+    "message": "Device data incorrect: Safety",
+    "description": "Device data incorrect: Safety",
+    "remedy": "Service case",
+    "classification": "Default: Stop category 0 (4096)"
+  },
+  "184877252": {
+    "code": 184877252,
+    "id": "11 | 05 | 00196",
+    "message": "Calibration data incorrect: con- trol unit",
+    "description": "Calibration data incorrect: control unit",
+    "remedy": "Service case",
+    "classification": "Default: Stop category 0 (4096)"
+  },
+  "184877253": {
+    "code": 184877253,
+    "id": "11 | 05 | 00197",
+    "message": "Calibration data incorrect: power Ca unit",
+    "description": "libration data incorrect: power unit",
+    "remedy": "Service case",
+    "classification": "Default: Stop category 0 (4096)"
+  },
+  "184877254": {
+    "code": 184877254,
+    "id": "11 | 05 | 00198",
+    "message": "Device data incorrect: power unit De",
+    "description": "vice data incorrect: power unit",
+    "remedy": "Service case",
+    "classification": "Default: Stop category 0 (4096)"
+  },
+  "184877256": {
+    "code": 184877256,
+    "id": "11 | 05 | 00200",
+    "message": "Current sensor calibration invalid C",
+    "description": "urrent sensor calibration invalid",
+    "remedy": "Service case",
+    "classification": "Default: Stop category 0 (4096)"
+  },
+  "184877257": {
+    "code": 184877257,
+    "id": "11 | 05 | 00201",
+    "message": "Device not configured",
+    "description": "Device not configured",
+    "remedy": "Restart device; Service case",
+    "classification": "Default: Stop category 0 (4096)"
+  },
+  "184877258": {
+    "code": 184877258,
+    "id": "11 | 05 | 00202",
+    "message": "Store device failed",
+    "description": "Store device failed",
+    "remedy": "Restart device; Service case",
+    "classification": "Default: Warning (16)"
+  },
+  "185008332": {
+    "code": 185008332,
+    "id": "11 | 07 | 00204",
+    "message": "Device initialisation failed",
+    "description": "The initialisation of the device has failed",
+    "remedy": "Check other diagnosis notifications.; Reset device to factory defaults.",
+    "classification": "Default: Stop category 0 (4096)"
+  },
+  "185008333": {
+    "code": 185008333,
+    "id": "11 | 07 | 00205",
+    "message": "Task ignored as reinitialisation not possible",
+    "description": "Requested reinitialisation could not be executed",
+    "remedy": "Reset controller enable",
+    "classification": "Default: Warning (16)"
+  },
+  "185008399": {
+    "code": 185008399,
+    "id": "11 | 07 | 00271",
+    "message": "Reinitialisation failed",
+    "description": "The reinitialisation failed",
+    "remedy": "Check other diagnosis notifications.; Reset device to factory defaults.",
+    "classification": "Default: Stop category 0 (4096)"
+  },
+  "185073870": {
+    "code": 185073870,
+    "id": "11 | 08 | 00206",
+    "message": "Hardware does not correspond Hardwar to expected revision/certification",
+    "description": "e does not correspond to expected revision/certification status",
+    "remedy": "Service case status",
+    "classification": "Default: Information (4)"
+  },
+  "185073871": {
+    "code": 185073871,
+    "id": "11 | 08 | 00207",
+    "message": "Hardware does not correspond Remedy to expected compatibility status",
+    "description": "Service case",
+    "remedy": "",
+    "classification": "Default: Stop category 0 (4096)"
+  },
+  "201392336": {
+    "code": 201392336,
+    "id": "12 | 01 | 00208",
+    "message": "Maximum mileage value reached Maximu",
+    "description": "m value for the mileage is reached",
+    "remedy": "None (info only)",
+    "classification": "Default: Information (4)"
+  },
+  "201392337": {
+    "code": 201392337,
+    "id": "12 | 01 | 00209",
+    "message": "Mileage warning threshold reached",
+    "description": "Threshold value 1 (default: warning threshold) for the mileage is reached",
+    "remedy": "None (info only)",
+    "classification": "Default: Warning (16)"
+  },
+  "201392338": {
+    "code": 201392338,
+    "id": "12 | 01 | 00210",
+    "message": "Mileage error threshold reached Thre",
+    "description": "shold value 2 (default: error threshold) for the mileage is reached",
+    "remedy": "None (info only)",
+    "classification": "Default: Warning (16)"
+  },
+  "201392339": {
+    "code": 201392339,
+    "id": "12 | 01 | 00211",
+    "message": "Maximum load change value reached",
+    "description": "The maximum value for the load change is reached",
+    "remedy": "None (info only)",
+    "classification": "Default: Information (4)"
+  },
+  "201392340": {
+    "code": 201392340,
+    "id": "12 | 01 | 00212",
+    "message": "Load change warning threshold reached",
+    "description": "Threshold value 1 (default: warning threshold) for the load change is reached",
+    "remedy": "None (info only)",
+    "classification": "Default: Warning (16)"
+  },
+  "201392341": {
+    "code": 201392341,
+    "id": "12 | 01 | 00213",
+    "message": "Load change error threshold reached; Stop category 0 (4096)",
+    "description": "Classification Can be parameterised: Px.14213, value list:; Stop category 1 (256); Stop category 2 (64); Warning (16); Information (4); Ignore (2)",
+    "remedy": "",
+    "classification": ""
+  },
+  "201392568": {
+    "code": 201392568,
+    "id": "12 | 01 | 00440",
+    "message": "Maximum write cycles reached",
+    "description": "Maximum write cycles of file storage reached",
+    "remedy": "Service case",
+    "classification": "Default: Information (4)"
+  },
+  "218169558": {
+    "code": 218169558,
+    "id": "13 | 01 | 00214",
+    "message": "Message acknowledgment",
+    "description": "Message acknowledgment completed",
+    "remedy": "None (info only)",
+    "classification": "Default: Internal (1)"
+  },
+  "218169559": {
+    "code": 218169559,
+    "id": "13 | 01 | 00215",
+    "message": "Diagnostics log file has invalid format",
+    "description": "Diagnostic memory invalid",
+    "remedy": "None",
+    "classification": "Default: Warning (16)"
+  },
+  "218169560": {
+    "code": 218169560,
+    "id": "13 | 01 | 00216",
+    "message": "Loss of messages from diagnos- Loss tics log",
+    "description": "of messages from diagnostics log",
+    "remedy": "None",
+    "classification": "Default: Warning (16)"
+  },
+  "218235097": {
+    "code": 218235097,
+    "id": "13 | 02 | 00217",
+    "message": "Auto tuning aborted",
+    "description": "Auto tuning aborted",
+    "remedy": "Check whether further error messages are present and correct their cause; Start Autotuning again",
+    "classification": "Default: Stop category 1 (256)"
+  },
+  "218235098": {
+    "code": 218235098,
+    "id": "13 | 02 | 00218",
+    "message": "Auto tuning movement insuffi- cient or synchronous phase too",
+    "description": "Auto tuning movement insufficient",
+    "remedy": "Check the position of the carriage. Too close to the end posi- short tions?; Check move distance of move set (Px.8621); Check the acceleration and braking ramps, if necessary increase the maximum acceleration and deceleration for autotuning, so that the acceleration and braking phases are shorter (Px.8620 ... Px.8625)",
+    "classification": "Default: Stop category 1 (256)"
+  },
+  "218235099": {
+    "code": 218235099,
+    "id": "13 | 02 | 00219",
+    "message": "Auto tuning controller parame- ters invalid",
+    "description": "The Auto tuning function could not identify any controller parameters",
+    "remedy": "Restart autotuning with modified parameter noise intensity (Px.8616); Start autotuning with movement (Px.8619); Evaluate frequency response analysis",
+    "classification": "Default: Stop category 1 (256)"
+  },
+  "218235100": {
+    "code": 218235100,
+    "id": "13 | 02 | 00220",
+    "message": "Transmission of auto tuning measured values failed",
+    "description": "Transmission of auto tuning measured values failed",
+    "remedy": "Check if connection exists; Restart transmission; Start Autotuning again",
+    "classification": "Default: Warning (16)"
+  },
+  "268501213": {
+    "code": 268501213,
+    "id": "16 | 01 | 00221",
+    "message": "CDSB display file faulty",
+    "description": "CDSB display file faulty",
+    "remedy": "Repeat transfer of firmware package; Service case",
+    "classification": "Default: Warning (16)"
+  },
+  "268501214": {
+    "code": 268501214,
+    "id": "16 | 01 | 00222",
+    "message": "JSON display description for CDSB too large",
+    "description": "JSON display description for CDSB too large",
+    "remedy": "Service case",
+    "classification": "Default: Warning (16)"
+  },
+  "268501215": {
+    "code": 268501215,
+    "id": "16 | 01 | 00223",
+    "message": "SPI communication too slow",
+    "description": "SPI communication too slow",
+    "remedy": "Service case",
+    "classification": "Default: Warning (16)"
+  },
+  "285278434": {
+    "code": 285278434,
+    "id": "17 | 01 | 00226",
+    "message": "Login error Can be parameterised: no",
+    "description": "Classification Default: Information (4)",
+    "remedy": "",
+    "classification": ""
+  },
+  "285278647": {
+    "code": 285278647,
+    "id": "17 | 01 | 00439",
+    "message": "Too many invalid login attempts",
+    "description": "Too many invalid login attempts",
+    "remedy": "Restart device and try again",
+    "classification": "Default: Stop category 0 (4096)"
+  },
+  "285278836": {
+    "code": 285278836,
+    "id": "17 | 01 | 00628",
+    "message": "Login completed",
+    "description": "Login to access the device at a specific authorisation level has been completed.",
+    "remedy": "None (info only)",
+    "classification": "Default: Information (4)"
+  },
+  "285278837": {
+    "code": 285278837,
+    "id": "17 | 01 | 00629",
+    "message": "Logout completed",
+    "description": "Logout of the device at a specific authorisation level has been completed.",
+    "remedy": "None (info only)",
+    "classification": "Default: Information (4)"
+  },
+  "285279025": {
+    "code": 285279025,
+    "id": "17 | 01 | 00817",
+    "message": "Login failed attempt",
+    "description": "Login failed attempt",
+    "remedy": "None (info only)",
+    "classification": "Default: Information (4)"
+  },
+  "301989980": {
+    "code": 301989980,
+    "id": "18 | 00 | 00092",
+    "message": "Motor change detected, commu- Motor tation angle invalid",
+    "description": "change detected, commutation angle invalid",
+    "remedy": "Run commutation angle finding and homing and save",
+    "classification": "Default: Stop category 0 (4096)"
+  },
+  "301989981": {
+    "code": 301989981,
+    "id": "18 | 00 | 00093",
+    "message": "Motor change detected, zero point offset invalid",
+    "description": "Motor change detected, zero point offset invalid",
+    "remedy": "Perform homing and save parameter set",
+    "classification": "Default: Stop category 0 (4096)"
+  },
+  "301989982": {
+    "code": 301989982,
+    "id": "18 | 00 | 00094",
+    "message": "Commutation angle in encoder invalid",
+    "description": "Commutation angle in encoder invalid",
+    "remedy": "Perform commutation angle determination",
+    "classification": "Default: Invalid (0)"
+  },
+  "301989983": {
+    "code": 301989983,
+    "id": "18 | 00 | 00095",
+    "message": "Encoder type plate invalid",
+    "description": "Encoder type plate invalid",
+    "remedy": "Service case",
+    "classification": "Default: Invalid (0)"
+  },
+  "301989984": {
+    "code": 301989984,
+    "id": "18 | 00 | 00096",
+    "message": "Encoder type plate (user defined) invalid",
+    "description": "Encoder type plate (user defined) invalid",
+    "remedy": "Reconfigure using the commissioning tool",
+    "classification": "Default: Invalid (0)"
+  },
+  "301990115": {
+    "code": 301990115,
+    "id": "18 | 00 | 00227",
+    "message": "Encoder identification reports incorrect encoder type",
+    "description": "Encoder identification reports incorrect encoder type",
+    "remedy": "Check configuration",
+    "classification": "Default: Stop category 0 (4096)"
+  },
+  "301990206": {
+    "code": 301990206,
+    "id": "18 | 00 | 00318",
+    "message": "Status transition error",
+    "description": "The requested state transition is not supported.",
+    "remedy": "Remove PROFIdrive command from control sequence",
+    "classification": "Default: Stop category 2 (64)"
+  },
+  "301990574": {
+    "code": 301990574,
+    "id": "18 | 00 | 00686",
+    "message": "Linearisation table invalid",
+    "description": "Linearisation table invalid",
+    "remedy": "None",
+    "classification": "Default: Stop category 1 (256)"
+  },
+  "301990576": {
+    "code": 301990576,
+    "id": "18 | 00 | 00688",
+    "message": "Cogging compensation invalid",
+    "description": "Cogging compensation invalid",
+    "remedy": "Restart device",
+    "classification": "Default: Stop category 1 (256)"
+  },
+  "301990581": {
+    "code": 301990581,
+    "id": "18 | 00 | 00693",
+    "message": "Error when recording the cog- ging table",
+    "description": "Error when recording the cogging table",
+    "remedy": "Repeat identification drive",
+    "classification": "Default: Warning (16)"
+  },
+  "302055652": {
+    "code": 302055652,
+    "id": "18 | 01 | 00228",
+    "message": "Common error EnDat 2.1",
+    "description": "Common error on EnDat 2.1 encoder",
+    "remedy": "Check encoder type configuration; Wiring error (short-circuit in encoder power supply); Encoder defective",
+    "classification": "Default: Stop category 0 (4096)"
+  },
+  "302055653": {
+    "code": 302055653,
+    "id": "18 | 01 | 00229",
+    "message": "Common error EnDat 2.2",
+    "description": "Common error on EnDat 2.2 encoder",
+    "remedy": "Check encoder type configuration; Wiring error (short-circuit in encoder power supply); Encoder defective",
+    "classification": "Default: Stop category 0 (4096)"
+  },
+  "302056195": {
+    "code": 302056195,
+    "id": "18 | 01 | 00771",
+    "message": "Incompatible motor change",
+    "description": "Incompatible motor change",
+    "remedy": "Match NOC code (Px.32410) with connected motor",
+    "classification": "Default: Stop category 0 (4096)"
+  },
+  "302121190": {
+    "code": 302121190,
+    "id": "18 | 02 | 00230",
+    "message": "Vector length invalid",
+    "description": "Vector length for Hiperface encoder invalid",
+    "remedy": "Check wiring (EMC); Input frequency too high, reduce velocity; Encoder defective- Encoder defective",
+    "classification": "Default: Stop category 0 (4096)"
+  },
+  "302121191": {
+    "code": 302121191,
+    "id": "18 | 02 | 00231",
+    "message": "Quadrant invalid",
+    "description": "Quadrant for Hiperface encoder invalid",
+    "remedy": "Check wiring (EMC); Encoder defective",
+    "classification": "Default: Stop category 0 (4096)"
+  },
+  "302121192": {
+    "code": 302121192,
+    "id": "18 | 02 | 00232",
+    "message": "Hiperface communication timeout",
+    "description": "Timeout for communication with Hiperface encoder",
+    "remedy": "Check wiring (EMC); Encoder defective",
+    "classification": "Default: Stop category 0 (4096)"
+  },
+  "302121193": {
+    "code": 302121193,
+    "id": "18 | 02 | 00233",
+    "message": "Error in CRC protocol for Hiper- face encoder Can be parameterised: no",
+    "description": "Error memory Default: save (1)",
+    "remedy": "",
+    "classification": ""
+  },
+  "302121194": {
+    "code": 302121194,
+    "id": "18 | 02 | 00234",
+    "message": "Common error Hiperface",
+    "description": "Common error Hiperface encoder",
+    "remedy": "Check wiring (EMC); Encoder defective",
+    "classification": "Default: Stop category 0 (4096)"
+  },
+  "302121236": {
+    "code": 302121236,
+    "id": "18 | 02 | 00276",
+    "message": "Error in Hiperface encoder",
+    "description": "Drive moving during initialisation of the Hiperface encoder",
+    "remedy": "Stop load and acknowledge error",
+    "classification": "Default: Stop category 0 (4096)"
+  },
+  "302186731": {
+    "code": 302186731,
+    "id": "18 | 03 | 00235",
+    "message": "Incremental encoder analysis invalid",
+    "description": "Common error quadrature encoder",
+    "remedy": "Check encoder cable; Restart the device",
+    "classification": "Default: Stop category 0 (4096)"
+  },
+  "302186797": {
+    "code": 302186797,
+    "id": "18 | 03 | 00301",
+    "message": "Number of increments between two zero pulses invalid",
+    "description": "Wrong zero pulse or incorrect number of increments per revolution",
+    "remedy": "Check encoder cable; Restart the device",
+    "classification": "Default: Warning (16)"
+  },
+  "302186930": {
+    "code": 302186930,
+    "id": "18 | 03 | 00434",
+    "message": "Invalid encoder resolution value range of 16 bit.",
+    "description": "The product of resolution Px.10040 and evaluation Px.10043 is larger than the",
+    "remedy": "Check parameterization. P0.10040 must be smaller than 65536.",
+    "classification": "Default: Stop category 1 (256)"
+  },
+  "302252268": {
+    "code": 302252268,
+    "id": "18 | 04 | 00236",
+    "message": "Protocol error Nikon-A encoder",
+    "description": "A protocol error for the Nikon-A encoder has occurred",
+    "remedy": "Check encoder cable; Restart the device",
+    "classification": "Default: Stop category 0 (4096)"
+  },
+  "302252269": {
+    "code": 302252269,
+    "id": "18 | 04 | 00237",
+    "message": "Timeout Nikon-A encoder",
+    "description": "A timeout for the Nikon-A encoder has occurred",
+    "remedy": "Check encoder cable; Restart the device",
+    "classification": "Default: Stop category 0 (4096)"
+  },
+  "302252270": {
+    "code": 302252270,
+    "id": "18 | 04 | 00238",
+    "message": "CRC error Nikon-A encoder",
+    "description": "A CRC error for the Nikon-A encoder has occurred",
+    "remedy": "Check encoder cable; Restart the device",
+    "classification": "Default: Stop category 0 (4096)"
+  },
+  "302317807": {
+    "code": 302317807,
+    "id": "18 | 05 | 00239",
+    "message": "BiSS-C encoder analysis invalid",
+    "description": "Check the wiring of the encoder and the position resolution of the BiSS-C protocol.",
+    "remedy": "Check encoder cable; Restart the device",
+    "classification": "Default: Stop category 0 (4096)"
+  },
+  "302318201": {
+    "code": 302318201,
+    "id": "18 | 05 | 00633",
+    "message": "BiSS-C Timeout communication",
+    "description": "The actual baud rate is too low for the encoder resolution",
+    "remedy": "Increase baud rate value",
+    "classification": "Default: Warning (16)"
+  },
+  "302318380": {
+    "code": 302318380,
+    "id": "18 | 05 | 00812",
+    "message": "BiSS-C encoder error",
+    "description": "BiSS-C encoder error",
+    "remedy": "Check surounding conditions of motor/encoder; unplug and plug the encoder; sevice case",
+    "classification": "Default: Stop category 0 (4096)"
+  },
+  "302318381": {
+    "code": 302318381,
+    "id": "18 | 05 | 00813",
+    "message": "BiSS-C encoder warning Can be parameterised: Px.102793, value list:",
+    "description": "Classification Default: Warning (16); Stop category 0 (4096); Stop category 1 (256); Stop category 2 (64); Warning (16); Information (4)",
+    "remedy": "",
+    "classification": ""
+  },
+  "302383344": {
+    "code": 302383344,
+    "id": "18 | 06 | 00240",
+    "message": "Vector length invalid",
+    "description": "Vector length for SIN/COS encoder invalid",
+    "remedy": "Check wiring (EMC); Input frequency too high, reduce velocity; Encoder defective- Encoder defective",
+    "classification": "Default: Stop category 0 (4096)"
+  },
+  "302383345": {
+    "code": 302383345,
+    "id": "18 | 06 | 00241",
+    "message": "Quadrant invalid",
+    "description": "Quadrant for SIN/COS encoder invalid",
+    "remedy": "Check wiring (EMC); Encoder defective",
+    "classification": "Default: Stop category 0 (4096)"
+  },
+  "302383346": {
+    "code": 302383346,
+    "id": "18 | 06 | 00242",
+    "message": "Encoder initialisation: Timeout",
+    "description": "Timeout of SIN/COS encoder during initialisation",
+    "remedy": "Check wiring (EMC); Encoder defective",
+    "classification": "Default: Stop category 0 (4096)"
+  },
+  "302383381": {
+    "code": 302383381,
+    "id": "18 | 06 | 00277",
+    "message": "Error in SIN/COS encoder",
+    "description": "Drive moving during initialisation of the SIN/COS encoder",
+    "remedy": "Stop load and acknowledge error",
+    "classification": "Default: Stop category 0 (4096)"
+  },
+  "302449005": {
+    "code": 302449005,
+    "id": "18 | 07 | 00365",
+    "message": "Invalid request Gn_STW1.4...7",
+    "description": "Invalid request for the control word Gn_STW1.4...7, bits reserved.",
+    "remedy": "Control word Check PROFIdrive encoder",
+    "classification": "Default: Warning (16)"
+  },
+  "302449006": {
+    "code": 302449006,
+    "id": "18 | 07 | 00366",
+    "message": "Function not supported Gn_STW1",
+    "description": "An unsupported function in the control word Gn_STW1 is requested.",
+    "remedy": "Control word Check PROFIdrive encoder",
+    "classification": "Default: Warning (16)"
+  },
+  "302449007": {
+    "code": 302449007,
+    "id": "18 | 07 | 00367",
+    "message": "Axis parking not possible",
+    "description": "Axis Parking Request cannot be executed because the axis is moving.",
+    "remedy": "Withdraw controller enable before parking",
+    "classification": "Default: Warning (16)"
+  },
+  "302449008": {
+    "code": 302449008,
+    "id": "18 | 07 | 00368",
+    "message": "Error reference marks search completely configured.",
+    "description": "Error when searching for the reference marks, because the requested function is not",
+    "remedy": "Control word Check PROFIdrive encoder",
+    "classification": "Default: Warning (16)"
+  },
+  "302449009": {
+    "code": 302449009,
+    "id": "18 | 07 | 00369",
+    "message": "Error Read Position Reference mark completely configured.",
+    "description": "Error when reading the position of the reference mark because the function is not",
+    "remedy": "Control word Check PROFIdrive encoder",
+    "classification": "Default: Warning (16)"
+  },
+  "302449010": {
+    "code": 302449010,
+    "id": "18 | 07 | 00370",
+    "message": "Error measuring on the fly completely configured.",
+    "description": "Error when measuring the reference mark on the fly, because the function is not",
+    "remedy": "Control word Check PROFIdrive encoder",
+    "classification": "Default: Warning (16)"
+  },
+  "302449011": {
+    "code": 302449011,
+    "id": "18 | 07 | 00371",
+    "message": "Error Read Position Measure on the fly the function is not completely configured.",
+    "description": "Error when reading the position Measure on the fly of the reference mark, because",
+    "remedy": "Control word Check PROFIdrive encoder",
+    "classification": "Default: Warning (16)"
+  },
+  "302449012": {
+    "code": 302449012,
+    "id": "18 | 07 | 00372",
+    "message": "Error Transfer absolute position to Gn_XIST2",
+    "description": "Error when transferring the absolute position to Gn_XIST2.",
+    "remedy": "Check PROFIdrive encoder control word; Use of absolute encoder",
+    "classification": "Default: Warning (16)"
+  }
+}

@@ -161,7 +161,7 @@ class MockMaster:
             return slave.txpdo.actual_position
         if index == 0x606C:
             return slave.txpdo.actual_velocity
-        if index == 0x603F:
+        if index == 0x2145 and subindex == 0x0C:
             return 0
         if index == 0x1001:
             return 0

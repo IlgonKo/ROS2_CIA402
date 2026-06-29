@@ -9,9 +9,11 @@ ENV_FILE="${PROJECT_ROOT}/.env"
 cd "${PROJECT_ROOT}"
 
 if [[ -f "${ENV_FILE}" ]]; then
-  docker compose -f "${COMPOSE_FILE}" --env-file "${ENV_FILE}" down --remove-orphans
+  docker compose -f "${COMPOSE_FILE}" --env-file "${ENV_FILE}" stop axis_server
+  docker compose -f "${COMPOSE_FILE}" --env-file "${ENV_FILE}" rm -f axis_server
 else
-  docker compose -f "${COMPOSE_FILE}" down --remove-orphans
+  docker compose -f "${COMPOSE_FILE}" stop axis_server
+  docker compose -f "${COMPOSE_FILE}" rm -f axis_server
 fi
 docker rm -f ros_cia402_axis_server 2>/dev/null || true
 docker rm -f ros2_cia402_pysoem_host 2>/dev/null || true

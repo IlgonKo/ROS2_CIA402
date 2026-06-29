@@ -74,6 +74,12 @@ class Cia402CommandBridgeNode(Node):
         self.feedback_lock = threading.Lock()
         self.latest_actual_positions = [0.0 for _ in range(self.axis_count)]
         self.latest_actual_velocities = [0.0 for _ in range(self.axis_count)]
+        self.position_counts_per_unit = float(
+            os.environ.get(
+                "CIA402_POSITION_COUNTS_PER_UNIT",
+                os.environ.get("PYSOEM_CSP_COUNTS_PER_UNIT", "1.0"),
+            )
+        )
         self.stop_event = threading.Event()
         self.motion_limits = [
             [0.0, 0.0, 0.0, 0.0]
@@ -218,7 +224,8 @@ class Cia402CommandBridgeNode(Node):
 
         self.get_logger().info(
             f"CIA402 bridge started. axes={self.axis_count} "
-            f"target={self.host}:{self.port}"
+            f"target={self.host}:{self.port} "
+            f"position_counts_per_unit={self.position_counts_per_unit:g}"
         )
 
     def declare_motion_limit_parameters(self):
@@ -262,7 +269,10 @@ class Cia402CommandBridgeNode(Node):
 
         if changed:
             self.motion_limits = limits
-            self.send_motion_limits(limits)
+            self.get_logger().warn(
+                "Ignoring ROS motion limit parameter update. "
+                "Configure limits from Axis Panel."
+            )
 
         return SetParametersResult(successful=True)
 
@@ -273,14 +283,15 @@ class Cia402CommandBridgeNode(Node):
             )
             return
 
-        self.send_json(
-            {
-                "type": "target_positions",
-                "positions": [
-                    float(msg.data[index])
-                    for index in range(self.axis_count)
-                ],
-            }
+        self.send_trajectory_command(
+            [
+                {
+                    "positions": [
+                        float(msg.data[index])
+                        for index in range(self.axis_count)
+                    ],
+                }
+            ]
         )
         self.get_logger().info(
             "Forwarded target positions to Axis Server: "
@@ -292,21 +303,43 @@ class Cia402CommandBridgeNode(Node):
             self.get_logger().warn("Invalid /joint_trajectory. No points.")
             return
 
-        point = msg.points[-1]
-        positions = self.map_joint_positions(msg.joint_names, point.positions)
-        if positions is None:
+        command_points = self.map_joint_trajectory_points(msg)
+        if command_points is None:
             return
 
-        self.send_json(
-            {
-                "type": "target_positions",
-                "positions": positions,
-            }
-        )
+        self.send_trajectory_command(command_points)
         self.get_logger().info(
-            "Forwarded JointTrajectory point to Axis Server: "
-            f"{dict(zip(self.axis_names[:self.axis_count], positions))}"
+            "Forwarded JointTrajectory to Axis Server: "
+            f"points={len(command_points)}"
         )
+
+    def map_joint_trajectory_points(self, trajectory):
+        command_points = []
+        for point in trajectory.points:
+            positions = self.map_joint_positions(trajectory.joint_names, point.positions)
+            if positions is None:
+                return None
+
+            command_point = {
+                "positions": positions,
+                "time_from_start": self.duration_to_seconds(point.time_from_start),
+            }
+            velocities = self.map_joint_optional_values(
+                trajectory.joint_names,
+                point.velocities,
+                "velocities",
+            )
+            if velocities is not None:
+                command_point["velocities"] = velocities
+            accelerations = self.map_joint_optional_values(
+                trajectory.joint_names,
+                point.accelerations,
+                "accelerations",
+            )
+            if accelerations is not None:
+                command_point["accelerations"] = accelerations
+            command_points.append(command_point)
+        return command_points
 
     def map_joint_positions(self, joint_names, positions):
         if not joint_names:
@@ -363,6 +396,39 @@ class Cia402CommandBridgeNode(Node):
             for name in expected_names
         ]
 
+    def map_joint_optional_values(self, joint_names, values, field_name):
+        if not values:
+            return None
+        if not joint_names:
+            if len(values) < self.axis_count:
+                self.get_logger().warn(
+                    f"Ignoring {field_name}; expected {self.axis_count} values."
+                )
+                return None
+            return [
+                float(values[index])
+                for index in range(self.axis_count)
+            ]
+        if len(values) < len(joint_names):
+            self.get_logger().warn(
+                f"Ignoring {field_name}; length is smaller than joint_names."
+            )
+            return None
+        value_by_name = {
+            name: float(values[index])
+            for index, name in enumerate(joint_names)
+        }
+        expected_names = list(self.axis_names[:self.axis_count])
+        if any(name not in value_by_name for name in expected_names):
+            self.get_logger().warn(
+                f"Ignoring {field_name}; missing expected joints."
+            )
+            return None
+        return [
+            value_by_name[name]
+            for name in expected_names
+        ]
+
     def follow_joint_trajectory_goal_callback(self, goal_request):
         trajectory = goal_request.trajectory
         if not trajectory.points:
@@ -389,45 +455,20 @@ class Cia402CommandBridgeNode(Node):
     def execute_follow_joint_trajectory(self, goal_handle):
         trajectory = goal_handle.request.trajectory
         result = FollowJointTrajectory.Result()
-        mapped_points = []
+        command_points = self.map_joint_trajectory_points(trajectory)
+        if command_points is None:
+            result.error_code = FollowJointTrajectory.Result.INVALID_JOINTS
+            result.error_string = "Invalid joint mapping."
+            goal_handle.abort()
+            return result
 
-        for point in trajectory.points:
-            positions = self.map_joint_positions(trajectory.joint_names, point.positions)
-            if positions is None:
-                result.error_code = FollowJointTrajectory.Result.INVALID_JOINTS
-                result.error_string = "Invalid joint mapping."
-                goal_handle.abort()
-                return result
-            mapped_points.append((point, positions))
+        if not self.send_trajectory_command(command_points):
+            result.error_code = FollowJointTrajectory.Result.INVALID_GOAL
+            result.error_string = "Axis Server is not connected."
+            goal_handle.abort()
+            return result
 
-        previous_time = 0.0
-        for point, positions in mapped_points:
-            if goal_handle.is_cancel_requested:
-                goal_handle.canceled()
-                result.error_code = FollowJointTrajectory.Result.INVALID_GOAL
-                result.error_string = "Goal canceled."
-                return result
-
-            point_time = self.duration_to_seconds(point.time_from_start)
-            wait_time = max(0.0, point_time - previous_time)
-            if wait_time > 0.0:
-                self.sleep_with_cancel(wait_time, goal_handle)
-                if goal_handle.is_cancel_requested:
-                    goal_handle.canceled()
-                    result.error_code = FollowJointTrajectory.Result.INVALID_GOAL
-                    result.error_string = "Goal canceled."
-                    return result
-            previous_time = point_time
-
-            if not self.send_target_positions(positions):
-                result.error_code = FollowJointTrajectory.Result.INVALID_GOAL
-                result.error_string = "Axis Server is not connected."
-                goal_handle.abort()
-                return result
-
-            self.publish_follow_joint_feedback(goal_handle, positions)
-
-        final_target = mapped_points[-1][1]
+        final_target = command_points[-1]["positions"]
         if not self.wait_for_action_target(goal_handle, final_target, time.monotonic()):
             result.error_code = FollowJointTrajectory.Result.GOAL_TOLERANCE_VIOLATED
             result.error_string = "Final target was not reached before timeout."
@@ -439,16 +480,52 @@ class Cia402CommandBridgeNode(Node):
         result.error_string = "Trajectory accepted by Axis Server."
         return result
 
-    def send_target_positions(self, positions):
+    def send_trajectory_command(self, points):
+        self.request_axis_server_authority()
         return self.send_json(
             {
-                "type": "target_positions",
-                "positions": [
-                    float(value)
-                    for value in positions[:self.axis_count]
-                ],
+                "type": "trajectory_command",
+                "axes": list(range(self.axis_count)),
+                "points": self.trajectory_points_to_axis_units(points),
             }
         )
+
+    def send_trajectory_stop(self):
+        self.request_axis_server_authority()
+        return self.send_json({"type": "trajectory_stop", "mode": "controlled"})
+
+    def request_axis_server_authority(self):
+        return self.send_json({"type": "command_authority_request"})
+
+    def trajectory_points_to_axis_units(self, points):
+        converted_points = []
+        for point in points:
+            converted = dict(point)
+            converted["positions"] = [
+                self.ros_position_to_axis_position(value)
+                for value in point.get("positions", [])
+            ]
+            if "velocities" in point:
+                converted["velocities"] = [
+                    self.ros_velocity_to_axis_velocity(value)
+                    for value in point["velocities"]
+                ]
+            if "accelerations" in point:
+                converted["accelerations"] = [
+                    self.ros_velocity_to_axis_velocity(value)
+                    for value in point["accelerations"]
+                ]
+            converted_points.append(converted)
+        return converted_points
+
+    def ros_position_to_axis_position(self, position):
+        return float(position) * self.position_counts_per_unit
+
+    def axis_position_to_ros_position(self, position):
+        return float(position) / max(self.position_counts_per_unit, 1e-9)
+
+    def ros_velocity_to_axis_velocity(self, velocity):
+        return float(velocity) * self.position_counts_per_unit
 
     def publish_follow_joint_feedback(self, goal_handle, desired_positions):
         with self.feedback_lock:
@@ -490,6 +567,7 @@ class Cia402CommandBridgeNode(Node):
 
         while deadline is None or time.monotonic() <= deadline:
             if goal_handle.is_cancel_requested:
+                self.send_trajectory_stop()
                 goal_handle.canceled()
                 return False
 
@@ -558,26 +636,15 @@ class Cia402CommandBridgeNode(Node):
             )
 
         self.motion_limits = limits
-        self.send_motion_limits(limits)
         self.get_logger().info(
-            f"Forwarded motion limits to Axis Server: {limits}"
-        )
-
-    def send_motion_limits(self, limits):
-        self.send_json(
-            {
-                "type": "motion_limits",
-                "limits": limits,
-            }
+            "Updated local ROS Bridge motion limits only. "
+            "Configure Axis Server limits from Axis Panel."
         )
 
     def alarm_ack_callback(self, _msg):
-        self.send_json(
-            {
-                "type": "alarm_ack",
-            }
+        self.get_logger().warn(
+            "Ignoring /alarm_ack in ROS Bridge. Use Axis Panel for alarm ack."
         )
-        self.get_logger().info("Forwarded alarm ack to Axis Server")
 
     def repeat_motion_callback(self, msg):
         try:
@@ -627,58 +694,22 @@ class Cia402CommandBridgeNode(Node):
         )
 
     def motion_mode_callback(self, msg):
-        try:
-            payload = json.loads(msg.data)
-            mode = str(payload["mode"]).lower()
-            axis = payload.get("axis", None)
-        except Exception:
-            mode = msg.data.strip().lower()
-            axis = None
-
-        message = {
-            "type": "motion_mode",
-            "mode": mode,
-        }
-        if axis is not None:
-            message["axis"] = int(axis)
-
-        self.send_json(message)
-        self.get_logger().info(f"Forwarded motion mode to Axis Server: {message}")
+        self.get_logger().warn(
+            "Ignoring /motion_mode in ROS Bridge. Trajectory commands force CSP."
+        )
 
     def controlword_callback(self, msg):
-        if len(msg.data) == 1:
-            message = {
-                "type": "controlword",
-                "controlword": int(msg.data[0]),
-            }
-        elif len(msg.data) >= 2:
-            message = {
-                "type": "controlword",
-                "axis": int(msg.data[0]),
-                "controlword": int(msg.data[1]),
-            }
-        else:
-            self.get_logger().warn("Invalid /controlword. Expected [cw] or [axis, cw].")
-            return
-
-        self.send_json(message)
-        self.get_logger().info(f"Forwarded controlword to Axis Server: {message}")
+        self.get_logger().warn(
+            "Ignoring /controlword in ROS Bridge. Use Axis Panel for controlword."
+        )
 
     def jog_position_callback(self, msg):
-        if len(msg.data) < 2:
-            self.get_logger().warn("Invalid /jog_position. Expected [axis, distance].")
-            return
-
-        message = {
-            "type": "jog_position",
-            "axis": int(msg.data[0]),
-            "distance": float(msg.data[1]),
-        }
-        self.send_json(message)
-        self.get_logger().info(f"Forwarded jog to Axis Server: {message}")
+        self.get_logger().warn(
+            "Ignoring /jog_position in ROS Bridge. Use Axis Panel for manual jog."
+        )
 
     def command_authority_request_callback(self, _msg):
-        self.send_json({"type": "command_authority_request"})
+        self.request_axis_server_authority()
         self.get_logger().info("Requested Axis Server command authority")
 
     def command_authority_release_callback(self, _msg):
@@ -711,7 +742,7 @@ class Cia402CommandBridgeNode(Node):
 
         self.get_logger().info("Connected to Axis Server")
         if self.auto_request_authority:
-            self.send_json({"type": "command_authority_request"})
+            self.request_axis_server_authority()
 
     def read_loop(self):
         while not self.stop_event.is_set():
@@ -732,12 +763,25 @@ class Cia402CommandBridgeNode(Node):
                 self.get_logger().warn(message.get("message", "Command rejected"))
 
     def publish_feedback(self, message):
-        actual_positions = message.get("actual_positions", [])
+        self.position_counts_per_unit = float(
+            message.get(
+                "position_counts_per_unit",
+                message.get("csp_counts_per_unit", self.position_counts_per_unit),
+            )
+        )
+        target_positions = [
+            self.axis_position_to_ros_position(value)
+            for value in list(message.get("target_positions", []))[:self.axis_count]
+        ]
+        actual_positions = [
+            self.axis_position_to_ros_position(value)
+            for value in list(message.get("actual_positions", []))[:self.axis_count]
+        ]
         actual_velocities = message.get("actual_velocities", [])
         with self.feedback_lock:
             self.latest_actual_positions = [
                 float(value)
-                for value in list(actual_positions)[:self.axis_count]
+                for value in actual_positions[:self.axis_count]
             ]
             self.latest_actual_velocities = [
                 float(value)
@@ -746,7 +790,7 @@ class Cia402CommandBridgeNode(Node):
 
         self.publish_float_array(
             self.target_position_pub,
-            message.get("target_positions", []),
+            target_positions,
         )
         self.publish_float_array(
             self.actual_position_pub,
@@ -789,7 +833,7 @@ class Cia402CommandBridgeNode(Node):
         now = time.monotonic()
         if self.last_sent_repeat_target is None:
             target = self.repeat_points[self.repeat_index]
-            self.send_json({"type": "target_positions", "positions": target})
+            self.send_trajectory_command([{"positions": target}])
             self.last_sent_repeat_target = list(target)
             return
 
@@ -814,7 +858,7 @@ class Cia402CommandBridgeNode(Node):
             return
 
         target = self.repeat_points[self.repeat_index]
-        self.send_json({"type": "target_positions", "positions": target})
+        self.send_trajectory_command([{"positions": target}])
         self.last_sent_repeat_target = list(target)
         self.repeat_waiting_to_send = False
 

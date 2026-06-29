@@ -251,14 +251,14 @@ ROS Docker bash:
 
 ```bash
 bash scripts/ros/start.sh --build
-bash scripts/ros/control_panel.sh --build
+bash scripts/ros/panel.sh --build
 ```
 
 After the image exists, normal startup does not rebuild it:
 
 ```bash
 bash scripts/ros/start.sh
-bash scripts/ros/control_panel.sh
+bash scripts/ros/panel.sh
 ```
 
 `ros_bridge` runs in the background as an Axis Server TCP client.

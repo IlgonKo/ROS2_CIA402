@@ -197,10 +197,10 @@ class AxisServerClient:
                 raise ConnectionError("Axis server is not connected")
             self.sock.sendall(payload)
 
-    def send_target_positions(self, positions):
+    def send_manual_move_absolute(self, positions):
         self.send_json(
             {
-                "type": "target_positions",
+                "type": "manual_move_absolute",
                 "positions": [float(value) for value in positions],
             }
         )
@@ -247,14 +247,17 @@ class AxisServerClient:
 
         self.send_json(message)
 
-    def send_jog_position(self, axis_index, distance):
+    def send_manual_move_relative(self, axis_index, distance):
         self.send_json(
             {
-                "type": "jog_position",
+                "type": "manual_move_relative",
                 "axis": int(axis_index),
                 "distance": float(distance),
             }
         )
+
+    def send_manual_stop(self):
+        self.send_json({"type": "manual_stop", "mode": "controlled"})
 
     def send_alarm_ack(self):
         self.send_json({"type": "alarm_ack"})
@@ -363,13 +366,8 @@ class TraceCanvas:
                 points.extend([x, y])
 
             self.canvas.create_line(*points, fill=color, width=2)
-            self.canvas.create_text(
-                margin + 8 + index * 120,
-                height - 14,
-                text=self.series_names[index],
-                fill=color,
-                anchor="w",
-            )
+
+        self._draw_legend(width, height, margin)
 
     def _draw_empty(self, width, height):
         self.canvas.create_text(
@@ -377,6 +375,47 @@ class TraceCanvas:
             height / 2,
             text="Waiting for feedback",
             fill="#bdbdbd",
+        )
+
+    def _draw_legend(self, width, height, margin):
+        x = margin + 8
+        y = height - 14
+        line_height = 15
+
+        for index, text in enumerate(self.series_names):
+            color = self.colors[(index + self.color_offset) % len(self.colors)]
+            item = self.canvas.create_text(
+                x,
+                y,
+                text=text,
+                fill=color,
+                anchor="w",
+                font=("TkDefaultFont", 9),
+            )
+            bbox = self.canvas.bbox(item)
+            if bbox is not None and bbox[2] > width - margin and x > margin + 8:
+                self.canvas.move(item, margin + 8 - x, -line_height)
+                x = margin + 8
+                y -= line_height
+                bbox = self.canvas.bbox(item)
+
+            if bbox is not None and bbox[2] > width - margin:
+                compact_text = self._compact_legend_text(text)
+                self.canvas.itemconfigure(item, text=compact_text)
+                bbox = self.canvas.bbox(item)
+
+            if bbox is not None:
+                x = bbox[2] + 18
+
+    def _compact_legend_text(self, text):
+        return (
+            text.replace("Actual ", "Act ")
+            .replace("Target ", "Tgt ")
+            .replace("Command ", "Cmd ")
+            .replace("Position", "Pos")
+            .replace("Velocity", "Vel")
+            .replace(" mm/s", "")
+            .replace(" mm", "")
         )
 
 
@@ -401,8 +440,7 @@ class AxisServerControlPanel:
         self.actual_velocity_var = tk.StringVar(value="0.0")
         self.command_velocity_var = tk.StringVar(value="0.0")
         self.statusword_var = tk.StringVar(value="0x0000")
-        self.error_code_var = tk.StringVar(value="0x0000")
-        self.error_register_var = tk.StringVar(value="0x00")
+        self.error_code_var = tk.StringVar(value="No error")
         self.kp_entries = []
         self.repeat_point_a_var = tk.StringVar(value="0.0")
         self.repeat_point_b_var = tk.StringVar(value="0.0")
@@ -547,8 +585,6 @@ class AxisServerControlPanel:
             ("Actual Velocity mm/s", self.actual_velocity_var, "label"),
             ("Command Velocity mm/s", self.command_velocity_var, "label"),
             ("Statusword", self.statusword_var, "label"),
-            ("Error", self.error_code_var, "label"),
-            ("Err Reg", self.error_register_var, "label"),
         ]
         for index, (label, var, kind) in enumerate(fields):
             row = index // 4
@@ -578,6 +614,29 @@ class AxisServerControlPanel:
                     sticky="ew",
                 )
             detail.columnconfigure(column + 1, weight=1)
+
+        error_row = (len(fields) + 3) // 4
+        ttk.Label(detail, text="Error").grid(
+            row=error_row,
+            column=0,
+            padx=5,
+            pady=5,
+            sticky="e",
+        )
+        ttk.Label(
+            detail,
+            textvariable=self.error_code_var,
+            anchor="w",
+            wraplength=1050,
+        ).grid(
+            row=error_row,
+            column=1,
+            columnspan=7,
+            padx=5,
+            pady=5,
+            sticky="ew",
+        )
+        detail.columnconfigure(1, weight=1)
         buttons = ttk.Frame(outer)
         buttons.pack(fill="x", pady=(12, 8))
         ttk.Button(buttons, text="Apply Limits", command=self.apply_limits).pack(
@@ -593,6 +652,10 @@ class AxisServerControlPanel:
             padx=4,
         )
         ttk.Button(buttons, text="Send Command", command=self.send_command).pack(
+            side="left",
+            padx=4,
+        )
+        ttk.Button(buttons, text="Manual Stop", command=self.manual_stop).pack(
             side="left",
             padx=4,
         )
@@ -737,7 +800,7 @@ class AxisServerControlPanel:
         axis_index = self.selected_axis()
         targets = list(self.latest_target_positions)
         targets[axis_index] = self.position_unit_to_count(target_position_mm)
-        self.try_send(lambda: self.client.send_target_positions(targets))
+        self.try_send(lambda: self.client.send_manual_move_absolute(targets))
 
     def apply_limits_and_send(self):
         axis_limits = self.read_selected_limit_values()
@@ -750,10 +813,14 @@ class AxisServerControlPanel:
         limits[axis_index] = axis_limits
         targets[axis_index] = self.position_unit_to_count(target_position_mm)
         self.try_send(lambda: self.client.send_motion_limits(limits))
-        self.try_send(lambda: self.client.send_target_positions(targets))
+        self.try_send(lambda: self.client.send_manual_move_absolute(targets))
 
     def alarm_ack(self):
         self.try_send(self.client.send_alarm_ack)
+
+    def manual_stop(self):
+        self.stop_repeat()
+        self.try_send(self.client.send_manual_stop)
 
     def toggle_command_authority(self):
         _, _, feedback, _ = self.client.get_snapshot()
@@ -830,7 +897,7 @@ class AxisServerControlPanel:
             return
 
         self.try_send(
-            lambda: self.client.send_jog_position(
+            lambda: self.client.send_manual_move_relative(
                 axis_index,
                 self.position_unit_to_count(direction * step),
             )
@@ -987,7 +1054,8 @@ class AxisServerControlPanel:
         self.actual_position_var.set(
             f"{self.position_count_to_unit(actual_positions[selected_axis]):.3f}"
         )
-        self.actual_velocity_var.set(f"{actual_velocities[selected_axis]:.3f}")
+        actual_velocity = float(actual_velocities[selected_axis])
+        self.actual_velocity_var.set(f"{actual_velocity:.3f}")
         self.command_velocity_var.set(
             f"{self.velocity_count_to_unit(command_velocities[selected_axis]):.3f}"
             if selected_motion_mode == "csp"
@@ -998,8 +1066,7 @@ class AxisServerControlPanel:
         )
 
         diag = diagnostics[selected_axis] if selected_axis < len(diagnostics) else {}
-        self.error_code_var.set(self._format_diag(diag, "error_code", 4))
-        self.error_register_var.set(self._format_diag(diag, "error_register", 2))
+        self.error_code_var.set(self._format_error_code(diag))
 
         for limit_index in range(4):
             var = self.limit_vars[limit_index]
@@ -1029,7 +1096,7 @@ class AxisServerControlPanel:
             )
             self.velocity_trace.add_sample(
                 [
-                    actual_velocities[selected_axis],
+                    actual_velocity,
                     self.velocity_count_to_unit(command_velocities[selected_axis]),
                 ]
             )
@@ -1044,7 +1111,7 @@ class AxisServerControlPanel:
                     self.position_count_to_unit(target_positions[selected_axis]),
                 ]
             )
-            self.velocity_trace.add_sample([actual_velocities[selected_axis]])
+            self.velocity_trace.add_sample([actual_velocity])
         self.position_trace.draw()
         self.velocity_trace.draw()
 
@@ -1087,7 +1154,7 @@ class AxisServerControlPanel:
             self.repeat_points[self.repeat_index],
         )
         if self.last_sent_repeat_target is None:
-            self.try_send(lambda: self.client.send_target_positions(target))
+            self.try_send(lambda: self.client.send_manual_move_absolute(target))
             self.last_sent_repeat_target = target[axis_index]
             return
 
@@ -1114,7 +1181,7 @@ class AxisServerControlPanel:
         if not self.repeat_enabled:
             return
         target = self._target_vector_for_axis(axis_index, target_position)
-        self.try_send(lambda: self.client.send_target_positions(target))
+        self.try_send(lambda: self.client.send_manual_move_absolute(target))
         self.last_sent_repeat_target = target[axis_index]
         self.repeat_waiting_to_send = False
 
@@ -1166,10 +1233,16 @@ class AxisServerControlPanel:
             for index in range(self.axis_count)
         ]
 
-    def _format_diag(self, diagnostics, key, width):
-        value = diagnostics.get(key, None)
+    def _format_error_code(self, diagnostics):
+        text = diagnostics.get("error_code_text", None)
+        if isinstance(text, str) and text:
+            return text
+
+        value = diagnostics.get("error_code", None)
         if isinstance(value, int):
-            return f"0x{value:0{width}X}"
+            if value == 0:
+                return "No error"
+            return f"Error {value}"
         if value is None:
             return "n/a"
         return "read fail"

@@ -13,8 +13,6 @@ import rclpy
 from rclpy.action import ActionClient
 from rclpy.node import Node
 from control_msgs.action import FollowJointTrajectory
-from rcl_interfaces.srv import SetParameters
-from rclpy.parameter import Parameter
 from std_msgs.msg import Empty
 from std_msgs.msg import Float64MultiArray
 from std_msgs.msg import Int32MultiArray
@@ -136,11 +134,6 @@ class AxisControlPanelNode(Node):
             [0.0, 0.0, 0.0, 0.0]
             for _ in AXES
         ]
-
-        self.parameter_client = self.create_client(
-            SetParameters,
-            "/ros_command_bridge/set_parameters",
-        )
 
         self.create_subscription(
             Float64MultiArray,
@@ -318,34 +311,13 @@ class AxisControlPanelNode(Node):
         except Exception:
             return False
 
-    def publish_motion_limits(self, limits):
-        if not self.parameter_client.wait_for_service(timeout_sec=0.1):
-            self.get_logger().warn("Bridge parameter service is not available")
-            return
-
-        request = SetParameters.Request()
-        for axis_index, axis_limits in enumerate(limits):
-            for name, value in [
-                ("max_velocity", axis_limits[0]),
-                ("acceleration", axis_limits[1]),
-                ("deceleration", axis_limits[2]),
-                ("kp", axis_limits[3]),
-            ]:
-                request.parameters.append(
-                    Parameter(
-                        f"axis_{axis_index}.{name}",
-                        Parameter.Type.DOUBLE,
-                        float(value),
-                    ).to_parameter_msg()
-                )
-
-        self.parameter_client.call_async(request)
-
     def request_command_authority(self):
         self.command_authority_request_pub.publish(Empty())
+        self.command_authority_text = "Authority request sent to ROS Bridge"
 
     def release_command_authority(self):
         self.command_authority_release_pub.publish(Empty())
+        self.command_authority_text = "Authority release sent to ROS Bridge"
 
     def target_position_callback(self, msg):
         if len(msg.data) >= len(AXES):
@@ -413,7 +385,7 @@ class AxisControlPanelNode(Node):
             return
 
         if payload.get("owned_by_this_client", False):
-            self.command_authority_text = "Authority: ROS bridge"
+            self.command_authority_text = "Authority: ROS Bridge owns Axis Server"
         elif payload.get("available", False):
             self.command_authority_text = "Authority: available"
         elif payload.get("owner", None) is not None:
@@ -452,7 +424,6 @@ class AxisControlPanelGui:
         self.repeat_period_var = tk.StringVar(value="2.0")
         self.repeat_points_frame = None
         self.limit_vars = []
-        self.dirty_vars = set()
         self.command_authority_var = tk.StringVar(value="Authority: unknown")
         self.command_transport_var = tk.StringVar(value="Action Controller")
         self.action_status_var = tk.StringVar(value="Action server: unknown")
@@ -494,12 +465,12 @@ class AxisControlPanelGui:
         )
         ttk.Button(
             frame,
-            text="Request Authority",
+            text="Request Bridge Authority",
             command=self.request_command_authority,
         ).grid(row=0, column=6, padx=5, pady=(0, 10), sticky="ew")
         ttk.Button(
             frame,
-            text="Release Authority",
+            text="Release Bridge Authority",
             command=self.release_command_authority,
         ).grid(row=0, column=7, padx=5, pady=(0, 10), sticky="ew")
         ttk.Label(
@@ -769,13 +740,25 @@ class AxisControlPanelGui:
 
     def _build_limits_tab(self, frame):
         headers = ["Joint", "Max Velocity", "Accel", "Decel", "Kp"]
+        ttk.Label(
+            frame,
+            text="Read-only feedback from Axis Server. Configure limits in Axis Panel.",
+            anchor="w",
+        ).grid(
+            row=0,
+            column=0,
+            columnspan=len(headers),
+            padx=5,
+            pady=(0, 8),
+            sticky="ew",
+        )
 
         for column, header in enumerate(headers):
             label = ttk.Label(frame, text=header, anchor="center")
-            label.grid(row=0, column=column, padx=5, pady=5, sticky="ew")
+            label.grid(row=1, column=column, padx=5, pady=5, sticky="ew")
             frame.columnconfigure(column, weight=1)
 
-        for row, axis_name in enumerate(AXES, start=1):
+        for row, axis_name in enumerate(AXES, start=2):
             ttk.Label(frame, text=axis_name, anchor="center").grid(
                 row=row,
                 column=0,
@@ -787,36 +770,20 @@ class AxisControlPanelGui:
             axis_limit_vars = []
             for column in range(1, 5):
                 var = tk.StringVar(value="0.0")
-                entry = ttk.Entry(frame, textvariable=var, justify="right")
-                entry.grid(
+                ttk.Label(
+                    frame,
+                    textvariable=var,
+                    anchor="e",
+                ).grid(
                     row=row,
                     column=column,
                     padx=5,
                     pady=5,
                     sticky="ew",
                 )
-                entry.bind(
-                    "<KeyRelease>",
-                    lambda _event, watched_var=var: self.mark_dirty(watched_var),
-                )
                 axis_limit_vars.append(var)
 
             self.limit_vars.append(axis_limit_vars)
-
-        button_frame = ttk.Frame(frame)
-        button_frame.grid(
-            row=len(AXES) + 1,
-            column=0,
-            columnspan=len(headers),
-            padx=5,
-            pady=(14, 5),
-            sticky="e",
-        )
-        ttk.Button(
-            button_frame,
-            text="Apply Limits",
-            command=self.apply_limits,
-        ).grid(row=0, column=0, padx=5)
 
     def build_repeat_point_entries(self, point_count):
         existing_values = [
@@ -896,20 +863,6 @@ class AxisControlPanelGui:
         self.repeat_point_count_var.set(str(point_count))
         self.stop_repeat()
         self.build_repeat_point_entries(point_count)
-
-    def mark_dirty(self, var):
-        self.dirty_vars.add(id(var))
-
-    def apply_limits(self):
-        limits = self.read_limit_values()
-        if limits is None:
-            return
-
-        self.node.publish_motion_limits(limits)
-
-        for axis_limit_vars in self.limit_vars:
-            for var in axis_limit_vars:
-                self.dirty_vars.discard(id(var))
 
     def send_command(self):
         targets = self.read_command_position_values()
@@ -1021,19 +974,6 @@ class AxisControlPanelGui:
 
         return points, period
 
-    def read_limit_values(self):
-        try:
-            return [
-                [float(var.get()) for var in axis_limit_vars]
-                for axis_limit_vars in self.limit_vars
-            ]
-        except ValueError:
-            messagebox.showerror(
-                "Invalid Input",
-                "Max Velocity, Accel, Decel, Kp must be numeric values.",
-            )
-            return None
-
     def read_command_position_values(self):
         try:
             return [
@@ -1069,10 +1009,7 @@ class AxisControlPanelGui:
 
             for limit_index in range(4):
                 var = self.limit_vars[index][limit_index]
-                if id(var) not in self.dirty_vars:
-                    var.set(
-                        f"{self.node.motion_limits[index][limit_index]:.3f}"
-                    )
+                var.set(f"{self.node.motion_limits[index][limit_index]:.3f}")
 
             self.actual_position_vars[index].set(
                 f"{self.node.actual_positions[index]:.3f}"

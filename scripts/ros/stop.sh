@@ -9,13 +9,13 @@ ENV_FILE="${PROJECT_ROOT}/.env"
 cd "${PROJECT_ROOT}"
 
 if [[ -f "${ENV_FILE}" ]]; then
-  docker compose -f "${COMPOSE_FILE}" --env-file "${ENV_FILE}" down --remove-orphans
+  docker compose -f "${COMPOSE_FILE}" --env-file "${ENV_FILE}" stop ros_bridge
+  docker compose -f "${COMPOSE_FILE}" --env-file "${ENV_FILE}" rm -f ros_bridge
 else
-  docker compose -f "${COMPOSE_FILE}" down --remove-orphans
+  docker compose -f "${COMPOSE_FILE}" stop ros_bridge
+  docker compose -f "${COMPOSE_FILE}" rm -f ros_bridge
 fi
 
 docker rm -f ros2_cia402_bridge 2>/dev/null || true
-docker rm -f ros2_cia402_control_panel 2>/dev/null || true
-docker rm -f ros2_cia402_moveit 2>/dev/null || true
 
-echo "Stopped ROS Bridge/Control Panel/MoveIt containers."
+echo "Stopped ROS Bridge container."

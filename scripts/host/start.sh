@@ -32,7 +32,8 @@ echo "Using env file: ${ENV_FILE}"
 grep -E '^(AXIS_SERVER_BACKEND|PYSOEM_AXIS_COUNT|PYSOEM_INTERFACE)=' "${ENV_FILE}" || true
 
 echo "Stopping existing Axis Server containers"
-docker compose -f "${COMPOSE_FILE}" --env-file "${ENV_FILE}" down --remove-orphans
+docker compose -f "${COMPOSE_FILE}" --env-file "${ENV_FILE}" stop axis_server
+docker compose -f "${COMPOSE_FILE}" --env-file "${ENV_FILE}" rm -f axis_server
 docker rm -f ros_cia402_axis_server 2>/dev/null || true
 docker rm -f ros2_cia402_pysoem_host 2>/dev/null || true
 
