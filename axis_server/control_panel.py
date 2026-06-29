@@ -106,9 +106,13 @@ class AxisServerClient:
             "target_positions": [0.0 for _ in range(axis_count)],
             "actual_positions": [0.0 for _ in range(axis_count)],
             "actual_velocities": [0.0 for _ in range(axis_count)],
+            "command_positions": [0.0 for _ in range(axis_count)],
+            "position_counts_per_unit": 1.0,
             "statuswords": [0 for _ in range(axis_count)],
             "motion_limits": [0.0 for _ in range(axis_count * 4)],
+            "software_position_limits": [0.0 for _ in range(axis_count * 2)],
             "motion_mode": "pp",
+            "capabilities": {},
             "diagnostics": [],
             "command_authority": {
                 "owner": None,
@@ -212,6 +216,17 @@ class AxisServerClient:
             }
         )
 
+    def send_software_position_limits(self, limits):
+        self.send_json(
+            {
+                "type": "software_position_limits",
+                "limits": [
+                    [float(value) for value in axis_limits]
+                    for axis_limits in limits
+                ],
+            }
+        )
+
     def send_motion_mode(self, mode, axis_index=None):
         message = {
             "type": "motion_mode",
@@ -252,12 +267,12 @@ class AxisServerClient:
 
 
 class TraceCanvas:
-    def __init__(self, parent, axis_names, title, color_offset=0):
-        self.axis_names = axis_names
+    def __init__(self, parent, series_names, title, color_offset=0):
+        self.series_names = series_names
         self.title = title
         self.history = [
             []
-            for _ in axis_names
+            for _ in series_names
         ]
         self.colors = [
             "#ff5a5f",
@@ -270,6 +285,16 @@ class TraceCanvas:
         self.color_offset = color_offset
         self.canvas = tk.Canvas(parent, height=190, bg="#202020", highlightthickness=1)
         self.canvas.pack(fill="both", expand=True, padx=5, pady=5)
+
+    def set_series_names(self, series_names):
+        if self.series_names == series_names:
+            return
+
+        self.series_names = series_names
+        self.history = [
+            []
+            for _ in series_names
+        ]
 
     def add_sample(self, values):
         for index, value in enumerate(values[:len(self.history)]):
@@ -339,9 +364,9 @@ class TraceCanvas:
 
             self.canvas.create_line(*points, fill=color, width=2)
             self.canvas.create_text(
-                margin + 8 + index * 90,
+                margin + 8 + index * 120,
                 height - 14,
-                text=self.axis_names[index],
+                text=self.series_names[index],
                 fill=color,
                 anchor="w",
             )
@@ -366,6 +391,10 @@ class AxisServerControlPanel:
         self.root.protocol("WM_DELETE_WINDOW", self.close)
 
         self.limit_vars = [tk.StringVar(value="0.0") for _ in range(4)]
+        self.software_limit_vars = [
+            tk.StringVar(value="0.0"),
+            tk.StringVar(value="0.0"),
+        ]
         self.command_var = tk.StringVar(value="0.0")
         self.target_var = tk.StringVar(value="0.0")
         self.actual_position_var = tk.StringVar(value="0.0")
@@ -387,6 +416,7 @@ class AxisServerControlPanel:
         self.scale_var = tk.StringVar(value="CSP scale: 1.0 count/unit")
         self.motion_mode_var = tk.StringVar(value="pp")
         self.server_motion_mode = "pp"
+        self.server_capabilities = {}
         self.dirty_vars = set()
         self.statusword_lamps = []
         self.latest_target_positions = [0.0 for _ in range(self.axis_count)]
@@ -395,7 +425,12 @@ class AxisServerControlPanel:
             [0.0, 0.0, 0.0, 0.0]
             for _ in range(self.axis_count)
         ]
+        self.latest_software_position_limits = [
+            [0.0, 0.0]
+            for _ in range(self.axis_count)
+        ]
         self.latest_motion_modes = ["pp" for _ in range(self.axis_count)]
+        self.position_counts_per_unit = 1000.0
 
         self.repeat_enabled = False
         self.repeat_axis_index = 0
@@ -500,15 +535,17 @@ class AxisServerControlPanel:
 
         fields = [
             ("Selected Axis", self.selected_axis_label_var, "label"),
-            ("Max Velocity", self.limit_vars[0], "entry"),
-            ("Accel", self.limit_vars[1], "entry"),
-            ("Decel", self.limit_vars[2], "entry"),
+            ("Max Velocity mm/s", self.limit_vars[0], "entry"),
+            ("Accel mm/s^2", self.limit_vars[1], "entry"),
+            ("Decel mm/s^2", self.limit_vars[2], "entry"),
             ("Kp", self.limit_vars[3], "entry_kp"),
-            ("Command Position", self.command_var, "entry"),
-            ("Target Position", self.target_var, "label"),
-            ("Actual Position", self.actual_position_var, "label"),
-            ("Actual Velocity", self.actual_velocity_var, "label"),
-            ("Command Velocity", self.command_velocity_var, "label"),
+            ("Negative SW Limit mm", self.software_limit_vars[0], "entry_sw"),
+            ("Positive SW Limit mm", self.software_limit_vars[1], "entry_sw"),
+            ("Command Position mm", self.command_var, "entry"),
+            ("Target Position mm", self.target_var, "label"),
+            ("Actual Position mm", self.actual_position_var, "label"),
+            ("Actual Velocity mm/s", self.actual_velocity_var, "label"),
+            ("Command Velocity mm/s", self.command_velocity_var, "label"),
             ("Statusword", self.statusword_var, "label"),
             ("Error", self.error_code_var, "label"),
             ("Err Reg", self.error_register_var, "label"),
@@ -547,6 +584,14 @@ class AxisServerControlPanel:
             side="left",
             padx=4,
         )
+        ttk.Button(
+            buttons,
+            text="Apply SW Limits",
+            command=self.apply_software_limits,
+        ).pack(
+            side="left",
+            padx=4,
+        )
         ttk.Button(buttons, text="Send Command", command=self.send_command).pack(
             side="left",
             padx=4,
@@ -581,7 +626,7 @@ class AxisServerControlPanel:
             padx=4,
             pady=6,
         )
-        ttk.Label(jog, text="Step").pack(side="left", padx=(12, 4), pady=6)
+        ttk.Label(jog, text="Step mm").pack(side="left", padx=(12, 4), pady=6)
         ttk.Entry(
             jog,
             textvariable=self.jog_step_var,
@@ -609,14 +654,14 @@ class AxisServerControlPanel:
             pady=4,
             sticky="w",
         )
-        ttk.Label(repeat, text="Point A").grid(row=0, column=2, padx=5, pady=4)
+        ttk.Label(repeat, text="Point A mm").grid(row=0, column=2, padx=5, pady=4)
         ttk.Entry(
             repeat,
             textvariable=self.repeat_point_a_var,
             justify="right",
             width=14,
         ).grid(row=0, column=3, padx=5, pady=4)
-        ttk.Label(repeat, text="Point B").grid(row=0, column=4, padx=5, pady=4)
+        ttk.Label(repeat, text="Point B mm").grid(row=0, column=4, padx=5, pady=4)
         ttk.Entry(
             repeat,
             textvariable=self.repeat_point_b_var,
@@ -645,8 +690,17 @@ class AxisServerControlPanel:
 
         traces = ttk.Frame(outer)
         traces.pack(fill="both", expand=True)
-        self.position_trace = TraceCanvas(traces, [self.axis_names[0]], "Actual Position")
-        self.velocity_trace = TraceCanvas(traces, [self.axis_names[0]], "Actual Velocity", 3)
+        self.position_trace = TraceCanvas(
+            traces,
+            ["Actual Position mm", "Target Position mm"],
+            "Position",
+        )
+        self.velocity_trace = TraceCanvas(
+            traces,
+            ["Actual Velocity mm/s"],
+            "Velocity",
+            2,
+        )
 
     def mark_dirty(self, var):
         self.dirty_vars.add(id(var))
@@ -662,25 +716,39 @@ class AxisServerControlPanel:
         for var in self.limit_vars:
             self.dirty_vars.discard(id(var))
 
+    def apply_software_limits(self):
+        software_limits_mm = self.read_selected_software_limit_values()
+        if software_limits_mm is None:
+            return
+
+        negative_limit = self.position_unit_to_count(software_limits_mm[0])
+        positive_limit = self.position_unit_to_count(software_limits_mm[1])
+        axis_index = self.selected_axis()
+        limits = [list(values) for values in self.latest_software_position_limits]
+        limits[axis_index] = [negative_limit, positive_limit]
+        self.try_send(lambda: self.client.send_software_position_limits(limits))
+        for var in self.software_limit_vars:
+            self.dirty_vars.discard(id(var))
+
     def send_command(self):
-        target_position = self.read_selected_command_value()
-        if target_position is None:
+        target_position_mm = self.read_selected_command_value()
+        if target_position_mm is None:
             return
         axis_index = self.selected_axis()
         targets = list(self.latest_target_positions)
-        targets[axis_index] = target_position
+        targets[axis_index] = self.position_unit_to_count(target_position_mm)
         self.try_send(lambda: self.client.send_target_positions(targets))
 
     def apply_limits_and_send(self):
         axis_limits = self.read_selected_limit_values()
-        target_position = self.read_selected_command_value()
-        if axis_limits is None or target_position is None:
+        target_position_mm = self.read_selected_command_value()
+        if axis_limits is None or target_position_mm is None:
             return
         axis_index = self.selected_axis()
         limits = [list(values) for values in self.latest_motion_limits]
         targets = list(self.latest_target_positions)
         limits[axis_index] = axis_limits
-        targets[axis_index] = target_position
+        targets[axis_index] = self.position_unit_to_count(target_position_mm)
         self.try_send(lambda: self.client.send_motion_limits(limits))
         self.try_send(lambda: self.client.send_target_positions(targets))
 
@@ -697,12 +765,16 @@ class AxisServerControlPanel:
 
     def update_selected_axis_label(self):
         self.stop_repeat()
-        self.position_trace.history = [[]]
-        self.velocity_trace.history = [[]]
+        self.position_trace.history = [
+            []
+            for _ in self.position_trace.series_names
+        ]
+        self.velocity_trace.history = [
+            []
+            for _ in self.velocity_trace.series_names
+        ]
         axis_index = self.selected_axis()
         self.selected_axis_label_var.set(self.axis_names[axis_index])
-        self.position_trace.axis_names = [self.axis_names[axis_index]]
-        self.velocity_trace.axis_names = [self.axis_names[axis_index]]
         self.dirty_vars.clear()
 
     def update_statusword_lamps(self, statusword):
@@ -758,7 +830,10 @@ class AxisServerControlPanel:
             return
 
         self.try_send(
-            lambda: self.client.send_jog_position(axis_index, direction * step)
+            lambda: self.client.send_jog_position(
+                axis_index,
+                self.position_unit_to_count(direction * step),
+            )
         )
 
     def apply_motion_mode(self):
@@ -798,6 +873,25 @@ class AxisServerControlPanel:
                 "Max Velocity, Accel, Decel, Kp must be numeric values.",
             )
             return None
+
+    def read_selected_software_limit_values(self):
+        try:
+            limits = [float(var.get()) for var in self.software_limit_vars]
+        except ValueError:
+            messagebox.showerror(
+                "Invalid Input",
+                "Negative/Positive SW Limit must be numeric values.",
+            )
+            return None
+
+        if limits[0] > limits[1]:
+            messagebox.showerror(
+                "Invalid Input",
+                "Negative SW Limit must be less than or equal to Positive SW Limit.",
+            )
+            return None
+
+        return limits
 
     def read_selected_command_value(self):
         try:
@@ -847,6 +941,7 @@ class AxisServerControlPanel:
         target_positions = self._values(feedback, "target_positions", 0.0)
         actual_positions = self._values(feedback, "actual_positions", 0.0)
         actual_velocities = self._values(feedback, "actual_velocities", 0.0)
+        command_positions = self._values(feedback, "command_positions", 0.0)
         command_velocities = self._values(feedback, "command_velocities", 0.0)
         statuswords = self._values(feedback, "statuswords", 0)
         diagnostics = feedback.get("diagnostics", [])
@@ -857,14 +952,25 @@ class AxisServerControlPanel:
         ]
         while len(motion_modes) < self.axis_count:
             motion_modes.append(motion_mode)
-        csp_counts_per_unit = float(feedback.get("csp_counts_per_unit", 1.0))
+        position_counts_per_unit = float(
+            feedback.get(
+                "position_counts_per_unit",
+                feedback.get("csp_counts_per_unit", 1.0),
+            )
+        )
         motion_limits = self._motion_limits(feedback)
+        software_position_limits = self._software_position_limits(feedback)
         self.latest_target_positions = target_positions
         self.latest_actual_positions = actual_positions
         self.latest_motion_limits = motion_limits
+        self.latest_software_position_limits = software_position_limits
         self.latest_motion_modes = motion_modes[:self.axis_count]
+        self.server_capabilities = dict(feedback.get("capabilities", {}))
         self.update_command_authority(feedback.get("command_authority", {}))
-        self.scale_var.set(f"CSP scale: {csp_counts_per_unit:g} count/unit")
+        self.position_counts_per_unit = max(position_counts_per_unit, 1e-9)
+        self.scale_var.set(
+            f"Position scale: {self.position_counts_per_unit:g} count/mm"
+        )
         selected_axis = self.selected_axis()
         self.update_statusword_lamps(int(statuswords[selected_axis]))
 
@@ -875,10 +981,18 @@ class AxisServerControlPanel:
                 self.motion_mode_var.set(selected_motion_mode)
             self.update_mode_dependent_controls()
 
-        self.target_var.set(f"{target_positions[selected_axis]:.3f}")
-        self.actual_position_var.set(f"{actual_positions[selected_axis]:.3f}")
+        self.target_var.set(
+            f"{self.position_count_to_unit(target_positions[selected_axis]):.3f}"
+        )
+        self.actual_position_var.set(
+            f"{self.position_count_to_unit(actual_positions[selected_axis]):.3f}"
+        )
         self.actual_velocity_var.set(f"{actual_velocities[selected_axis]:.3f}")
-        self.command_velocity_var.set(f"{command_velocities[selected_axis]:.3f}")
+        self.command_velocity_var.set(
+            f"{self.velocity_count_to_unit(command_velocities[selected_axis]):.3f}"
+            if selected_motion_mode == "csp"
+            else "n/a"
+        )
         self.statusword_var.set(
             self.statusword_state_text(int(statuswords[selected_axis]))
         )
@@ -892,8 +1006,45 @@ class AxisServerControlPanel:
             if id(var) not in self.dirty_vars:
                 var.set(f"{motion_limits[selected_axis][limit_index]:.3f}")
 
-        self.position_trace.add_sample([actual_positions[selected_axis]])
-        self.velocity_trace.add_sample([actual_velocities[selected_axis]])
+        for limit_index in range(2):
+            var = self.software_limit_vars[limit_index]
+            if id(var) not in self.dirty_vars:
+                var.set(
+                    f"{self.position_count_to_unit(software_position_limits[selected_axis][limit_index]):.3f}"
+                )
+
+        if selected_motion_mode == "csp":
+            self.position_trace.set_series_names(
+                ["Actual Position mm", "Target Position mm", "CSP Command Position mm"]
+            )
+            self.velocity_trace.set_series_names(
+                ["Actual Velocity mm/s", "Command Velocity mm/s"]
+            )
+            self.position_trace.add_sample(
+                [
+                    self.position_count_to_unit(actual_positions[selected_axis]),
+                    self.position_count_to_unit(target_positions[selected_axis]),
+                    self.position_count_to_unit(command_positions[selected_axis]),
+                ]
+            )
+            self.velocity_trace.add_sample(
+                [
+                    actual_velocities[selected_axis],
+                    self.velocity_count_to_unit(command_velocities[selected_axis]),
+                ]
+            )
+        else:
+            self.position_trace.set_series_names(
+                ["Actual Position mm", "Target Position mm"]
+            )
+            self.velocity_trace.set_series_names(["Actual Velocity mm/s"])
+            self.position_trace.add_sample(
+                [
+                    self.position_count_to_unit(actual_positions[selected_axis]),
+                    self.position_count_to_unit(target_positions[selected_axis]),
+                ]
+            )
+            self.velocity_trace.add_sample([actual_velocities[selected_axis]])
         self.position_trace.draw()
         self.velocity_trace.draw()
 
@@ -914,7 +1065,14 @@ class AxisServerControlPanel:
             self.command_authority_button_var.set("Request Authority")
 
     def update_mode_dependent_controls(self):
-        kp_state = "normal" if self.server_motion_mode == "csp" else "disabled"
+        kp_state = (
+            "normal"
+            if (
+                self.server_motion_mode == "csp"
+                and self.server_capabilities.get("position_loop_gain", False)
+            )
+            else "disabled"
+        )
         for entry in self.kp_entries:
             entry.configure(state=kp_state)
 
@@ -957,13 +1115,22 @@ class AxisServerControlPanel:
             return
         target = self._target_vector_for_axis(axis_index, target_position)
         self.try_send(lambda: self.client.send_target_positions(target))
-        self.last_sent_repeat_target = target_position
+        self.last_sent_repeat_target = target[axis_index]
         self.repeat_waiting_to_send = False
 
     def _target_vector_for_axis(self, axis_index, target_position):
         targets = list(self.latest_target_positions)
-        targets[axis_index] = float(target_position)
+        targets[axis_index] = self.position_unit_to_count(float(target_position))
         return targets
+
+    def position_count_to_unit(self, position_count):
+        return float(position_count) / self.position_counts_per_unit
+
+    def position_unit_to_count(self, position_unit):
+        return float(position_unit) * self.position_counts_per_unit
+
+    def velocity_count_to_unit(self, velocity_count):
+        return float(velocity_count) / self.position_counts_per_unit
 
     def _values(self, feedback, key, default):
         values = list(feedback.get(key, []))
@@ -982,6 +1149,19 @@ class AxisServerControlPanel:
                 float(flat[index * 4 + 1]),
                 float(flat[index * 4 + 2]),
                 float(flat[index * 4 + 3]),
+            ]
+            for index in range(self.axis_count)
+        ]
+
+    def _software_position_limits(self, feedback):
+        flat = list(feedback.get("software_position_limits", []))
+        required = self.axis_count * 2
+        while len(flat) < required:
+            flat.append(0.0)
+        return [
+            [
+                float(flat[index * 2]),
+                float(flat[index * 2 + 1]),
             ]
             for index in range(self.axis_count)
         ]

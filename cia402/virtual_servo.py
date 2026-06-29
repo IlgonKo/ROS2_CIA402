@@ -19,6 +19,7 @@ class VirtualCiA402Servo(ServoInterface):
         self.previous_controlword = 0
         self.pp_active = False
         self.pp_target_position = self.actual_position
+        self.pp_setpoint_ack = False
 
         #self.init_object_dictionary()
 
@@ -61,6 +62,16 @@ class VirtualCiA402Servo(ServoInterface):
             "max_velocity": self.od.read(0x607F),
             "acceleration": self.od.read(0x6083),
             "deceleration": self.od.read(0x6084),
+        }
+
+    def set_software_position_limits(self, negative_limit, positive_limit):
+        self.od.write(0x607D, negative_limit, 1)
+        self.od.write(0x607D, positive_limit, 2)
+
+    def get_software_position_limits(self):
+        return {
+            "negative_limit": self.od.read(0x607D, 1),
+            "positive_limit": self.od.read(0x607D, 2),
         }
 
     def set_position_loop_gain(self, kp):
@@ -144,6 +155,8 @@ class VirtualCiA402Servo(ServoInterface):
 
         if self.target_reached:
             statusword |= (1 << 10)
+        if self.pp_setpoint_ack:
+            statusword |= (1 << 12)
 
         self.od.write(0x6041, statusword)
         self.previous_controlword = controlword
@@ -167,6 +180,8 @@ class VirtualCiA402Servo(ServoInterface):
             self.pp_active = True
             self.target_reached = False
             self.window_counter = 0
+
+        self.pp_setpoint_ack = bool(controlword & (1 << 4))
 
         if not self.pp_active:
             self._decelerate_to_stop()

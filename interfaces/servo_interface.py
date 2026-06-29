@@ -51,6 +51,14 @@ class ServoInterface(ABC):
         pass
 
     @abstractmethod
+    def set_software_position_limits(self, negative_limit, positive_limit):
+        pass
+
+    @abstractmethod
+    def get_software_position_limits(self):
+        pass
+
+    @abstractmethod
     def set_position_loop_gain(self, kp):
         pass
 

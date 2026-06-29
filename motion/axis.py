@@ -31,6 +31,15 @@ class Axis:
     def get_motion_limits(self):
         return self.servo.get_motion_limits()
 
+    def set_software_position_limits(self, negative_limit, positive_limit):
+        self.servo.set_software_position_limits(
+            negative_limit,
+            positive_limit,
+        )
+
+    def get_software_position_limits(self):
+        return self.servo.get_software_position_limits()
+
     def set_position_loop_gain(self, kp):
         self.servo.set_position_loop_gain(kp)
 

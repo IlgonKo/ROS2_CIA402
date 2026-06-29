@@ -173,6 +173,14 @@ class PySOEMMaster:
             struct.pack("<b", int(value)),
         )
 
+    def sdo_write_int32(self, slave_index, index, subindex, value):
+        self._require_connected()
+        self._master.slaves[slave_index].sdo_write(
+            index,
+            subindex,
+            struct.pack("<i", int(value)),
+        )
+
     def sdo_write_uint16(self, slave_index, index, subindex, value):
         self._require_connected()
         self._master.slaves[slave_index].sdo_write(
@@ -214,6 +222,15 @@ class PySOEMMaster:
             size=1,
         )
         return struct.unpack("<b", payload[:1])[0]
+
+    def sdo_read_int32(self, slave_index, index, subindex):
+        self._require_connected()
+        payload = self._master.slaves[slave_index].sdo_read(
+            index,
+            subindex,
+            size=4,
+        )
+        return struct.unpack("<i", payload[:4])[0]
 
     def sdo_read_uint16(self, slave_index, index, subindex):
         self._require_connected()

@@ -27,6 +27,11 @@ STATUS_LOG_PERIOD = 1.0
 PROFILE_POSITION_MODE = 1
 CSP_MODE = 8
 CSV_MODE = 9
+PP_BASE_CONTROLWORD = 0x000F
+PP_NEW_SETPOINT_CONTROLWORD = 0x003F
+PP_SETPOINT_ACK_BIT = 12
+PP_SETPOINT_ACK_MASK = 1 << PP_SETPOINT_ACK_BIT
+PP_HANDSHAKE_MAX_CYCLES = 100
 MOTION_MODES = {
     "pp": PROFILE_POSITION_MODE,
     "csp": CSP_MODE,
@@ -105,7 +110,7 @@ def create_master(args, motion_limits):
         return MockMaster(
             slaves,
             cycle_time=args.cycle_time,
-            csp_counts_per_unit=args.csp_counts_per_unit,
+            csp_counts_per_unit=1.0,
         )
 
     return PySOEMMaster(
@@ -296,6 +301,10 @@ def feedback_message(master, state, client_id=None):
             for slave in master.slaves
         ],
         "derived_velocities": state["derived_velocities"],
+        "command_positions": [
+            float(generator.command_position)
+            for generator in master.trajectory_generators
+        ],
         "command_velocities": [
             float(generator.command_velocity)
             for generator in master.trajectory_generators
@@ -305,9 +314,14 @@ def feedback_message(master, state, client_id=None):
             for slave in master.slaves
         ],
         "motion_limits": flatten_motion_limits(state["motion_limits"]),
+        "software_position_limits": flatten_software_position_limits(
+            state["software_position_limits"]
+        ),
         "motion_mode": state["motion_mode"],
         "motion_modes": state["motion_modes"],
         "csp_counts_per_unit": master.csp_counts_per_unit,
+        "position_counts_per_unit": state["position_counts_per_unit"],
+        "capabilities": state["capabilities"],
         "diagnostics": master.last_diagnostics,
         "command_authority": {
             "owner": owner,
@@ -321,6 +335,14 @@ def flatten_motion_limits(motion_limits):
     return [
         float(value)
         for axis_limits in motion_limits
+        for value in axis_limits
+    ]
+
+
+def flatten_software_position_limits(software_position_limits):
+    return [
+        float(value)
+        for axis_limits in software_position_limits
         for value in axis_limits
     ]
 
@@ -468,6 +490,43 @@ def handle_motion_limits(message, master, state):
         write_profile_motion_limits(master, axis_index)
 
     print(f"Received motion_limits: {state['motion_limits']}", flush=True)
+
+
+def handle_software_position_limits(message, master, state):
+    limits = message.get("limits", [])
+    if not limits:
+        return
+
+    for axis_index, axis_limits in enumerate(limits[:axis_count(master)]):
+        if len(axis_limits) < 2:
+            continue
+
+        negative_limit = int(round(float(axis_limits[0])))
+        positive_limit = int(round(float(axis_limits[1])))
+        if negative_limit > positive_limit:
+            print(
+                "Ignored software_position_limits because negative limit is "
+                f"greater than positive limit. axis={axis_index} "
+                f"negative={negative_limit} positive={positive_limit}",
+                flush=True,
+            )
+            continue
+
+        write_software_position_limits(
+            master,
+            axis_index,
+            negative_limit,
+            positive_limit,
+        )
+        state["software_position_limits"][axis_index] = read_software_position_limits(
+            master,
+            axis_index,
+        )
+
+    print(
+        f"Received software_position_limits: {state['software_position_limits']}",
+        flush=True,
+    )
 
 
 def handle_motion_mode(message, master, state):
@@ -660,6 +719,7 @@ COMMAND_MESSAGE_TYPES = {
     "target_positions",
     "jog_position",
     "motion_limits",
+    "software_position_limits",
     "motion_mode",
     "target_velocities",
     "alarm_ack",
@@ -763,6 +823,8 @@ def handle_message(message, master, state, client):
         handle_jog_position(message, master, state)
     elif message_type == "motion_limits":
         handle_motion_limits(message, master, state)
+    elif message_type == "software_position_limits":
+        handle_software_position_limits(message, master, state)
     elif message_type == "motion_mode":
         handle_motion_mode(message, master, state)
     elif message_type == "target_velocities":
@@ -889,16 +951,60 @@ def command_profile_positions(master, target_positions, axis_indices):
         slave.rxpdo.profile_velocity = int(slave.motion_limits.max_velocity)
         write_profile_motion_limits(master, axis_index)
 
+    pp_setpoint_handshake(master, axis_indices)
+
+
+def pp_setpoint_handshake(master, axis_indices):
     for axis_index in axis_indices:
-        master.slaves[axis_index].rxpdo.controlword = 0x000F
-    exchange(master, cycles=2)
+        master.slaves[axis_index].rxpdo.controlword = PP_BASE_CONTROLWORD
+    ack_cleared_before = wait_pp_setpoint_ack(
+        master,
+        axis_indices,
+        expected=False,
+        max_cycles=PP_HANDSHAKE_MAX_CYCLES,
+    )
 
     for axis_index in axis_indices:
-        master.slaves[axis_index].rxpdo.controlword = 0x001F
-    exchange(master, cycles=2)
+        master.slaves[axis_index].rxpdo.controlword = PP_NEW_SETPOINT_CONTROLWORD
+    ack_set = wait_pp_setpoint_ack(
+        master,
+        axis_indices,
+        expected=True,
+        max_cycles=PP_HANDSHAKE_MAX_CYCLES,
+    )
 
     for axis_index in axis_indices:
-        master.slaves[axis_index].rxpdo.controlword = 0x000F
+        master.slaves[axis_index].rxpdo.controlword = PP_BASE_CONTROLWORD
+    ack_cleared_after = wait_pp_setpoint_ack(
+        master,
+        axis_indices,
+        expected=False,
+        max_cycles=PP_HANDSHAKE_MAX_CYCLES,
+    )
+
+    if not (ack_cleared_before and ack_set and ack_cleared_after):
+        print(
+            "PP set-point handshake did not complete cleanly. "
+            f"axes={axis_indices} "
+            f"ack_cleared_before={ack_cleared_before} "
+            f"ack_set={ack_set} "
+            f"ack_cleared_after={ack_cleared_after} "
+            f"statuswords={[f'0x{master.slaves[index].txpdo.statusword:04X}' for index in axis_indices]}",
+            flush=True,
+        )
+
+
+def wait_pp_setpoint_ack(master, axis_indices, expected, max_cycles):
+    for _ in range(max_cycles):
+        exchange(master)
+        if all(
+            bool(master.slaves[axis_index].txpdo.statusword & PP_SETPOINT_ACK_MASK)
+            == expected
+            for axis_index in axis_indices
+        ):
+            return True
+
+    return False
 
 
 def command_csp_positions(master, target_positions, axis_indices):
@@ -932,6 +1038,39 @@ def write_profile_motion_limits(master, axis_index):
         0,
         max(0, int(limits.deceleration)),
     )
+
+
+def read_software_position_limits(master, axis_index):
+    return [
+        master.sdo_read_int32(axis_index, 0x607D, 1),
+        master.sdo_read_int32(axis_index, 0x607D, 2),
+    ]
+
+
+def read_all_software_position_limits(master):
+    limits = []
+    for axis_index in range(axis_count(master)):
+        try:
+            limits.append(read_software_position_limits(master, axis_index))
+        except Exception as exc:
+            print(
+                f"Axis {axis_index}: failed to read software position limits "
+                f"0x607D:01/02 ({exc})",
+                flush=True,
+            )
+            limits.append([0, 0])
+
+    return limits
+
+
+def write_software_position_limits(
+    master,
+    axis_index,
+    negative_limit,
+    positive_limit,
+):
+    master.sdo_write_int32(axis_index, 0x607D, 1, negative_limit)
+    master.sdo_write_int32(axis_index, 0x607D, 2, positive_limit)
 
 
 def allocate_client_id(clients):
@@ -1020,6 +1159,7 @@ def main():
             slave.rxpdo.profile_velocity = int(args.max_velocity)
 
         master.last_diagnostics = read_all_diagnostics(master)
+        software_position_limits = read_all_software_position_limits(master)
         positions = actual_positions(master)
         print(
             "Drive initialized. "
@@ -1029,6 +1169,7 @@ def main():
             f"csp_counts_per_unit={args.csp_counts_per_unit} "
             f"derived_velocity_alpha={args.derived_velocity_alpha} "
             f"statuswords={[f'0x{slave.txpdo.statusword:04X}' for slave in master.slaves]} "
+            f"software_position_limits={software_position_limits} "
             f"AP={positions}",
             flush=True,
         )
@@ -1051,11 +1192,23 @@ def main():
                 ]
                 for _ in range(args.axis_count)
             ],
+            "software_position_limits": software_position_limits,
             "motion_mode": args.motion_mode,
             "motion_modes": [
                 args.motion_mode
                 for _ in range(args.axis_count)
             ],
+            "position_counts_per_unit": (
+                args.csp_counts_per_unit
+                if args.backend == "pysoem"
+                else 1.0
+            ),
+            "capabilities": {
+                "position_loop_gain": args.backend == "mock",
+                "profile_motion_limits": True,
+                "software_position_limits": True,
+                "csp_trajectory_feedback": True,
+            },
             "command_authority_owner": None,
         }
 

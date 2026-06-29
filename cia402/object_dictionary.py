@@ -12,6 +12,8 @@ class ObjectDictionary:
 
             0x607A: 0.0,       # Target Position
             0x6064: 0.0,       # Actual Position
+            (0x607D, 1): -1000000,  # Negative Software Position Limit
+            (0x607D, 2): 1000000,   # Positive Software Position Limit
 
             0x60FF: 0.0,       # Target Velocity
             0x606C: 0.0,        # Actual Velocity
@@ -24,10 +26,12 @@ class ObjectDictionary:
             0x6084 : 500     # Profile Deceleration(mm/sec^2)
         }
 
-    def read(self, index):
+    def read(self, index, subindex=None):
 
-        return self.objects[index]
+        key = (index, subindex) if subindex is not None else index
+        return self.objects[key]
 
-    def write(self, index, value):
+    def write(self, index, value, subindex=None):
 
-        self.objects[index] = value
+        key = (index, subindex) if subindex is not None else index
+        self.objects[key] = value

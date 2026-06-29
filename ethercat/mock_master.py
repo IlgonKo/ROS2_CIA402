@@ -75,28 +75,34 @@ class MockMaster:
         slave.axis.set_motion_limits(max_velocity, acceleration, deceleration)
 
     def sdo_write_int8(self, slave_index, index, subindex, value):
-        self._write_object(slave_index, index, value)
+        self._write_object(slave_index, index, value, subindex)
+
+    def sdo_write_int32(self, slave_index, index, subindex, value):
+        self._write_object(slave_index, index, value, subindex)
 
     def sdo_write_uint8(self, slave_index, index, subindex, value):
-        self._write_object(slave_index, index, value)
+        self._write_object(slave_index, index, value, subindex)
 
     def sdo_write_uint16(self, slave_index, index, subindex, value):
-        self._write_object(slave_index, index, value)
+        self._write_object(slave_index, index, value, subindex)
 
     def sdo_write_uint32(self, slave_index, index, subindex, value):
-        self._write_object(slave_index, index, value)
+        self._write_object(slave_index, index, value, subindex)
 
     def sdo_read_int8(self, slave_index, index, subindex):
-        return int(self._read_object(slave_index, index))
+        return int(self._read_object(slave_index, index, subindex))
+
+    def sdo_read_int32(self, slave_index, index, subindex):
+        return int(self._read_object(slave_index, index, subindex))
 
     def sdo_read_uint8(self, slave_index, index, subindex):
-        return int(self._read_object(slave_index, index)) & 0xFF
+        return int(self._read_object(slave_index, index, subindex)) & 0xFF
 
     def sdo_read_uint16(self, slave_index, index, subindex):
-        return int(self._read_object(slave_index, index)) & 0xFFFF
+        return int(self._read_object(slave_index, index, subindex)) & 0xFFFF
 
     def sdo_read_uint32(self, slave_index, index, subindex):
-        return int(self._read_object(slave_index, index)) & 0xFFFFFFFF
+        return int(self._read_object(slave_index, index, subindex)) & 0xFFFFFFFF
 
     def send_processdata(self):
         self.dc_time_ns = self.dc.get_time_ns()
@@ -131,7 +137,7 @@ class MockMaster:
                 float(limits["deceleration"]) * self.csp_counts_per_unit,
             )
 
-    def _read_object(self, slave_index, index):
+    def _read_object(self, slave_index, index, subindex=0):
         slave = self.slaves[slave_index]
         if index == 0x6040:
             return slave.rxpdo.controlword
@@ -143,6 +149,14 @@ class MockMaster:
             return slave.txpdo.mode_of_operation_display
         if index == 0x607A:
             return slave.rxpdo.target_position
+        if index == 0x607D:
+            limits = slave.axis.get_software_position_limits()
+            if subindex == 1:
+                return limits["negative_limit"]
+            if subindex == 2:
+                return limits["positive_limit"]
+            if subindex == 0:
+                return 2
         if index == 0x6064:
             return slave.txpdo.actual_position
         if index == 0x606C:
@@ -159,7 +173,7 @@ class MockMaster:
             return slave.motion_limits.deceleration
         raise KeyError(f"Unsupported mock SDO read 0x{index:04X}")
 
-    def _write_object(self, slave_index, index, value):
+    def _write_object(self, slave_index, index, value, subindex=0):
         slave = self.slaves[slave_index]
         if index == 0x6040:
             slave.rxpdo.controlword = int(value)
@@ -167,6 +181,22 @@ class MockMaster:
             slave.rxpdo.mode_of_operation = int(value)
         elif index == 0x607A:
             slave.rxpdo.target_position = value
+        elif index == 0x607D:
+            limits = slave.axis.get_software_position_limits()
+            negative_limit = limits["negative_limit"]
+            positive_limit = limits["positive_limit"]
+            if subindex == 1:
+                negative_limit = value
+            elif subindex == 2:
+                positive_limit = value
+            else:
+                raise KeyError(
+                    f"Unsupported mock SDO write 0x{index:04X}:{subindex:02X}"
+                )
+            slave.axis.set_software_position_limits(
+                negative_limit,
+                positive_limit,
+            )
         elif index == 0x6081:
             slave.rxpdo.profile_velocity = int(value)
             slave.motion_limits.max_velocity = float(value)
