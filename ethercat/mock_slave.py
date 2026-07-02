@@ -14,6 +14,7 @@ class MockSlave:
             float(limits["max_velocity"]),
             float(limits["acceleration"]),
             float(limits["deceleration"]),
+            float(limits.get("jerk", 0.0)),
         )
         self.mapper = PdoMapper(
             self.axis,

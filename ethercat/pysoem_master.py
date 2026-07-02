@@ -4,7 +4,7 @@ from pathlib import Path
 import struct
 import sys
 
-from ethercat.csp_trajectory_generator import CspTrajectoryGenerator
+from axis_server.csp_trajectory_generator import CspTrajectoryGenerator
 from ethercat.distributed_clock import DistributedClock
 from ethercat.pdo_codec import CiA402PdoCodec
 from ethercat.rxpdo import RxPDO
@@ -17,6 +17,7 @@ class AxisMotionLimits:
     max_velocity: float
     acceleration: float
     deceleration: float
+    jerk: float = 0.0
 
 
 class PySOEMPdoSlave:
@@ -34,12 +35,14 @@ class PySOEMMaster:
         cycle_time=0.001,
         motion_limits=None,
         csp_counts_per_unit=1.0,
+        sync_mode=None,
         pdo_codec=CiA402PdoCodec,
     ):
         self.interface_name = interface_name
         self.slave_count = slave_count
         self.cycle_time = cycle_time
         self.csp_counts_per_unit = float(csp_counts_per_unit)
+        self.sync_mode = sync_mode
         self.pdo_codec = pdo_codec
 
         self.dc = DistributedClock()
@@ -83,6 +86,7 @@ class PySOEMMaster:
 
         if target_state == pysoem.OP_STATE:
             self._request_safe_operational(pysoem, timeout_us)
+            self._configure_sync_parameters()
             self._prime_outputs()
             self._request_operational(pysoem, timeout_us)
             return
@@ -146,16 +150,12 @@ class PySOEMMaster:
             self.slaves,
         ):
             actual_position = float(slave.txpdo.actual_position)
-            generator.command_position = actual_position
-            generator.target_position = actual_position
-            generator.command_velocity = 0.0
+            generator.reset(actual_position)
 
     def sync_trajectory_to_actual_position(self, axis_index):
         generator = self.trajectory_generators[axis_index]
         actual_position = float(self.slaves[axis_index].txpdo.actual_position)
-        generator.command_position = actual_position
-        generator.target_position = actual_position
-        generator.command_velocity = 0.0
+        generator.reset(actual_position)
 
     def set_controlword_all(self, controlword):
         for slave in self.slaves:
@@ -203,6 +203,14 @@ class PySOEMMaster:
             index,
             subindex,
             struct.pack("<I", int(value)),
+        )
+
+    def sdo_write_float32(self, slave_index, index, subindex, value):
+        self._require_connected()
+        self._master.slaves[slave_index].sdo_write(
+            index,
+            subindex,
+            struct.pack("<f", float(value)),
         )
 
     def sdo_read_uint8(self, slave_index, index, subindex):
@@ -256,11 +264,13 @@ class PySOEMMaster:
         max_velocity,
         acceleration,
         deceleration,
+        jerk=0.0,
     ):
         self.slaves[axis_index].motion_limits = AxisMotionLimits(
             float(max_velocity),
             float(acceleration),
             float(deceleration),
+            float(jerk),
         )
 
     def send_processdata(self):
@@ -313,6 +323,31 @@ class PySOEMMaster:
                 f"Reached={reached_state}. Slaves={self.describe_slaves()}"
             )
 
+    def _configure_sync_parameters(self):
+        if self.sync_mode is None:
+            return
+
+        for axis_index in range(self.slave_count):
+            self.sdo_write_uint16(axis_index, 0x212E, 0x01, self.sync_mode)
+            self.sdo_write_float32(
+                axis_index,
+                0x212E,
+                0x02,
+                self.cycle_time,
+            )
+            self.sdo_write_float32(
+                axis_index,
+                0x212E,
+                0x09,
+                self.cycle_time,
+            )
+
+        print(
+            "Configured CMMT sync parameters via 0x212E: "
+            f"mode={self.sync_mode} cycle_time={self.cycle_time}",
+            flush=True,
+        )
+
     def _prime_outputs(self):
         self._update_csp_targets()
         self._write_outputs()
@@ -360,6 +395,7 @@ class PySOEMMaster:
                 limits.max_velocity * self.csp_counts_per_unit,
                 limits.acceleration * self.csp_counts_per_unit,
                 limits.deceleration * self.csp_counts_per_unit,
+                limits.jerk * self.csp_counts_per_unit,
             )))
 
     def _require_connected(self):
@@ -412,6 +448,7 @@ class PySOEMMaster:
                 max_velocity=1000.0,
                 acceleration=500.0,
                 deceleration=500.0,
+                jerk=0.0,
             )
 
         limits = motion_limits[index]
@@ -423,4 +460,5 @@ class PySOEMMaster:
             max_velocity=float(limits["max_velocity"]),
             acceleration=float(limits["acceleration"]),
             deceleration=float(limits["deceleration"]),
+            jerk=float(limits.get("jerk", 0.0)),
         )

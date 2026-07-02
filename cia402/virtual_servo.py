@@ -20,6 +20,9 @@ class VirtualCiA402Servo(ServoInterface):
         self.pp_active = False
         self.pp_target_position = self.actual_position
         self.pp_setpoint_ack = False
+        self.homing_active = False
+        self.homing_referenced = False
+        self.homing_error = False
 
         #self.init_object_dictionary()
 
@@ -40,6 +43,10 @@ class VirtualCiA402Servo(ServoInterface):
         current_mode = int(self.od.read(0x6060))
         if next_mode != current_mode:
             self.stop_at_current_position()
+            if next_mode != 6:
+                self.homing_active = False
+                self.homing_referenced = False
+                self.homing_error = False
         self.od.write(0x6060,next_mode)
 
     def set_target_position(self, position):        
@@ -150,6 +157,8 @@ class VirtualCiA402Servo(ServoInterface):
             self.process_csp()
         elif mode == 9:
             self.process_csv()
+        elif mode == 6:
+            self.process_homing()
 
         statusword = self.sm.get_statusword()
 
@@ -157,9 +166,41 @@ class VirtualCiA402Servo(ServoInterface):
             statusword |= (1 << 10)
         if self.pp_setpoint_ack:
             statusword |= (1 << 12)
+        if mode == 6 and self.homing_referenced:
+            statusword |= (1 << 15)
+        if mode == 6 and self.homing_error:
+            statusword |= (1 << 3)
 
         self.od.write(0x6041, statusword)
         self.previous_controlword = controlword
+
+    # ---------------------------------
+    # Homing
+    # ---------------------------------
+
+    def process_homing(self):
+        if self.sm.get_statusword() != 0x0027:
+            return
+
+        controlword = self.od.read(0x6040)
+        start_homing = (
+            bool(controlword & (1 << 4)) and
+            not bool(self.previous_controlword & (1 << 4))
+        )
+
+        if not start_homing:
+            return
+
+        self.homing_active = True
+        self.homing_referenced = False
+        self.homing_error = False
+        self.actual_position = 0.0
+        self.actual_velocity = 0.0
+        self.od.write(0x607A, self.actual_position)
+        self._write_actual_feedback()
+        self.target_reached = True
+        self.homing_active = False
+        self.homing_referenced = True
 
     # ---------------------------------
     # PP

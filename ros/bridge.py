@@ -49,8 +49,8 @@ class Cia402CommandBridgeNode(Node):
         )
         self.port = int(
             os.environ.get(
-                "CIA402_AXIS_SERVER_PORT",
-                os.environ.get("CIA402_PYSOEM_PORT", DEFAULT_PORT),
+                "PYSOEM_AXIS_SERVER_PORT",
+                DEFAULT_PORT,
             )
         )
         self.auto_request_authority = (
@@ -234,7 +234,7 @@ class Cia402CommandBridgeNode(Node):
             self.declare_parameter(f"{prefix}.max_velocity", 0.0)
             self.declare_parameter(f"{prefix}.acceleration", 0.0)
             self.declare_parameter(f"{prefix}.deceleration", 0.0)
-            self.declare_parameter(f"{prefix}.kp", 0.0)
+            self.declare_parameter(f"{prefix}.jerk", 0.0)
 
     def parameter_callback(self, parameters):
         limits = [list(values) for values in self.motion_limits]
@@ -254,7 +254,7 @@ class Cia402CommandBridgeNode(Node):
                 "max_velocity": 0,
                 "acceleration": 1,
                 "deceleration": 2,
-                "kp": 3,
+                "jerk": 3,
             }
             if axis_index < 0 or axis_index >= self.axis_count:
                 return SetParametersResult(
@@ -495,7 +495,12 @@ class Cia402CommandBridgeNode(Node):
         return self.send_json({"type": "trajectory_stop", "mode": "controlled"})
 
     def request_axis_server_authority(self):
+        self.auto_request_authority = True
         return self.send_json({"type": "command_authority_request"})
+
+    def release_axis_server_authority(self):
+        self.auto_request_authority = False
+        return self.send_json({"type": "command_authority_release"})
 
     def trajectory_points_to_axis_units(self, points):
         converted_points = []
@@ -710,11 +715,15 @@ class Cia402CommandBridgeNode(Node):
 
     def command_authority_request_callback(self, _msg):
         self.request_axis_server_authority()
-        self.get_logger().info("Requested Axis Server command authority")
+        self.get_logger().info(
+            "Requested Axis Server command authority; auto request enabled"
+        )
 
     def command_authority_release_callback(self, _msg):
-        self.send_json({"type": "command_authority_release"})
-        self.get_logger().info("Released Axis Server command authority")
+        self.release_axis_server_authority()
+        self.get_logger().info(
+            "Released Axis Server command authority; auto request disabled"
+        )
 
     def connection_loop(self):
         while not self.stop_event.is_set():
@@ -743,6 +752,8 @@ class Cia402CommandBridgeNode(Node):
         self.get_logger().info("Connected to Axis Server")
         if self.auto_request_authority:
             self.request_axis_server_authority()
+        else:
+            self.get_logger().info("Auto authority request is disabled")
 
     def read_loop(self):
         while not self.stop_event.is_set():

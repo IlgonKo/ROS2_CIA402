@@ -739,7 +739,7 @@ class AxisControlPanelGui:
         self.velocity_trace = TraceCanvas(traces_frame, AXES, "Actual Velocity", 3)
 
     def _build_limits_tab(self, frame):
-        headers = ["Joint", "Max Velocity", "Accel", "Decel", "Kp"]
+        headers = ["Joint", "Max Velocity", "Accel", "Decel", "Jerk"]
         ttk.Label(
             frame,
             text="Read-only feedback from Axis Server. Configure limits in Axis Panel.",

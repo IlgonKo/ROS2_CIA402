@@ -32,7 +32,7 @@ STATUSWORD_BITS = [
     (12, "OMS 12"),
     (13, "OMS 13"),
     (14, "Manuf 14"),
-    (15, "Refered"),
+    (15, "Referenced"),
 ]
 
 
@@ -259,6 +259,14 @@ class AxisServerClient:
     def send_manual_stop(self):
         self.send_json({"type": "manual_stop", "mode": "controlled"})
 
+    def send_homing_start(self, axis_index):
+        self.send_json(
+            {
+                "type": "homing_start",
+                "axis": int(axis_index),
+            }
+        )
+
     def send_alarm_ack(self):
         self.send_json({"type": "alarm_ack"})
 
@@ -441,7 +449,7 @@ class AxisServerControlPanel:
         self.command_velocity_var = tk.StringVar(value="0.0")
         self.statusword_var = tk.StringVar(value="0x0000")
         self.error_code_var = tk.StringVar(value="No error")
-        self.kp_entries = []
+        self.jerk_entries = []
         self.repeat_point_a_var = tk.StringVar(value="0.0")
         self.repeat_point_b_var = tk.StringVar(value="0.0")
         self.repeat_period_var = tk.StringVar(value="2.0")
@@ -576,7 +584,7 @@ class AxisServerControlPanel:
             ("Max Velocity mm/s", self.limit_vars[0], "entry"),
             ("Accel mm/s^2", self.limit_vars[1], "entry"),
             ("Decel mm/s^2", self.limit_vars[2], "entry"),
-            ("Kp", self.limit_vars[3], "entry_kp"),
+            ("Jerk mm/s^3", self.limit_vars[3], "entry_jerk"),
             ("Negative SW Limit mm", self.software_limit_vars[0], "entry_sw"),
             ("Positive SW Limit mm", self.software_limit_vars[1], "entry_sw"),
             ("Command Position mm", self.command_var, "entry"),
@@ -603,8 +611,8 @@ class AxisServerControlPanel:
                     lambda _event, watched_var=var: self.mark_dirty(watched_var),
                 )
                 entry.grid(row=row, column=column + 1, padx=5, pady=5, sticky="ew")
-                if kind == "entry_kp":
-                    self.kp_entries.append(entry)
+                if kind == "entry_jerk":
+                    self.jerk_entries.append(entry)
             else:
                 ttk.Label(detail, textvariable=var, anchor="e", width=16).grid(
                     row=row,
@@ -656,6 +664,10 @@ class AxisServerControlPanel:
             padx=4,
         )
         ttk.Button(buttons, text="Manual Stop", command=self.manual_stop).pack(
+            side="left",
+            padx=4,
+        )
+        ttk.Button(buttons, text="Homing", command=self.homing_start).pack(
             side="left",
             padx=4,
         )
@@ -822,6 +834,11 @@ class AxisServerControlPanel:
         self.stop_repeat()
         self.try_send(self.client.send_manual_stop)
 
+    def homing_start(self):
+        self.stop_repeat()
+        axis_index = self.selected_axis()
+        self.try_send(lambda: self.client.send_homing_start(axis_index))
+
     def toggle_command_authority(self):
         _, _, feedback, _ = self.client.get_snapshot()
         authority = feedback.get("command_authority", {})
@@ -937,7 +954,7 @@ class AxisServerControlPanel:
         except ValueError:
             messagebox.showerror(
                 "Invalid Input",
-                "Max Velocity, Accel, Decel, Kp must be numeric values.",
+                "Max Velocity, Accel, Decel, Jerk must be numeric values.",
             )
             return None
 
@@ -1132,16 +1149,8 @@ class AxisServerControlPanel:
             self.command_authority_button_var.set("Request Authority")
 
     def update_mode_dependent_controls(self):
-        kp_state = (
-            "normal"
-            if (
-                self.server_motion_mode == "csp"
-                and self.server_capabilities.get("position_loop_gain", False)
-            )
-            else "disabled"
-        )
-        for entry in self.kp_entries:
-            entry.configure(state=kp_state)
+        for entry in self.jerk_entries:
+            entry.configure(state="normal")
 
     def update_repeat(self, actual_positions):
         if not self.repeat_enabled or self.repeat_points is None:

@@ -20,6 +20,7 @@ from motion.axis import Axis
 
 
 DEFAULT_CYCLE_TIME = float(os.environ.get("PYSOEM_CYCLE_TIME", "0.01"))
+DEFAULT_SPIN_WAIT_TIME = float(os.environ.get("PYSOEM_SPIN_WAIT_TIME", "0.00015"))
 DERIVED_VELOCITY_ALPHA = float(
     os.environ.get("PYSOEM_DERIVED_VELOCITY_ALPHA", "0.2")
 )
@@ -27,6 +28,7 @@ FEEDBACK_PERIOD = 0.05
 STATUS_LOG_PERIOD = float(os.environ.get("PYSOEM_STATUS_LOG_PERIOD", "1.0"))
 CYCLE_STATS_PERIOD = float(os.environ.get("PYSOEM_CYCLE_STATS_PERIOD", "1.0"))
 PROFILE_POSITION_MODE = 1
+HOMING_MODE = 6
 CSP_MODE = 8
 CSV_MODE = 9
 PP_BASE_CONTROLWORD = 0x000F
@@ -34,6 +36,10 @@ PP_NEW_SETPOINT_CONTROLWORD = 0x003F
 PP_SETPOINT_ACK_BIT = 12
 PP_SETPOINT_ACK_MASK = 1 << PP_SETPOINT_ACK_BIT
 PP_HANDSHAKE_MAX_CYCLES = 100
+HOMING_START_BIT = 1 << 4
+HOMING_REFERENCED_MASK = 1 << 15
+HOMING_ERROR_MASK = 1 << 13
+HOMING_MIN_MONITOR_TIME = 0.05
 CMMT_MAIN_GROUPS = {
     1: "Current",
     2: "Voltage",
@@ -142,6 +148,24 @@ def parse_args():
         help="Process-data cycle time in seconds.",
     )
     parser.add_argument(
+        "--spin-wait-time",
+        type=float,
+        default=DEFAULT_SPIN_WAIT_TIME,
+        help=(
+            "Busy-wait window before each process-data cycle in seconds. "
+            "Use 0.0 to sleep until the cycle deadline."
+        ),
+    )
+    parser.add_argument(
+        "--sync-mode",
+        default=os.environ.get("PYSOEM_SYNC_MODE", "0"),
+        help=(
+            "Optional CMMT EtherCAT sync mode written via 0x212E before OP. "
+            "0=FreeRun, 1=sync with process data, 2=DC Sync0. "
+            "Cycle time follows --cycle-time."
+        ),
+    )
+    parser.add_argument(
         "--axis-count",
         type=int,
         default=int(os.environ.get("PYSOEM_AXIS_COUNT", "1")),
@@ -160,6 +184,18 @@ def parse_args():
         "--deceleration",
         type=float,
         default=float(os.environ.get("PYSOEM_DECELERATION", "100.0")),
+    )
+    parser.add_argument(
+        "--jerk",
+        type=float,
+        default=float(os.environ.get("PYSOEM_JERK", "1000.0")),
+        help="CSP S-curve jerk limit in user units per second cubed.",
+    )
+    parser.add_argument(
+        "--pp-jerk",
+        type=int,
+        default=int(os.environ.get("PYSOEM_PP_JERK", "100000")),
+        help="Profile position jerk written to 0x60A4:01 as UDINT.",
     )
     parser.add_argument(
         "--csp-counts-per-unit",
@@ -185,6 +221,8 @@ def parse_args():
 
 
 def create_master(args, motion_limits):
+    sync_mode = parse_optional_sync_mode(args.sync_mode)
+
     if args.backend == "mock":
         slaves = []
         for axis_index, limits in enumerate(motion_limits):
@@ -197,11 +235,20 @@ def create_master(args, motion_limits):
             axis = Axis(f"A{axis_index}", servo)
             slaves.append(MockSlave(axis))
 
-        return MockMaster(
+        master = MockMaster(
             slaves,
             cycle_time=args.cycle_time,
             csp_counts_per_unit=1.0,
         )
+        for axis_index, limits in enumerate(motion_limits):
+            master.set_axis_motion_limits(
+                axis_index,
+                limits["max_velocity"],
+                limits["acceleration"],
+                limits["deceleration"],
+                limits["jerk"],
+            )
+        return master
 
     return PySOEMMaster(
         interface_name=args.interface,
@@ -209,7 +256,21 @@ def create_master(args, motion_limits):
         cycle_time=args.cycle_time,
         motion_limits=motion_limits,
         csp_counts_per_unit=args.csp_counts_per_unit,
+        sync_mode=sync_mode,
     )
+
+
+def parse_optional_sync_mode(raw_value):
+    value = str(raw_value).strip()
+    if value == "":
+        return None
+
+    sync_mode = int(value, 0)
+    if sync_mode not in (0, 1, 2):
+        raise ValueError(
+            f"Unsupported sync mode {sync_mode}; expected 0, 1, 2, or empty."
+        )
+    return sync_mode
 
 
 class CycleStats:
@@ -403,13 +464,17 @@ def format_axis_diagnostics(diagnostics_list):
 
 
 def mode_code(mode_name):
+    if mode_name == "homing":
+        return HOMING_MODE
     return MOTION_MODES[mode_name]
 
 
 def configure_motion_mode(master, mode_name, axis_index=None):
     code = mode_code(mode_name)
-    if mode_name == "csp":
-        configure_csp_interpolation_time(master, axis_index)
+    configure_mode_code(master, code, axis_index)
+
+
+def configure_mode_code(master, code, axis_index=None):
 
     axis_indices = (
         range(axis_count(master))
@@ -425,34 +490,11 @@ def configure_motion_mode(master, mode_name, axis_index=None):
     exchange(master, cycles=5)
 
 
-def configure_csp_interpolation_time(master, axis_index=None):
-    period_ms = max(1, int(round(master.cycle_time * 1000.0)))
-    axis_indices = (
-        range(axis_count(master))
-        if axis_index is None
-        else [axis_index]
-    )
-    for current_axis in axis_indices:
-        try:
-            master.sdo_write_uint8(current_axis, 0x60C2, 1, period_ms)
-            master.sdo_write_int8(current_axis, 0x60C2, 2, -3)
-            print(
-                f"Axis {current_axis}: CSP interpolation time set to "
-                f"{period_ms} ms",
-                flush=True,
-            )
-        except Exception as exc:
-            print(
-                f"Axis {current_axis}: CSP interpolation time object 0x60C2 "
-                f"is not available; continuing without it ({exc})",
-                flush=True,
-            )
-
-
-def initialize_drive(master, motion_mode):
+def initialize_drive(master, motion_mode, pp_jerk):
     master.connect()
     configure_motion_mode(master, motion_mode)
     for axis_index in range(axis_count(master)):
+        write_profile_jerk(master, axis_index, pp_jerk)
         write_profile_motion_limits(master, axis_index)
 
     exchange(master, cycles=10)
@@ -475,9 +517,10 @@ def initialize_drive(master, motion_mode):
                 f"0x{slave.txpdo.statusword:04X}"
                 for slave in master.slaves
             ]
-            raise RuntimeError(
+            print(
                 f"Failed to reach CiA402 status 0x{expected_status:04X}. "
-                f"Statuswords={statuswords}"
+                f"Statuswords={statuswords}; continuing startup.",
+                flush=True,
             )
 
 
@@ -517,6 +560,7 @@ def feedback_message(master, state, client_id=None):
         "position_counts_per_unit": state["position_counts_per_unit"],
         "capabilities": state["capabilities"],
         "trajectory": state["trajectory"],
+        "homing": public_homing_state(state),
         "diagnostics": master.last_diagnostics,
         "command_authority": {
             "owner": owner,
@@ -656,6 +700,13 @@ def handle_trajectory_command(message, master, state):
         reject_trajectory(state, validation_error)
         return
 
+    for local_index, axis_index in enumerate(axes):
+        master.trajectory_generators[axis_index].set_timed_trajectory(
+            axis_timed_points(points, local_index)
+        )
+        master.slaves[axis_index].rxpdo.mode_of_operation = CSP_MODE
+        master.slaves[axis_index].rxpdo.controlword = 0x000F
+
     state["trajectory"] = {
         "active": True,
         "state": "running",
@@ -672,6 +723,21 @@ def handle_trajectory_command(message, master, state):
         f"duration={points[-1]['time_from_start']:.3f}",
         flush=True,
     )
+
+
+def axis_timed_points(points, local_index):
+    axis_points = []
+    for point in points:
+        axis_point = {
+            "position": point["positions"][local_index],
+            "time_from_start": point["time_from_start"],
+        }
+        if "velocities" in point:
+            axis_point["velocity"] = point["velocities"][local_index]
+        if "accelerations" in point:
+            axis_point["acceleration"] = point["accelerations"][local_index]
+        axis_points.append(axis_point)
+    return axis_points
 
 
 def normalize_trajectory_points(raw_points, axes):
@@ -862,6 +928,343 @@ def handle_trajectory_status(client, master, state):
     send_client_message(client, message)
 
 
+def inactive_homing_state(result="idle"):
+    return {
+        "active": False,
+        "state": result,
+        "axes": [],
+        "start_time": None,
+        "message": "",
+        "per_axis": [],
+    }
+
+
+def parse_axis_indices(message, master, command_name):
+    if "axes" in message:
+        axes = [parse_int_field(value) for value in message.get("axes", [])]
+    elif "axis" in message:
+        axes = [parse_int_field(message.get("axis"))]
+    else:
+        axes = list(range(axis_count(master)))
+
+    if not axes:
+        raise ValueError(f"{command_name} requires at least one axis")
+    invalid_axes = [
+        axis_index
+        for axis_index in axes
+        if axis_index < 0 or axis_index >= axis_count(master)
+    ]
+    if invalid_axes:
+        raise ValueError(f"{command_name} invalid axes: {invalid_axes}")
+    return axes
+
+
+def homing_axis_status(master, axis_index):
+    statusword = int(master.slaves[axis_index].txpdo.statusword)
+    return {
+        "axis": axis_index,
+        "statusword": statusword,
+        "statusword_hex": f"0x{statusword:04X}",
+        "operation_enabled": (statusword & 0x006F) == 0x0027,
+        "target_reached": bool(statusword & (1 << 10)),
+        "referenced": bool(statusword & HOMING_REFERENCED_MASK),
+        "homing_error": bool(statusword & HOMING_ERROR_MASK),
+        "fault": bool(statusword & 0x0008),
+        "error": bool(statusword & HOMING_ERROR_MASK),
+        "warning": bool(statusword & (1 << 7)),
+        "actual_position": float(master.slaves[axis_index].txpdo.actual_position),
+        "mode_display": int(master.slaves[axis_index].txpdo.mode_of_operation_display),
+    }
+
+
+def homing_status_message(master, state):
+    homing = public_homing_state(state)
+    axes = homing["axes"] or list(range(axis_count(master)))
+    homing["per_axis"] = [
+        homing_axis_status(master, axis_index)
+        for axis_index in axes
+    ]
+    return {
+        "type": "homing_status",
+        "homing": homing,
+    }
+
+
+def public_homing_state(state):
+    homing = dict(state["homing"])
+    homing.pop("original_motion_modes", None)
+    homing.pop("initial_referenced", None)
+    homing.pop("referenced_seen_low", None)
+    return homing
+
+
+def send_homing_status(client, master, state):
+    send_client_message(client, homing_status_message(master, state))
+
+
+def update_motion_mode_summary(state):
+    modes = state["motion_modes"]
+    state["motion_mode"] = modes[0] if len(set(modes)) == 1 else "mixed"
+
+
+def set_homing_start_bit(master, axis_indices, enabled):
+    for axis_index in axis_indices:
+        slave = master.slaves[axis_index]
+        controlword = int(slave.rxpdo.controlword)
+        if enabled:
+            controlword |= HOMING_START_BIT
+        else:
+            controlword &= ~HOMING_START_BIT
+        slave.rxpdo.controlword = controlword
+
+
+def finish_homing(master, state, result, message):
+    homing = state.get("homing", {})
+    axes = homing.get("axes", [])
+    if not axes:
+        return
+
+    set_homing_start_bit(master, axes, False)
+    exchange(master, cycles=2)
+
+    original_modes = homing.get("original_motion_modes", {})
+    for axis_index in axes:
+        original_mode = original_modes.get(axis_index)
+        if original_mode in MOTION_MODES:
+            configure_motion_mode(master, original_mode, axis_index)
+            state["motion_modes"][axis_index] = original_mode
+
+    update_motion_mode_summary(state)
+    homing["active"] = False
+    homing["state"] = result
+    homing["message"] = message
+    print(
+        "Homing finished: "
+        f"state={result} axes={axes} message={message} "
+        f"modes={state['motion_modes']} "
+        f"controlwords={[f'0x{master.slaves[index].rxpdo.controlword:04X}' for index in axes]}",
+        flush=True,
+    )
+
+
+def handle_homing_start(message, master, state, client):
+    try:
+        axis_indices = parse_axis_indices(message, master, "homing_start")
+    except (TypeError, ValueError) as exc:
+        state["homing"] = inactive_homing_state("rejected")
+        state["homing"]["message"] = str(exc)
+        send_homing_status(client, master, state)
+        print(f"Ignored homing_start: {exc}", flush=True)
+        return
+
+    original_modes = {
+        axis_index: state["motion_modes"][axis_index]
+        for axis_index in axis_indices
+    }
+    for axis_index in axis_indices:
+        configure_mode_code(master, HOMING_MODE, axis_index)
+        state["motion_modes"][axis_index] = "homing"
+    update_motion_mode_summary(state)
+
+    initial_referenced = {
+        axis_index: bool(
+            master.slaves[axis_index].txpdo.statusword & HOMING_REFERENCED_MASK
+        )
+        for axis_index in axis_indices
+    }
+    referenced_seen_low = {
+        axis_index: not referenced
+        for axis_index, referenced in initial_referenced.items()
+    }
+
+    for axis_index in axis_indices:
+        slave = master.slaves[axis_index]
+        slave.rxpdo.controlword = int(slave.rxpdo.controlword) | HOMING_START_BIT
+    exchange(master, cycles=2)
+
+    state["homing"] = {
+        "active": True,
+        "state": "running",
+        "axes": axis_indices,
+        "start_time": time.monotonic(),
+        "message": "",
+        "per_axis": [],
+        "original_motion_modes": original_modes,
+        "initial_referenced": initial_referenced,
+        "referenced_seen_low": referenced_seen_low,
+    }
+    send_homing_status(client, master, state)
+    print(
+        "Received homing_start: "
+        f"axes={axis_indices} "
+        f"original_modes={original_modes} "
+        f"initial_referenced={initial_referenced} "
+        f"controlwords={[f'0x{master.slaves[index].rxpdo.controlword:04X}' for index in axis_indices]}",
+        flush=True,
+    )
+
+
+def handle_homing_stop(message, master, state, client):
+    try:
+        axis_indices = parse_axis_indices(message, master, "homing_stop")
+    except (TypeError, ValueError) as exc:
+        state["homing"]["message"] = str(exc)
+        send_homing_status(client, master, state)
+        print(f"Ignored homing_stop: {exc}", flush=True)
+        return
+
+    if state.get("homing", {}).get("active"):
+        finish_homing(master, state, "stopped", "Homing stopped by command.")
+    else:
+        set_homing_start_bit(master, axis_indices, False)
+        exchange(master, cycles=2)
+        state["homing"] = inactive_homing_state("stopped")
+        state["homing"]["axes"] = axis_indices
+    send_homing_status(client, master, state)
+
+
+def handle_homing_status(client, master, state):
+    send_homing_status(client, master, state)
+
+
+def update_homing_state(master, state):
+    homing = state.get("homing", {})
+    if not homing.get("active"):
+        return
+
+    axes = homing.get("axes", [])
+    statuses = [
+        homing_axis_status(master, axis_index)
+        for axis_index in axes
+    ]
+    homing["per_axis"] = statuses
+
+    status_by_axis = {
+        status["axis"]: status
+        for status in statuses
+    }
+    referenced_seen_low = homing.setdefault("referenced_seen_low", {})
+    for axis_index, status in status_by_axis.items():
+        if not status["referenced"]:
+            referenced_seen_low[axis_index] = True
+
+    if any(status["homing_error"] for status in statuses):
+        finish_homing(master, state, "error", "Homing error bit is set.")
+        return
+
+    elapsed = time.monotonic() - float(homing.get("start_time") or time.monotonic())
+    monitor_ready = elapsed >= HOMING_MIN_MONITOR_TIME
+    completion_ready = (
+        bool(statuses)
+        and monitor_ready
+        and all(
+            status_by_axis[axis_index]["referenced"]
+            and bool(referenced_seen_low.get(axis_index, False))
+            for axis_index in axes
+        )
+    )
+    if completion_ready:
+        finish_homing(master, state, "complete", "Axis referenced.")
+
+
+def handle_sdo_read(message, master, client):
+    data_type = str(message.get("data_type", "uint32")).strip().lower()
+    try:
+        axis_index = parse_int_field(message.get("axis", 0))
+        index = parse_int_field(message.get("index"), 0)
+        subindex = parse_int_field(message.get("subindex", 0))
+    except (TypeError, ValueError) as exc:
+        send_client_message(
+            client,
+            {
+                "type": "sdo_read",
+                "ok": False,
+                "axis": message.get("axis", 0),
+                "index": message.get("index"),
+                "subindex": message.get("subindex", 0),
+                "data_type": data_type,
+                "error": f"Invalid SDO address: {exc}",
+            },
+        )
+        return
+
+    if axis_index < 0 or axis_index >= axis_count(master):
+        send_client_message(
+            client,
+            {
+                "type": "sdo_read",
+                "ok": False,
+                "axis": axis_index,
+                "index": index,
+                "subindex": subindex,
+                "data_type": data_type,
+                "error": f"Invalid axis index: {axis_index}",
+            },
+        )
+        return
+
+    readers = {
+        "uint8": master.sdo_read_uint8,
+        "int8": master.sdo_read_int8,
+        "uint16": master.sdo_read_uint16,
+        "int32": master.sdo_read_int32,
+        "uint32": master.sdo_read_uint32,
+        "udint": master.sdo_read_uint32,
+    }
+    reader = readers.get(data_type)
+    if reader is None:
+        send_client_message(
+            client,
+            {
+                "type": "sdo_read",
+                "ok": False,
+                "axis": axis_index,
+                "index": index,
+                "subindex": subindex,
+                "data_type": data_type,
+                "error": f"Unsupported SDO data type: {data_type}",
+            },
+        )
+        return
+
+    try:
+        value = reader(axis_index, index, subindex)
+    except Exception as exc:
+        send_client_message(
+            client,
+            {
+                "type": "sdo_read",
+                "ok": False,
+                "axis": axis_index,
+                "index": index,
+                "subindex": subindex,
+                "data_type": data_type,
+                "error": str(exc),
+            },
+        )
+        return
+
+    send_client_message(
+        client,
+        {
+            "type": "sdo_read",
+            "ok": True,
+            "axis": axis_index,
+            "index": index,
+            "subindex": subindex,
+            "data_type": data_type,
+            "value": int(value),
+            "hex": f"0x{int(value) & 0xFFFFFFFF:08X}",
+        },
+    )
+
+
+def parse_int_field(value, base=0):
+    if isinstance(value, int):
+        return value
+    return int(str(value), base)
+
+
 def update_active_trajectory(master, state):
     trajectory = state.get("trajectory", {})
     if not trajectory.get("active"):
@@ -869,81 +1272,37 @@ def update_active_trajectory(master, state):
 
     axes = trajectory["axes"]
     points = trajectory["points"]
-    elapsed = time.monotonic() - trajectory["start_time"]
-    trajectory["time_from_start"] = elapsed
+    positions = list(state["target_positions"])
+    elapsed = 0.0
+    active = False
+    segment = 0
 
-    if elapsed >= points[-1]["time_from_start"]:
-        positions = list(state["target_positions"])
+    for axis_index in axes:
+        generator = master.trajectory_generators[axis_index]
+        positions[axis_index] = generator.command_position
+        elapsed = max(elapsed, generator.timed_elapsed)
+        segment = max(segment, generator.timed_segment)
+        active = active or generator.timed_active
+
+    state["target_positions"] = positions
+    trajectory["time_from_start"] = elapsed
+    trajectory["segment"] = segment
+
+    if not active or elapsed >= points[-1]["time_from_start"]:
         for local_index, axis_index in enumerate(axes):
-            positions[axis_index] = points[-1]["positions"][local_index]
-            set_csp_command_position(master, axis_index, positions[axis_index], 0.0)
+            generator = master.trajectory_generators[axis_index]
+            final_position = points[-1]["positions"][local_index]
+            generator.command_position = final_position
+            generator.target_position = final_position
+            generator.command_velocity = 0.0
+            generator.command_acceleration = 0.0
+            generator.clear_timed_trajectory()
+            master.slaves[axis_index].rxpdo.target_position = int(round(final_position))
+            positions[axis_index] = final_position
         state["target_positions"] = positions
         trajectory["active"] = False
         trajectory["state"] = "complete"
         trajectory["segment"] = max(0, len(points) - 2)
-        return
-
-    segment_index = find_trajectory_segment(points, elapsed)
-    start = points[segment_index]
-    end = points[segment_index + 1]
-    segment_start_time = start["time_from_start"]
-    segment_duration = end["time_from_start"] - segment_start_time
-    local_time = elapsed - segment_start_time
-
-    positions = list(state["target_positions"])
-    for local_index, axis_index in enumerate(axes):
-        position, velocity = interpolate_trajectory_axis(
-            start,
-            end,
-            local_index,
-            local_time,
-            segment_duration,
-        )
-        positions[axis_index] = position
-        set_csp_command_position(master, axis_index, position, velocity)
-
-    state["target_positions"] = positions
-    trajectory["segment"] = segment_index
-
-
-def find_trajectory_segment(points, elapsed):
-    for index in range(len(points) - 1):
-        if elapsed <= points[index + 1]["time_from_start"]:
-            return index
-    return len(points) - 2
-
-
-def interpolate_trajectory_axis(start, end, local_index, local_time, duration):
-    p0 = start["positions"][local_index]
-    p1 = end["positions"][local_index]
-
-    if "velocities" not in start and "velocities" not in end:
-        ratio = max(0.0, min(1.0, local_time / duration))
-        position = p0 + (p1 - p0) * ratio
-        velocity = (p1 - p0) / duration
-        return position, velocity
-
-    v0 = start.get("velocities", [0.0] * len(start["positions"]))[local_index]
-    v1 = end.get("velocities", [0.0] * len(end["positions"]))[local_index]
-    t = max(0.0, min(duration, local_time))
-    a0 = p0
-    a1 = v0
-    a2 = (3.0 * (p1 - p0) / duration - 2.0 * v0 - v1) / duration
-    a3 = (2.0 * (p0 - p1) / duration + v0 + v1) / (duration * duration)
-    position = a0 + a1 * t + a2 * t * t + a3 * t * t * t
-    velocity = a1 + 2.0 * a2 * t + 3.0 * a3 * t * t
-    return position, velocity
-
-
-def set_csp_command_position(master, axis_index, position, velocity):
-    generator = master.trajectory_generators[axis_index]
-    generator.command_position = float(position)
-    generator.target_position = float(position)
-    generator.command_velocity = float(velocity)
-    slave = master.slaves[axis_index]
-    slave.rxpdo.mode_of_operation = CSP_MODE
-    slave.rxpdo.controlword = 0x000F
-    slave.rxpdo.target_position = int(round(position))
 
 
 def handle_manual_move_absolute(message, master, state):
@@ -1041,6 +1400,9 @@ def handle_manual_stop(message, master, state):
         print(f"Ignored unsupported manual_stop mode: {mode}", flush=True)
         return
 
+    if state.get("homing", {}).get("active"):
+        finish_homing(master, state, "stopped", "Homing stopped by manual_stop.")
+
     state["trajectory"] = inactive_trajectory_state("manual_stop")
     positions = actual_positions(master)
     state["target_positions"] = positions
@@ -1071,19 +1433,20 @@ def handle_motion_limits(message, master, state):
         max_velocity = float(axis_limits[0])
         acceleration = float(axis_limits[1])
         deceleration = float(axis_limits[2])
-        kp = float(axis_limits[3]) if len(axis_limits) > 3 else 0.0
+        jerk = float(axis_limits[3]) if len(axis_limits) > 3 else 0.0
 
         state["motion_limits"][axis_index] = [
             max_velocity,
             acceleration,
             deceleration,
-            kp,
+            jerk,
         ]
         master.set_axis_motion_limits(
             axis_index,
             max_velocity,
             acceleration,
             deceleration,
+            jerk,
         )
         master.slaves[axis_index].rxpdo.profile_velocity = int(max_velocity)
         write_profile_motion_limits(master, axis_index)
@@ -1204,69 +1567,30 @@ def handle_target_velocities(message, master, state):
 
 
 def handle_alarm_ack(master, state):
-    print("Received alarm_ack", flush=True)
-    master.last_diagnostics = read_all_diagnostics(master)
     print(
-        "Alarm before ack: "
-        f"{format_axis_diagnostics(master.last_diagnostics)}",
+        "Received alarm_ack: pulsing fault reset bit only",
         flush=True,
     )
+    original_controlwords = [
+        int(slave.rxpdo.controlword)
+        for slave in master.slaves
+    ]
 
-    state["target_positions"] = actual_positions(master)
-    master.set_target_positions(state["target_positions"])
-    master.sync_trajectory_to_actual_positions()
-    exchange(master, cycles=10)
+    for slave, controlword in zip(master.slaves, original_controlwords):
+        slave.rxpdo.controlword = controlword & ~0x0080
+    exchange(master, cycles=2)
 
-    for axis_index, motion_mode in enumerate(state["motion_modes"]):
-        configure_motion_mode(master, motion_mode, axis_index)
+    for slave, controlword in zip(master.slaves, original_controlwords):
+        slave.rxpdo.controlword = controlword | 0x0080
+    exchange(master, cycles=2)
 
-    master.set_controlword_all(0x0000)
-    exchange(master, cycles=10)
-    master.set_controlword_all(0x0080)
-    reset_done = wait_status_all(master, 0x0040, timeout_s=2.0)
+    for slave, controlword in zip(master.slaves, original_controlwords):
+        slave.rxpdo.controlword = controlword & ~0x0080
+    exchange(master, cycles=2)
 
-    master.last_diagnostics = read_all_diagnostics(master)
     print(
-        "Alarm after reset request: "
-        f"reset_done={reset_done} "
-        f"{format_axis_diagnostics(master.last_diagnostics)}",
-        flush=True,
-    )
-
-    if not reset_done:
-        return
-
-    master.set_controlword_all(0x0000)
-    exchange(master, cycles=10)
-
-    for controlword, expected_status in [
-        (0x0006, 0x0021),
-        (0x0007, 0x0023),
-        (0x000F, 0x0027),
-    ]:
-        master.set_controlword_all(controlword)
-        reached = wait_status_all(master, expected_status, timeout_s=2.0)
-        print(
-            f"Alarm ack transition cw=0x{controlword:04X} "
-            f"expected=0x{expected_status:04X} reached={reached} "
-            f"statuswords={[f'0x{slave.txpdo.statusword:04X}' for slave in master.slaves]}",
-            flush=True,
-        )
-        if not reached:
-            master.last_diagnostics = read_all_diagnostics(master)
-            print(
-                "Alarm ack transition failed: "
-                f"{format_axis_diagnostics(master.last_diagnostics)}",
-                flush=True,
-            )
-            return
-
-    master.sync_trajectory_to_actual_positions()
-    state["target_positions"] = actual_positions(master)
-    print(
-        "Alarm ack complete. "
-        f"statuswords={[f'0x{slave.txpdo.statusword:04X}' for slave in master.slaves]} "
-        f"AP={actual_positions(master)}",
+        "Alarm ack fault reset pulse complete. "
+        f"controlwords={[f'0x{slave.rxpdo.controlword:04X}' for slave in master.slaves]}",
         flush=True,
     )
 
@@ -1317,6 +1641,8 @@ def handle_controlword(message, master, state):
 COMMAND_MESSAGE_TYPES = {
     "trajectory_command",
     "trajectory_stop",
+    "homing_start",
+    "homing_stop",
     "manual_move_absolute",
     "manual_move_relative",
     "manual_stop",
@@ -1421,10 +1747,18 @@ def handle_message(message, master, state, client):
 
     if message_type == "trajectory_status":
         handle_trajectory_status(client, master, state)
+    elif message_type == "homing_status":
+        handle_homing_status(client, master, state)
+    elif message_type == "sdo_read":
+        handle_sdo_read(message, master, client)
     elif message_type == "trajectory_command":
         handle_trajectory_command(message, master, state)
     elif message_type == "trajectory_stop":
         handle_trajectory_stop(message, master, state)
+    elif message_type == "homing_start":
+        handle_homing_start(message, master, state, client)
+    elif message_type == "homing_stop":
+        handle_homing_stop(message, master, state, client)
     elif message_type == "manual_move_absolute":
         handle_manual_move_absolute(message, master, state)
     elif message_type == "manual_move_relative":
@@ -1652,6 +1986,22 @@ def write_profile_motion_limits(master, axis_index):
     )
 
 
+def write_profile_jerk(master, axis_index, pp_jerk):
+    value = max(0, int(pp_jerk))
+    try:
+        master.sdo_write_uint32(axis_index, 0x60A4, 1, value)
+        print(
+            f"Axis {axis_index}: PP jerk 0x60A4:01 set to {value}",
+            flush=True,
+        )
+    except Exception as exc:
+        print(
+            f"Axis {axis_index}: failed to set PP jerk 0x60A4:01 "
+            f"to {value}; continuing ({exc})",
+            flush=True,
+        )
+
+
 def read_software_position_limits(master, axis_index):
     return [
         master.sdo_read_int32(axis_index, 0x607D, 1),
@@ -1693,6 +2043,18 @@ def allocate_client_id(clients):
     return client_id
 
 
+def wait_until_cycle_time(target_time, spin_wait_time):
+    spin_wait_time = max(0.0, float(spin_wait_time))
+    sleep_until = target_time - spin_wait_time
+
+    now = time.monotonic()
+    if now < sleep_until:
+        time.sleep(sleep_until - now)
+
+    while time.monotonic() < target_time:
+        pass
+
+
 def run_server_loop(server, master, state):
     server.setblocking(False)
     clients = []
@@ -1702,11 +2064,10 @@ def run_server_loop(server, master, state):
     last_cycle_start_time = None
     last_cycle_stats_log_time = time.monotonic()
     next_cycle_time = time.monotonic()
+    spin_wait_time = float(state.get("spin_wait_time", 0.0))
 
     while True:
-        now = time.monotonic()
-        if now < next_cycle_time:
-            time.sleep(next_cycle_time - now)
+        wait_until_cycle_time(next_cycle_time, spin_wait_time)
 
         cycle_start_time = time.monotonic()
         if last_cycle_start_time is not None:
@@ -1722,6 +2083,7 @@ def run_server_loop(server, master, state):
         hold_faulted_axes(master, state)
         update_active_trajectory(master, state)
         exchange(master, cycle_stats=cycle_stats, sleep_after=False)
+        update_homing_state(master, state)
 
         now = time.monotonic()
         if clients and now - last_feedback_update_time >= FEEDBACK_PERIOD:
@@ -1786,13 +2148,18 @@ def main():
             "max_velocity": args.max_velocity,
             "acceleration": args.acceleration,
             "deceleration": args.deceleration,
+            "jerk": args.jerk,
         }
         for _ in range(args.axis_count)
     ]
     master = create_master(args, motion_limits)
 
     try:
-        initialize_drive(master, args.motion_mode)
+        initialize_drive(
+            master,
+            args.motion_mode,
+            args.pp_jerk,
+        )
         for slave in master.slaves:
             slave.rxpdo.profile_velocity = int(args.max_velocity)
 
@@ -1804,7 +2171,10 @@ def main():
             f"backend={args.backend} "
             f"axes={args.axis_count} "
             f"cycle_time={args.cycle_time} "
+            f"spin_wait_time={args.spin_wait_time} "
             f"csp_counts_per_unit={args.csp_counts_per_unit} "
+            f"jerk={args.jerk} "
+            f"pp_jerk={args.pp_jerk} "
             f"derived_velocity_alpha={args.derived_velocity_alpha} "
             f"statuswords={[f'0x{slave.txpdo.statusword:04X}' for slave in master.slaves]} "
             f"software_position_limits={software_position_limits} "
@@ -1826,7 +2196,7 @@ def main():
                     args.max_velocity,
                     args.acceleration,
                     args.deceleration,
-                    0.0,
+                    args.jerk,
                 ]
                 for _ in range(args.axis_count)
             ],
@@ -1848,7 +2218,9 @@ def main():
                 "csp_trajectory_feedback": True,
             },
             "trajectory": inactive_trajectory_state(),
+            "homing": inactive_homing_state(),
             "command_authority_owner": None,
+            "spin_wait_time": max(0.0, args.spin_wait_time),
         }
 
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as server:

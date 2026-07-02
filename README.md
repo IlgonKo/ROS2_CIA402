@@ -348,8 +348,8 @@ bash scripts/ros/moveit.sh --move-group
 The ROS Bridge Axis Server endpoint is configured in `.env`:
 
 ```text
+PYSOEM_AXIS_SERVER_PORT=15000
 CIA402_AXIS_SERVER_HOST=192.168.0.12
-CIA402_AXIS_SERVER_PORT=15000
 CIA402_AUTO_REQUEST_AUTHORITY=1
 ```
 

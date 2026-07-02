@@ -11,21 +11,21 @@ DEFAULT_AXIS_CONFIGS = [
         "max_velocity": 1000.0,
         "acceleration": 500.0,
         "deceleration": 500.0,
-        "kp": 5.0,
+        "jerk": 5000.0,
     },
     {
         "name": "Y",
         "max_velocity": 500.0,
         "acceleration": 300.0,
         "deceleration": 300.0,
-        "kp": 3.0,
+        "jerk": 3000.0,
     },
     {
         "name": "Z",
         "max_velocity": 2000.0,
         "acceleration": 1000.0,
         "deceleration": 1000.0,
-        "kp": 8.0,
+        "jerk": 10000.0,
     },
 ]
 
@@ -89,7 +89,7 @@ def get_axis_configs():
                 "max_velocity": 1000.0,
                 "acceleration": 500.0,
                 "deceleration": 500.0,
-                "kp": 5.0,
+                "jerk": 5000.0,
             }
 
         configs.append(config)
