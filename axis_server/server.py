@@ -1,5 +1,7 @@
 import argparse
+from collections import deque
 import json
+import math
 import os
 from pathlib import Path
 import select
@@ -27,6 +29,45 @@ DERIVED_VELOCITY_ALPHA = float(
 FEEDBACK_PERIOD = 0.05
 STATUS_LOG_PERIOD = float(os.environ.get("PYSOEM_STATUS_LOG_PERIOD", "1.0"))
 CYCLE_STATS_PERIOD = float(os.environ.get("PYSOEM_CYCLE_STATS_PERIOD", "1.0"))
+TX_HISTORY_LENGTH = int(os.environ.get("PYSOEM_TX_HISTORY_LENGTH", "16"))
+TRAJECTORY_DEBUG_LOGS = os.environ.get(
+    "PYSOEM_TRAJECTORY_DEBUG_LOGS",
+    "0",
+).strip() == "1"
+TRAJECTORY_SNAPSHOT_LOGS = os.environ.get(
+    "PYSOEM_TRAJECTORY_SNAPSHOT_LOGS",
+    "0",
+).strip() == "1"
+VELOCITY_ANOMALY_LOGS = os.environ.get(
+    "PYSOEM_VELOCITY_ANOMALY_LOGS",
+    "0",
+).strip() == "1"
+CSP_COMMAND_STEP_LOGS = os.environ.get(
+    "PYSOEM_CSP_COMMAND_STEP_LOGS",
+    "0",
+).strip() == "1"
+VELOCITY_ANOMALY_THRESHOLD = float(
+    os.environ.get("PYSOEM_VELOCITY_ANOMALY_THRESHOLD", "15.0")
+)
+VELOCITY_JUMP_THRESHOLD = float(
+    os.environ.get("PYSOEM_VELOCITY_JUMP_THRESHOLD", "15.0")
+)
+VELOCITY_ANOMALY_LOG_PERIOD = float(
+    os.environ.get("PYSOEM_VELOCITY_ANOMALY_LOG_PERIOD", "0.05")
+)
+POSITION_FEEDBACK_LAG_LOGS = os.environ.get(
+    "PYSOEM_POSITION_FEEDBACK_LAG_LOGS",
+    "0",
+).strip() == "1"
+POSITION_FEEDBACK_LAG_LOG_PERIOD = float(
+    os.environ.get("PYSOEM_POSITION_FEEDBACK_LAG_LOG_PERIOD", "0.2")
+)
+CSP_COMMAND_STEP_THRESHOLD = float(
+    os.environ.get("PYSOEM_CSP_COMMAND_STEP_THRESHOLD", "250.0")
+)
+CSP_COMMAND_STEP_ERROR_THRESHOLD = float(
+    os.environ.get("PYSOEM_CSP_COMMAND_STEP_ERROR_THRESHOLD", "75.0")
+)
 PROFILE_POSITION_MODE = 1
 HOMING_MODE = 6
 CSP_MODE = 8
@@ -166,6 +207,57 @@ def parse_args():
         ),
     )
     parser.add_argument(
+        "--dc-enabled",
+        action="store_true",
+        default=os.environ.get("PYSOEM_DC_ENABLED", "0").strip() == "1",
+        help="Enable EtherCAT distributed clocks and Sync0 before OP.",
+    )
+    parser.add_argument(
+        "--dc-sync0-shift-time",
+        type=int,
+        default=int(os.environ.get("PYSOEM_DC_SYNC0_SHIFT_TIME_NS", "0")),
+        help="SYNC0 shift time in nanoseconds when DC is enabled.",
+    )
+    parser.add_argument(
+        "--dc-phase-lock",
+        action="store_true",
+        default=os.environ.get("PYSOEM_DC_PHASE_LOCK", "0").strip() == "1",
+        help="PI-correct the host wake-up time against EtherCAT DC phase.",
+    )
+    parser.add_argument(
+        "--dc-absolute-schedule",
+        action="store_true",
+        default=os.environ.get("PYSOEM_DC_ABSOLUTE_SCHEDULE", "0").strip() == "1",
+        help=(
+            "Schedule each PDO send from the current EtherCAT DC phase instead "
+            "of a host-clock periodic deadline."
+        ),
+    )
+    parser.add_argument(
+        "--dc-send-offset",
+        type=int,
+        default=int(os.environ.get("PYSOEM_DC_SEND_OFFSET_NS", "800000")),
+        help="Target PDO send offset before Sync0 in nanoseconds.",
+    )
+    parser.add_argument(
+        "--dc-phase-kp",
+        type=float,
+        default=float(os.environ.get("PYSOEM_DC_PHASE_KP", "0.05")),
+        help="Proportional gain for DC phase lock.",
+    )
+    parser.add_argument(
+        "--dc-phase-ki",
+        type=float,
+        default=float(os.environ.get("PYSOEM_DC_PHASE_KI", "0.0005")),
+        help="Integral gain for DC phase lock.",
+    )
+    parser.add_argument(
+        "--dc-phase-max-correction",
+        type=float,
+        default=float(os.environ.get("PYSOEM_DC_PHASE_MAX_CORRECTION", "0.001")),
+        help="Maximum absolute host wake-up correction in seconds.",
+    )
+    parser.add_argument(
         "--axis-count",
         type=int,
         default=int(os.environ.get("PYSOEM_AXIS_COUNT", "1")),
@@ -207,6 +299,83 @@ def parse_args():
         ),
     )
     parser.add_argument(
+        "--csp-command-step-threshold",
+        type=float,
+        default=CSP_COMMAND_STEP_THRESHOLD,
+        help=(
+            "Log CSP command position steps at or above this threshold "
+            "in counts. Set 0 to disable."
+        ),
+    )
+    parser.add_argument(
+        "--csp-command-step-error-threshold",
+        type=float,
+        default=CSP_COMMAND_STEP_ERROR_THRESHOLD,
+        help=(
+            "Log CSP command position steps whose sent step differs from "
+            "the command-velocity-derived expected step by this many counts. "
+            "Set 0 to disable."
+        ),
+    )
+    parser.add_argument(
+        "--txpdo-setpoint-feedback",
+        action="store_true",
+        default=os.environ.get("PYSOEM_TXPDO_SETPOINT_FEEDBACK", "0").strip() == "1",
+        help=(
+            "Decode the selected setpoint feedback object from TxPDO1. Enable "
+            "only when the drive TxPDO mapping already contains that object."
+        ),
+    )
+    parser.add_argument(
+        "--configure-txpdo-setpoint-feedback",
+        action="store_true",
+        default=(
+            os.environ.get("PYSOEM_CONFIGURE_TXPDO_SETPOINT_FEEDBACK", "0").strip()
+            == "1"
+        ),
+        help=(
+            "Try to remap TxPDO1 via SDO so it contains the selected "
+            "setpoint feedback object. "
+            "This can be rejected by CMMT at SAFE_OP; keep disabled unless testing."
+        ),
+    )
+    parser.add_argument(
+        "--txpdo-setpoint-feedback-object",
+        default=os.environ.get("PYSOEM_TXPDO_SETPOINT_FEEDBACK_OBJECT", "6062"),
+        help=(
+            "TxPDO feedback object added/decoded by setpoint-feedback mode. "
+            "Supported values: 6062, 217A01."
+        ),
+    )
+    parser.add_argument(
+        "--restore-default-txpdo-mapping",
+        action="store_true",
+        default=os.environ.get("PYSOEM_RESTORE_DEFAULT_TXPDO_MAPPING", "1").strip()
+        == "1",
+        help=(
+            "Restore TxPDO1 to the default CMMT feedback layout before config_map. "
+            "Useful after a failed experimental remap."
+        ),
+    )
+    parser.add_argument(
+        "--csp-interpolation-mode",
+        type=int,
+        default=int(os.environ.get("PYSOEM_CSP_INTERPOLATION_MODE", "1")),
+        help=(
+            "CMMT CSP interpolation mode written to 0x217B:0D. "
+            "CMMT enum: 1=CSP, 4=CSP-V, 5=CSP-T, 6=CSP-VT."
+        ),
+    )
+    parser.add_argument(
+        "--csp-velocity-offset",
+        action="store_true",
+        default=os.environ.get("PYSOEM_CSP_VELOCITY_OFFSET", "0").strip() == "1",
+        help=(
+            "Send CSP command velocity as 0x60B1 velocity offset in user units. "
+            "Use with CSP interpolation mode CSP-V."
+        ),
+    )
+    parser.add_argument(
         "--derived-velocity-alpha",
         type=float,
         default=DERIVED_VELOCITY_ALPHA,
@@ -239,6 +408,11 @@ def create_master(args, motion_limits):
             slaves,
             cycle_time=args.cycle_time,
             csp_counts_per_unit=1.0,
+            csp_velocity_offset_enabled=args.csp_velocity_offset,
+            csp_command_step_threshold=args.csp_command_step_threshold,
+            csp_command_step_error_threshold=(
+                args.csp_command_step_error_threshold
+            ),
         )
         for axis_index, limits in enumerate(motion_limits):
             master.set_axis_motion_limits(
@@ -257,6 +431,15 @@ def create_master(args, motion_limits):
         motion_limits=motion_limits,
         csp_counts_per_unit=args.csp_counts_per_unit,
         sync_mode=sync_mode,
+        dc_enabled=args.dc_enabled,
+        dc_sync0_shift_time=args.dc_sync0_shift_time,
+        txpdo_setpoint_feedback=args.txpdo_setpoint_feedback,
+        configure_txpdo_setpoint_feedback=args.configure_txpdo_setpoint_feedback,
+        txpdo_setpoint_feedback_object=args.txpdo_setpoint_feedback_object,
+        restore_default_txpdo_mapping=args.restore_default_txpdo_mapping,
+        csp_velocity_offset_enabled=args.csp_velocity_offset,
+        csp_command_step_threshold=args.csp_command_step_threshold,
+        csp_command_step_error_threshold=args.csp_command_step_error_threshold,
     )
 
 
@@ -276,9 +459,11 @@ def parse_optional_sync_mode(raw_value):
 class CycleStats:
     def __init__(self):
         self.values = {}
+        self.latest = {}
         self.last_tx_time = None
 
     def add(self, name, seconds):
+        self.latest[name] = seconds
         bucket = self.values.setdefault(
             name,
             {
@@ -314,7 +499,80 @@ class CycleStats:
             )
 
         self.values = {}
+        self.latest = {}
         return " | ".join(parts)
+
+
+class DcPhaseLock:
+    def __init__(
+        self,
+        enabled,
+        cycle_time,
+        send_offset_ns,
+        kp,
+        ki,
+        max_correction,
+    ):
+        self.enabled = bool(enabled)
+        self.cycle_time_ns = max(1, int(round(float(cycle_time) * 1_000_000_000.0)))
+        self.send_offset_ns = int(send_offset_ns)
+        self.kp = float(kp)
+        self.ki = float(ki)
+        self.max_correction = abs(float(max_correction))
+        self.integral_error_s = 0.0
+        self.correction_s = 0.0
+
+    def target_phase_ns(self):
+        return (self.cycle_time_ns - self.send_offset_ns) % self.cycle_time_ns
+
+    def correction(self):
+        return self.correction_s if self.enabled else 0.0
+
+    def update(self, dc_time_ns, stats):
+        if dc_time_ns is None:
+            return
+
+        phase_error_ns = self._wrapped_phase_error_ns(dc_time_ns)
+        phase_error_s = phase_error_ns / 1_000_000_000.0
+        stats.add("dc_phase_error", phase_error_s)
+
+        if not self.enabled:
+            self.integral_error_s = 0.0
+            self.correction_s = 0.0
+            stats.add("dc_phase_correction", 0.0)
+            return
+
+        self.integral_error_s += phase_error_s
+        self.integral_error_s = self._clamp(
+            self.integral_error_s,
+            -self.max_correction,
+            self.max_correction,
+        )
+        self.correction_s = -(
+            self.kp * phase_error_s
+            + self.ki * self.integral_error_s
+        )
+        self.correction_s = self._clamp(
+            self.correction_s,
+            -self.max_correction,
+            self.max_correction,
+        )
+
+        stats.add("dc_phase_correction", self.correction_s)
+
+    def _wrapped_phase_error_ns(self, dc_time_ns):
+        actual_phase = int(dc_time_ns) % self.cycle_time_ns
+        error = actual_phase - self.target_phase_ns()
+        half_cycle = self.cycle_time_ns // 2
+        if error > half_cycle:
+            error -= self.cycle_time_ns
+        elif error < -half_cycle:
+            error += self.cycle_time_ns
+        return error
+
+    @staticmethod
+    def _clamp(value, minimum, maximum):
+        return max(minimum, min(maximum, value))
 
 
 def exchange(master, cycles=1, cycle_stats=None, sleep_after=True):
@@ -331,6 +589,18 @@ def exchange(master, cycles=1, cycle_stats=None, sleep_after=True):
         if cycle_stats is not None:
             cycle_stats.add("pdo_io", pdo_done - exchange_start)
             cycle_stats.add("exchange", exchange_done - exchange_start)
+
+
+def exchange_prepared(master, cycle_stats=None):
+    exchange_start = time.monotonic()
+    if cycle_stats is not None:
+        cycle_stats.add_tx_time(exchange_start)
+    master.send_prepared_processdata()
+    master.receive_processdata()
+    exchange_done = time.monotonic()
+    if cycle_stats is not None:
+        cycle_stats.add("pdo_io", exchange_done - exchange_start)
+        cycle_stats.add("exchange", exchange_done - exchange_start)
 
 
 def axis_count(master):
@@ -490,8 +760,9 @@ def configure_mode_code(master, code, axis_index=None):
     exchange(master, cycles=5)
 
 
-def initialize_drive(master, motion_mode, pp_jerk):
+def initialize_drive(master, motion_mode, pp_jerk, csp_interpolation_mode):
     master.connect()
+    write_csp_interpolation_modes(master, csp_interpolation_mode)
     configure_motion_mode(master, motion_mode)
     for axis_index in range(axis_count(master)):
         write_profile_jerk(master, axis_index, pp_jerk)
@@ -524,10 +795,36 @@ def initialize_drive(master, motion_mode, pp_jerk):
             )
 
 
+def write_csp_interpolation_modes(master, csp_interpolation_mode):
+    value = int(csp_interpolation_mode)
+    if value <= 0:
+        return
+
+    for axis_index in range(axis_count(master)):
+        try:
+            master.sdo_write_uint32(axis_index, 0x217B, 0x0D, value)
+            readback = master.sdo_read_uint32(axis_index, 0x217B, 0x0D)
+            print(
+                "Axis "
+                f"{axis_index}: CSP interpolation mode 0x217B:0D "
+                f"set to {value} readback={readback}",
+                flush=True,
+            )
+        except Exception as exc:
+            print(
+                "Axis "
+                f"{axis_index}: failed to set CSP interpolation mode "
+                f"0x217B:0D to {value}; continuing ({exc})",
+                flush=True,
+            )
+
+
 def feedback_message(master, state, client_id=None):
     owner = state.get("command_authority_owner")
     return {
         "type": "feedback",
+        "drive_initialized": bool(state.get("drive_initialized", True)),
+        "initialization_error": state.get("initialization_error", ""),
         "target_positions": state["target_positions"],
         "actual_positions": [
             float(slave.txpdo.actual_position)
@@ -535,6 +832,10 @@ def feedback_message(master, state, client_id=None):
         ],
         "actual_velocities": [
             float(slave.txpdo.actual_velocity)
+            for slave in master.slaves
+        ],
+        "setpoint_positions": [
+            float(slave.txpdo.setpoint_position)
             for slave in master.slaves
         ],
         "derived_velocities": state["derived_velocities"],
@@ -631,7 +932,8 @@ def ensure_csp_mode(master, state, axis_indices):
     for axis_index in axis_indices:
         if state["motion_modes"][axis_index] != "csp":
             hold_axis_at_actual_position(master, state, axis_index)
-            configure_motion_mode(master, "csp", axis_index)
+            master.slaves[axis_index].rxpdo.mode_of_operation = CSP_MODE
+            master.slaves[axis_index].rxpdo.controlword = 0x000F
             state["motion_modes"][axis_index] = "csp"
             changed = True
 
@@ -648,6 +950,127 @@ def reject_trajectory(state, message):
     state["trajectory"] = inactive_trajectory_state("rejected")
     state["trajectory"]["message"] = message
     print(f"Ignored trajectory_command: {message}", flush=True)
+
+
+def same_trajectory_target(active_trajectory, axes, points, tolerance=1e-6):
+    if not active_trajectory.get("active"):
+        return False
+    if active_trajectory.get("axes") != axes:
+        return False
+
+    active_points = active_trajectory.get("points") or []
+    if not active_points or not points:
+        return False
+
+    active_target = active_points[-1].get("positions", [])
+    target = points[-1].get("positions", [])
+    if len(active_target) != len(target):
+        return False
+
+    return all(
+        abs(float(active_value) - float(target_value)) <= tolerance
+        for active_value, target_value in zip(active_target, target)
+    )
+
+
+def trajectory_debug_snapshot(master, state, axes):
+    snapshots = []
+    trajectory = state.get("trajectory", {})
+    for axis_index in axes:
+        generator = master.trajectory_generators[axis_index]
+        timed_start = None
+        timed_end = None
+        if generator.timed_points:
+            timed_start = generator.timed_points[0]
+            timed_end = generator.timed_points[-1]
+        snapshots.append(
+            {
+                "axis": axis_index,
+                "rxpdo_target": int(master.slaves[axis_index].rxpdo.target_position),
+                "actual": int(master.slaves[axis_index].txpdo.actual_position),
+                "command": round(float(generator.command_position), 3),
+                "target": round(float(generator.target_position), 3),
+                "velocity": round(float(generator.command_velocity), 3),
+                "timed_active": bool(generator.timed_active),
+                "timed_elapsed": round(float(generator.timed_elapsed), 6),
+                "timed_segment": int(generator.timed_segment),
+                "timed_start": timed_start,
+                "timed_end": timed_end,
+            }
+        )
+    return {
+        "trajectory_active": bool(trajectory.get("active", False)),
+        "trajectory_state": trajectory.get("state"),
+        "trajectory_time": round(float(trajectory.get("time_from_start", 0.0)), 6),
+        "axes": snapshots,
+    }
+
+
+def log_trajectory_debug(label, master, state, axes, extra=None):
+    if not TRAJECTORY_DEBUG_LOGS:
+        return
+
+    payload = trajectory_debug_snapshot(master, state, axes)
+    if extra:
+        payload.update(extra)
+    print(
+        f"Trajectory debug {label}: {json.dumps(payload, sort_keys=True)}",
+        flush=True,
+    )
+
+
+def log_trajectory_snapshot(label, master, state, axes, points=None, extra=None):
+    if not TRAJECTORY_SNAPSHOT_LOGS:
+        return
+
+    scale = max(float(getattr(master, "csp_counts_per_unit", 1.0)), 1e-9)
+    axis_parts = []
+    for axis_index in axes:
+        slave = master.slaves[axis_index]
+        generator = master.trajectory_generators[axis_index]
+        command_position = float(generator.command_position)
+        actual_position = float(slave.txpdo.actual_position)
+        command_velocity = float(generator.command_velocity) / scale
+        axis_parts.append(
+            "A"
+            f"{axis_index}:"
+            f"SW=0x{int(slave.txpdo.statusword):04X},"
+            f"MD={int(slave.txpdo.mode_of_operation_display)},"
+            f"AP={actual_position:.3f},"
+            f"AV={float(slave.txpdo.actual_velocity):.3f},"
+            f"CP={command_position:.3f},"
+            f"CV={command_velocity:.3f},"
+            f"GAP={command_position - actual_position:.3f}"
+        )
+
+    now = time.monotonic()
+    last_complete_time = state.get("last_trajectory_complete_time")
+    since_complete = (
+        "None"
+        if last_complete_time is None
+        else f"{now - last_complete_time:.3f}"
+    )
+    duration = None
+    target = None
+    if points:
+        duration = points[-1].get("time_from_start")
+        target = points[-1].get("positions")
+
+    details = [
+        f"seq={state.get('trajectory_sequence', 0)}",
+        f"since_complete_s={since_complete}",
+        f"duration={duration}",
+        f"target={target}",
+    ]
+    if extra:
+        details.extend(f"{key}={value}" for key, value in extra.items())
+
+    print(
+        f"Trajectory snapshot {label}: "
+        f"{' '.join(details)} "
+        f"{' | '.join(axis_parts)}",
+        flush=True,
+    )
 
 
 def handle_trajectory_command(message, master, state):
@@ -674,10 +1097,23 @@ def handle_trajectory_command(message, master, state):
         return
 
     ensure_csp_mode(master, state, axes)
+    log_trajectory_debug(
+        "before_command",
+        master,
+        state,
+        axes,
+        {
+            "raw_points": points,
+        },
+    )
 
     if len(points) == 1:
         current = [
-            float(master.slaves[axis_index].txpdo.actual_position)
+            float(master.trajectory_generators[axis_index].command_position)
+            for axis_index in axes
+        ]
+        current_velocities = [
+            float(master.trajectory_generators[axis_index].command_velocity)
             for axis_index in axes
         ]
         target = points[0]["positions"]
@@ -685,20 +1121,44 @@ def handle_trajectory_command(message, master, state):
         points = [
             {
                 "positions": current,
-                "velocities": [0.0 for _ in axes],
+                "velocities": current_velocities,
+                "accelerations": [0.0 for _ in axes],
                 "time_from_start": 0.0,
             },
             {
                 "positions": target,
                 "velocities": [0.0 for _ in axes],
+                "accelerations": [0.0 for _ in axes],
                 "time_from_start": duration,
             },
         ]
+
+        log_trajectory_debug(
+            "expanded_single_point",
+            master,
+            state,
+            axes,
+            {
+                "expanded_points": points,
+            },
+        )
+
+    if same_trajectory_target(state.get("trajectory", {}), axes, points):
+        print(
+            "Ignored duplicate active trajectory_command: "
+            f"axes={axes} target={points[-1]['positions']}",
+            flush=True,
+        )
+        return
+
+    points = retime_trajectory_to_motion_limits(master, axes, points)
 
     validation_error = validate_trajectory_limits(master, axes, points)
     if validation_error:
         reject_trajectory(state, validation_error)
         return
+
+    log_trajectory_snapshot("start_request", master, state, axes, points)
 
     for local_index, axis_index in enumerate(axes):
         master.trajectory_generators[axis_index].set_timed_trajectory(
@@ -706,6 +1166,16 @@ def handle_trajectory_command(message, master, state):
         )
         master.slaves[axis_index].rxpdo.mode_of_operation = CSP_MODE
         master.slaves[axis_index].rxpdo.controlword = 0x000F
+
+    log_trajectory_debug(
+        "after_set_timed_trajectory",
+        master,
+        state,
+        axes,
+        {
+            "points": points,
+        },
+    )
 
     state["trajectory"] = {
         "active": True,
@@ -717,6 +1187,8 @@ def handle_trajectory_command(message, master, state):
         "start_time": time.monotonic(),
         "message": "",
     }
+    state["trajectory_sequence"] = state.get("trajectory_sequence", 0) + 1
+    log_trajectory_snapshot("start_active", master, state, axes, points)
     print(
         "Received trajectory_command: "
         f"axes={axes} points={len(points)} "
@@ -816,6 +1288,179 @@ def estimate_trajectory_duration(master, axes, current, target):
             (6.0 * distance / accel_limit) ** 0.5,
         )
     return max(duration, master.cycle_time)
+
+
+def retime_trajectory_to_motion_limits(master, axes, points):
+    if len(points) < 2:
+        return points
+
+    retimed_points = [
+        {
+            key: (list(value) if isinstance(value, list) else value)
+            for key, value in point.items()
+        }
+        for point in points
+    ]
+    adjusted = False
+    current_time = float(retimed_points[0]["time_from_start"])
+    retimed_points[0]["time_from_start"] = current_time
+
+    for point_index in range(1, len(retimed_points)):
+        previous = retimed_points[point_index - 1]
+        current = retimed_points[point_index]
+        requested_dt = (
+            float(points[point_index]["time_from_start"])
+            - float(points[point_index - 1]["time_from_start"])
+        )
+        required_dt = max(requested_dt, master.cycle_time)
+
+        for local_index, axis_index in enumerate(axes):
+            required_dt = max(
+                required_dt,
+                required_segment_duration_for_axis(
+                    master,
+                    axis_index,
+                    previous,
+                    current,
+                    local_index,
+                    required_dt,
+                ),
+            )
+
+        if required_dt > requested_dt + 1e-9:
+            adjusted = True
+        current_time += required_dt
+        current["time_from_start"] = current_time
+
+    if adjusted:
+        print(
+            "Retimed trajectory to motion limits: "
+            f"requested_duration={points[-1]['time_from_start']:.6f} "
+            f"retimed_duration={retimed_points[-1]['time_from_start']:.6f}",
+            flush=True,
+        )
+
+    return retimed_points
+
+
+def required_segment_duration_for_axis(
+    master,
+    axis_index,
+    previous,
+    current,
+    local_index,
+    initial_dt,
+):
+    distance = abs(
+        float(current["positions"][local_index])
+        - float(previous["positions"][local_index])
+    )
+    if distance <= 1e-9:
+        return max(float(initial_dt), master.cycle_time)
+
+    velocity_limit = max(
+        float(master.slaves[axis_index].motion_limits.max_velocity)
+        * master.csp_counts_per_unit,
+        1e-9,
+    )
+    acceleration_limit = max(
+        float(master.slaves[axis_index].motion_limits.acceleration)
+        * master.csp_counts_per_unit,
+        1e-9,
+    )
+    deceleration_limit = max(
+        float(master.slaves[axis_index].motion_limits.deceleration)
+        * master.csp_counts_per_unit,
+        1e-9,
+    )
+    accel_limit = min(acceleration_limit, deceleration_limit)
+
+    duration = max(
+        float(initial_dt),
+        1.875 * distance / velocity_limit,
+        math.sqrt(5.773502691896258 * distance / accel_limit),
+        master.cycle_time,
+    )
+
+    if "velocities" not in previous and "velocities" not in current:
+        return duration
+
+    for _ in range(24):
+        peak_velocity, peak_acceleration = sample_segment_peaks(
+            previous,
+            current,
+            local_index,
+            duration,
+        )
+        velocity_ratio = peak_velocity / velocity_limit
+        acceleration_ratio = peak_acceleration / accel_limit
+        ratio = max(velocity_ratio, math.sqrt(acceleration_ratio), 1.0)
+        if ratio <= 1.0001:
+            return duration
+        duration *= min(max(ratio, 1.02), 2.0)
+
+    return duration
+
+
+def sample_segment_peaks(previous, current, local_index, duration):
+    duration = max(float(duration), 1e-9)
+    p0 = float(previous["positions"][local_index])
+    p1 = float(current["positions"][local_index])
+    v0 = trajectory_point_value(previous, "velocities", local_index, 0.0)
+    v1 = trajectory_point_value(current, "velocities", local_index, 0.0)
+    a0 = trajectory_point_value(previous, "accelerations", local_index, 0.0)
+    a1 = trajectory_point_value(current, "accelerations", local_index, 0.0)
+
+    duration2 = duration * duration
+    duration3 = duration2 * duration
+    duration4 = duration3 * duration
+    duration5 = duration4 * duration
+    c1 = v0
+    c2 = a0 / 2.0
+    c3 = (
+        20.0 * (p1 - p0)
+        - (8.0 * v1 + 12.0 * v0) * duration
+        - (3.0 * a0 - a1) * duration2
+    ) / (2.0 * duration3)
+    c4 = (
+        30.0 * (p0 - p1)
+        + (14.0 * v1 + 16.0 * v0) * duration
+        + (3.0 * a0 - 2.0 * a1) * duration2
+    ) / (2.0 * duration4)
+    c5 = (
+        12.0 * (p1 - p0)
+        - (6.0 * v1 + 6.0 * v0) * duration
+        - (a0 - a1) * duration2
+    ) / (2.0 * duration5)
+
+    peak_velocity = 0.0
+    peak_acceleration = 0.0
+    for sample_index in range(65):
+        t = duration * sample_index / 64.0
+        velocity = (
+            c1
+            + 2.0 * c2 * t
+            + 3.0 * c3 * t * t
+            + 4.0 * c4 * t * t * t
+            + 5.0 * c5 * t * t * t * t
+        )
+        acceleration = (
+            2.0 * c2
+            + 6.0 * c3 * t
+            + 12.0 * c4 * t * t
+            + 20.0 * c5 * t * t * t
+        )
+        peak_velocity = max(peak_velocity, abs(velocity))
+        peak_acceleration = max(peak_acceleration, abs(acceleration))
+
+    return peak_velocity, peak_acceleration
+
+
+def trajectory_point_value(point, key, local_index, default):
+    values = point.get(key)
+    if values is None:
+        return default
+    return float(values[local_index])
 
 
 def validate_trajectory_limits(master, axes, points):
@@ -1289,6 +1934,29 @@ def update_active_trajectory(master, state):
     trajectory["segment"] = segment
 
     if not active or elapsed >= points[-1]["time_from_start"]:
+        log_trajectory_snapshot(
+            "complete_before_clear",
+            master,
+            state,
+            axes,
+            points,
+            {
+                "elapsed": f"{elapsed:.6f}",
+                "active": active,
+            },
+        )
+        log_trajectory_debug(
+            "before_complete",
+            master,
+            state,
+            axes,
+            {
+                "elapsed": elapsed,
+                "duration": points[-1]["time_from_start"],
+                "active": active,
+                "final_positions": points[-1]["positions"],
+            },
+        )
         for local_index, axis_index in enumerate(axes):
             generator = master.trajectory_generators[axis_index]
             final_position = points[-1]["positions"][local_index]
@@ -1303,6 +1971,26 @@ def update_active_trajectory(master, state):
         trajectory["active"] = False
         trajectory["state"] = "complete"
         trajectory["segment"] = max(0, len(points) - 2)
+        state["last_trajectory_complete_time"] = time.monotonic()
+        log_trajectory_snapshot(
+            "complete",
+            master,
+            state,
+            axes,
+            points,
+            {"elapsed": f"{elapsed:.6f}"},
+        )
+        log_trajectory_debug(
+            "after_complete",
+            master,
+            state,
+            axes,
+            {
+                "elapsed": elapsed,
+                "duration": points[-1]["time_from_start"],
+                "final_positions": points[-1]["positions"],
+            },
+        )
 
 
 def handle_manual_move_absolute(message, master, state):
@@ -1330,11 +2018,16 @@ def handle_manual_move_absolute(message, master, state):
         )
         return
 
+    previous_target_positions = list(state["target_positions"])
     state["target_positions"] = positions[:axis_count(master)]
     pp_axes = [
         axis_index
         for axis_index, mode_name in enumerate(state["motion_modes"])
-        if mode_name == "pp"
+        if (
+            mode_name == "pp"
+            and state["target_positions"][axis_index]
+            != previous_target_positions[axis_index]
+        )
     ]
     csp_axes = [
         axis_index
@@ -1657,7 +2350,9 @@ COMMAND_MESSAGE_TYPES = {
 
 def handle_command_authority_request(client, state):
     owner = state.get("command_authority_owner")
-    if owner is None or owner == client["id"]:
+    force = bool(client.get("last_message_force", False))
+    if owner is None or owner == client["id"] or force:
+        previous_owner = owner
         state["command_authority_owner"] = client["id"]
         send_client_message(
             client,
@@ -1665,10 +2360,21 @@ def handle_command_authority_request(client, state):
                 "type": "command_authority",
                 "granted": True,
                 "owner": client["id"],
-                "message": "Command authority granted.",
+                "message": (
+                    "Command authority granted."
+                    if previous_owner in (None, client["id"])
+                    else f"Command authority taken from client {previous_owner}."
+                ),
             },
         )
-        print(f"Command authority granted to client {client['id']}", flush=True)
+        if previous_owner not in (None, client["id"]):
+            print(
+                "Command authority force-granted to "
+                f"client {client['id']}; previous_owner={previous_owner}",
+                flush=True,
+            )
+        else:
+            print(f"Command authority granted to client {client['id']}", flush=True)
         return
 
     send_client_message(
@@ -1727,11 +2433,27 @@ def reject_command_without_authority(client, message, state):
     )
 
 
+def reject_command_when_not_initialized(client, message, state):
+    send_client_message(
+        client,
+        {
+            "type": "command_rejected",
+            "command": message.get("type"),
+            "message": (
+                "Axis Server is running, but EtherCAT drive initialization "
+                f"failed: {state.get('initialization_error', 'unknown error')}"
+            ),
+        },
+    )
+
+
 def handle_message(message, master, state, client):
     message_type = message.get("type")
 
     if message_type == "command_authority_request":
+        client["last_message_force"] = bool(message.get("force", False))
         handle_command_authority_request(client, state)
+        client["last_message_force"] = False
         return
 
     if message_type == "command_authority_release":
@@ -1743,6 +2465,13 @@ def handle_message(message, master, state, client):
         not client_has_command_authority(client, state)
     ):
         reject_command_without_authority(client, message, state)
+        return
+
+    if (
+        message_type in COMMAND_MESSAGE_TYPES
+        and not state.get("drive_initialized", True)
+    ):
+        reject_command_when_not_initialized(client, message, state)
         return
 
     if message_type == "trajectory_status":
@@ -1855,6 +2584,329 @@ def update_derived_velocities(master, state, now):
     state["derived_velocity_positions"] = positions
 
 
+def format_latest_cycle_value(cycle_stats, name):
+    value = cycle_stats.latest.get(name)
+    if value is None:
+        return "None"
+    return f"{value * 1000.0:.3f}"
+
+
+def velocity_anomaly_dc_snapshot(master, state, cycle_stats):
+    cycle_time_ns = max(1, int(round(float(master.cycle_time) * 1_000_000_000.0)))
+    send_offset_ns = int(state.get("dc_send_offset_ns", 0))
+    target_phase_ns = (cycle_time_ns - send_offset_ns) % cycle_time_ns
+    tx_dc_time_ns = getattr(master, "last_tx_dc_time_ns", None)
+    direct_tx_dc_time_ns = getattr(master, "last_direct_tx_dc_time_ns", None)
+    actual_phase_ns = None
+    phase_error_ns = None
+    if tx_dc_time_ns is not None:
+        actual_phase_ns = int(tx_dc_time_ns) % cycle_time_ns
+        phase_error_ns = actual_phase_ns - target_phase_ns
+        half_cycle_ns = cycle_time_ns // 2
+        if phase_error_ns > half_cycle_ns:
+            phase_error_ns -= cycle_time_ns
+        elif phase_error_ns < -half_cycle_ns:
+            phase_error_ns += cycle_time_ns
+
+    direct_phase_ns = None
+    if direct_tx_dc_time_ns is not None:
+        direct_phase_ns = int(direct_tx_dc_time_ns) % cycle_time_ns
+
+    def ns_to_ms(value):
+        return "None" if value is None else f"{value / 1_000_000.0:.3f}"
+
+    return (
+        f"dc_phase_ms={format_latest_cycle_value(cycle_stats, 'dc_phase_error')} "
+        f"dc_corr_ms={format_latest_cycle_value(cycle_stats, 'dc_phase_correction')} "
+        f"tx_prepare_ms={format_latest_cycle_value(cycle_stats, 'tx_prepare')} "
+        f"send_call_ms={format_latest_cycle_value(cycle_stats, 'send_call')} "
+        f"pdo_io_ms={format_latest_cycle_value(cycle_stats, 'pdo_io')} "
+        f"tx_gap_ms={format_latest_cycle_value(cycle_stats, 'tx_gap')} "
+        f"tx_phase_ms={ns_to_ms(actual_phase_ns)} "
+        f"target_phase_ms={ns_to_ms(target_phase_ns)} "
+        f"phase_err_calc_ms={ns_to_ms(phase_error_ns)} "
+        f"direct_tx_phase_ms={ns_to_ms(direct_phase_ns)} "
+        f"dc_tx_est_delta_ms={format_latest_cycle_value(cycle_stats, 'dc_tx_estimation_delta')}"
+    )
+
+
+def record_tx_history(master, state, cycle_stats):
+    history = state.get("tx_history")
+    if history is None:
+        return
+
+    scale = max(float(getattr(master, "csp_counts_per_unit", 1.0)), 1e-9)
+    cycle_time_ns = max(1, int(round(float(master.cycle_time) * 1_000_000_000.0)))
+    tx_dc_time_ns = getattr(master, "last_tx_dc_time_ns", None)
+    tx_phase_ms = None
+    if tx_dc_time_ns is not None:
+        tx_phase_ms = (int(tx_dc_time_ns) % cycle_time_ns) / 1_000_000.0
+
+    history.append(
+        {
+            "time": time.monotonic(),
+            "targets": [
+                int(slave.rxpdo.target_position)
+                for slave in master.slaves
+            ],
+            "modes": [
+                int(slave.rxpdo.mode_of_operation)
+                for slave in master.slaves
+            ],
+            "command_velocities": [
+                float(generator.command_velocity) / scale
+                for generator in master.trajectory_generators
+            ],
+            "tx_gap_ms": cycle_stats.latest.get("tx_gap", 0.0) * 1000.0,
+            "tx_phase_ms": tx_phase_ms,
+        }
+    )
+
+
+def format_tx_history_for_axes(state, axes, sample_count=10):
+    history = list(state.get("tx_history") or [])
+    if not history:
+        return "TX_HISTORY=None"
+
+    samples = history[-sample_count:]
+    parts = []
+    for axis_index in axes:
+        previous_target = None
+        entries = []
+        for sample in samples:
+            target = sample["targets"][axis_index]
+            delta = None if previous_target is None else target - previous_target
+            previous_target = target
+            phase = sample.get("tx_phase_ms")
+            phase_text = "None" if phase is None else f"{phase:.3f}"
+            entries.append(
+                f"{target}/{delta if delta is not None else 'NA'}"
+                f"@{phase_text}"
+            )
+        parts.append(f"A{axis_index}=[" + ",".join(entries) + "]")
+
+    return "TX_HISTORY " + " ".join(parts)
+
+
+def position_feedback_lag(state, axis_index, feedback_position):
+    history = list(state.get("tx_history") or [])
+    if not history:
+        return None
+
+    best = None
+    last_index = len(history) - 1
+    for sample_index, sample in enumerate(history):
+        target = int(sample["targets"][axis_index])
+        error = float(feedback_position) - float(target)
+        candidate = {
+            "lag": last_index - sample_index,
+            "target": target,
+            "error": error,
+            "abs_error": abs(error),
+            "tx_phase_ms": sample.get("tx_phase_ms"),
+        }
+        if best is None or candidate["abs_error"] < best["abs_error"]:
+            best = candidate
+
+    return best
+
+
+def format_position_feedback_lag(master, state, axes):
+    parts = []
+    for axis_index in axes:
+        generator = master.trajectory_generators[axis_index]
+        feedback_position = float(master.slaves[axis_index].txpdo.actual_position)
+        command_position = float(generator.command_position)
+        command_diff = feedback_position - command_position
+        lag = position_feedback_lag(state, axis_index, feedback_position)
+        if lag is None:
+            parts.append(
+                f"A{axis_index}:FB={feedback_position:.0f},"
+                f"CP={command_position:.3f},DIFF={command_diff:.3f},LAG=None"
+            )
+            continue
+
+        phase = lag.get("tx_phase_ms")
+        phase_text = "None" if phase is None else f"{phase:.3f}"
+        parts.append(
+            f"A{axis_index}:FB={feedback_position:.0f},"
+            f"CP={command_position:.3f},"
+            f"DIFF={command_diff:.3f},"
+            f"LAG={lag['lag']},"
+            f"LAG_TARGET={lag['target']},"
+            f"LAG_ERR={lag['error']:.3f},"
+            f"LAG_PHASE_MS={phase_text}"
+        )
+
+    return "POS_FB_LAG " + " | ".join(parts)
+
+
+def log_position_feedback_lag(master, state):
+    if not POSITION_FEEDBACK_LAG_LOGS:
+        return
+
+    now = time.monotonic()
+    last_log_time = state.get("position_feedback_lag_last_log_time", 0.0)
+    if now - last_log_time < POSITION_FEEDBACK_LAG_LOG_PERIOD:
+        return
+
+    axes = list(state.get("trajectory", {}).get("axes", []))
+    if not axes:
+        return
+
+    print(
+        "Position feedback lag: "
+        f"trajectory_state={state.get('trajectory', {}).get('state')} "
+        f"trajectory_time={state.get('trajectory', {}).get('time_from_start', 0.0):.3f} "
+        f"{format_position_feedback_lag(master, state, axes)}",
+        flush=True,
+    )
+    state["position_feedback_lag_last_log_time"] = now
+
+
+def log_velocity_anomalies(master, state, cycle_stats):
+    if not VELOCITY_ANOMALY_LOGS:
+        return
+
+    now = time.monotonic()
+    last_log_time = state.get("velocity_anomaly_last_log_time", 0.0)
+    if now - last_log_time < VELOCITY_ANOMALY_LOG_PERIOD:
+        return
+
+    previous_actual = state.get("velocity_anomaly_previous_actual")
+    current_actual = [
+        float(slave.txpdo.actual_velocity)
+        for slave in master.slaves
+    ]
+    state["velocity_anomaly_previous_actual"] = current_actual
+    if previous_actual is None:
+        return
+
+    active_axes = set(state.get("trajectory", {}).get("axes", []))
+    dc_phase_values = cycle_stats.values.get("dc_phase_error", {})
+    latest_dc_phase_ms = None
+    if dc_phase_values.get("count"):
+        latest_dc_phase_ms = (
+            dc_phase_values["sum"] / dc_phase_values["count"]
+        ) * 1000.0
+
+    anomalies = []
+    anomaly_axes = []
+    for axis_index, actual_velocity in enumerate(current_actual):
+        if axis_index not in active_axes:
+            continue
+
+        generator = master.trajectory_generators[axis_index]
+        command_velocity = (
+            float(generator.command_velocity)
+            / max(float(master.csp_counts_per_unit), 1e-9)
+        )
+        velocity_error = actual_velocity - command_velocity
+        velocity_jump = actual_velocity - previous_actual[axis_index]
+        if (
+            abs(velocity_error) < VELOCITY_ANOMALY_THRESHOLD
+            and abs(velocity_jump) < VELOCITY_JUMP_THRESHOLD
+        ):
+            continue
+
+        anomalies.append(
+            "A"
+            f"{axis_index}:"
+            f"AV={actual_velocity:.3f},"
+            f"CV={command_velocity:.3f},"
+            f"ERR={velocity_error:.3f},"
+            f"JUMP={velocity_jump:.3f},"
+            f"AP={master.slaves[axis_index].txpdo.actual_position},"
+            f"SP={master.slaves[axis_index].txpdo.setpoint_position},"
+            f"CP={generator.command_position:.3f},"
+            f"TP={generator.target_position:.3f}"
+        )
+        anomaly_axes.append(axis_index)
+
+    if anomalies:
+        print(
+            "Velocity anomaly: "
+            f"{' | '.join(anomalies)} "
+            f"trajectory_state={state.get('trajectory', {}).get('state')} "
+            f"trajectory_time={state.get('trajectory', {}).get('time_from_start', 0.0):.3f} "
+            f"dc_phase_avg_ms={latest_dc_phase_ms} "
+            f"{format_position_feedback_lag(master, state, anomaly_axes)} "
+            f"{velocity_anomaly_dc_snapshot(master, state, cycle_stats)} "
+            f"{format_tx_history_for_axes(state, anomaly_axes)}",
+            flush=True,
+        )
+        state["velocity_anomaly_last_log_time"] = now
+
+
+def log_csp_command_step_anomalies(master, state):
+    if not CSP_COMMAND_STEP_LOGS:
+        return
+
+    trajectory = state.get("trajectory", {})
+    scale = max(float(getattr(master, "csp_counts_per_unit", 1.0)), 1e-9)
+    events = getattr(master, "last_csp_command_steps", [])
+    for event in events:
+        axis_index = int(event["axis"])
+        generator = master.trajectory_generators[axis_index]
+        timed_start = None
+        timed_end = None
+        if generator.timed_points:
+            timed_start = generator.timed_points[0]
+            timed_end = generator.timed_points[-1]
+        actual_position = master.slaves[axis_index].txpdo.actual_position
+        print(
+            "CSP command step anomaly: "
+            f"axis={axis_index} "
+            f"previous_sent_position={event['previous_sent_position']} "
+            f"sent_position={event['sent_position']} "
+            f"sent_step={event['sent_step']} "
+            f"expected_step={event['expected_step']:.3f} "
+            f"step_error={event['step_error']:.3f} "
+            f"previous_command_position={event['previous_command_position']:.3f} "
+            f"command_position={event['command_position']:.3f} "
+            f"command_step={event['command_step']:.3f} "
+            f"command_velocity={event['command_velocity'] / scale:.3f} "
+            f"actual_position={actual_position} "
+            f"position_gap={event['command_position'] - actual_position:.3f} "
+            f"target_position={generator.target_position:.3f} "
+            f"timed_active={generator.timed_active} "
+            f"timed_elapsed={generator.timed_elapsed:.6f} "
+            f"timed_segment={generator.timed_segment} "
+            f"timed_start={timed_start} "
+            f"timed_end={timed_end} "
+            f"trajectory_state={trajectory.get('state')} "
+            f"trajectory_time={trajectory.get('time_from_start', 0.0):.3f}",
+            flush=True,
+        )
+
+    output_events = getattr(master, "last_csp_output_steps", [])
+    for event in output_events:
+        axis_index = int(event["axis"])
+        generator = master.trajectory_generators[axis_index]
+        actual_position = master.slaves[axis_index].txpdo.actual_position
+        print(
+            "CSP output buffer step anomaly: "
+            f"axis={axis_index} "
+            f"previous_output_target={event['previous_output_target']} "
+            f"output_target={event['output_target']} "
+            f"output_step={event['output_step']} "
+            f"rxpdo_target={event['rxpdo_target']} "
+            f"expected_step={event['expected_step']:.3f} "
+            f"step_error={event['step_error']:.3f} "
+            f"command_position={event['command_position']:.3f} "
+            f"command_velocity={event['command_velocity'] / scale:.3f} "
+            f"actual_position={actual_position} "
+            f"position_gap={event['command_position'] - actual_position:.3f} "
+            f"target_position={generator.target_position:.3f} "
+            f"timed_active={generator.timed_active} "
+            f"timed_elapsed={generator.timed_elapsed:.6f} "
+            f"timed_segment={generator.timed_segment} "
+            f"trajectory_state={trajectory.get('state')} "
+            f"trajectory_time={trajectory.get('time_from_start', 0.0):.3f}",
+            flush=True,
+        )
+
+
 def log_status_if_due(master, state, last_status_log_time):
     if STATUS_LOG_PERIOD <= 0.0:
         return last_status_log_time
@@ -1873,6 +2925,7 @@ def log_status_if_due(master, state, last_status_log_time):
             f"CMD={state['target_positions'][axis_index]:.3f} "
             f"CSP_CV={master.trajectory_generators[axis_index].command_velocity:.3f} "
             f"CSP_CP={master.trajectory_generators[axis_index].command_position:.3f} "
+            f"SP={slave.txpdo.setpoint_position} "
             f"AP={slave.txpdo.actual_position} "
             f"AV={slave.txpdo.actual_velocity} "
             f"DV={state['derived_velocities'][axis_index]:.3f} "
@@ -1895,7 +2948,6 @@ def command_profile_positions(master, target_positions, axis_indices):
         slave.rxpdo.mode_of_operation = PROFILE_POSITION_MODE
         slave.rxpdo.target_position = int(target_position)
         slave.rxpdo.profile_velocity = int(slave.motion_limits.max_velocity)
-        write_profile_motion_limits(master, axis_index)
 
     pp_setpoint_handshake(master, axis_indices)
 
@@ -1955,11 +3007,9 @@ def wait_pp_setpoint_ack(master, axis_indices, expected, max_cycles):
 
 def command_csp_positions(master, target_positions, axis_indices):
     for axis_index in axis_indices:
-        target_position = target_positions[axis_index]
         slave = master.slaves[axis_index]
         slave.rxpdo.mode_of_operation = CSP_MODE
         slave.rxpdo.controlword = 0x000F
-        slave.rxpdo.target_position = int(target_position)
 
     master.set_target_positions(target_positions)
 
@@ -2055,6 +3105,18 @@ def wait_until_cycle_time(target_time, spin_wait_time):
         pass
 
 
+def dc_absolute_cycle_deadline(master, dc_phase_lock):
+    now_monotonic_ns = time.monotonic_ns()
+    dc_now_ns = master.estimate_dc_time_ns(now_monotonic_ns)
+    phase_ns = int(dc_now_ns) % dc_phase_lock.cycle_time_ns
+    wait_ns = dc_phase_lock.target_phase_ns() - phase_ns
+    if wait_ns <= 0:
+        wait_ns += dc_phase_lock.cycle_time_ns
+
+    deadline = (now_monotonic_ns + wait_ns) / 1_000_000_000.0
+    return deadline, wait_ns / 1_000_000_000.0
+
+
 def run_server_loop(server, master, state):
     server.setblocking(False)
     clients = []
@@ -2065,8 +3127,28 @@ def run_server_loop(server, master, state):
     last_cycle_stats_log_time = time.monotonic()
     next_cycle_time = time.monotonic()
     spin_wait_time = float(state.get("spin_wait_time", 0.0))
+    dc_absolute_schedule = bool(state.get("dc_absolute_schedule", False))
+    dc_phase_lock = DcPhaseLock(
+        state.get("dc_phase_lock", False),
+        master.cycle_time,
+        state.get("dc_send_offset_ns", 800000),
+        state.get("dc_phase_kp", 0.05),
+        state.get("dc_phase_ki", 0.0005),
+        state.get("dc_phase_max_correction", 0.001),
+    )
 
     while True:
+        if dc_absolute_schedule:
+            hold_faulted_axes(master, state)
+            update_active_trajectory(master, state)
+            master.prepare_processdata()
+
+            next_cycle_time, dc_schedule_wait = dc_absolute_cycle_deadline(
+                master,
+                dc_phase_lock,
+            )
+            cycle_stats.add("dc_schedule_wait", dc_schedule_wait)
+
         wait_until_cycle_time(next_cycle_time, spin_wait_time)
 
         cycle_start_time = time.monotonic()
@@ -2076,14 +3158,38 @@ def run_server_loop(server, master, state):
         deadline_late = cycle_start_time - next_cycle_time
         if deadline_late > 0.0:
             cycle_stats.add("deadline_late", deadline_late)
-        next_cycle_time += master.cycle_time
-        if cycle_start_time - next_cycle_time > master.cycle_time:
-            next_cycle_time = cycle_start_time + master.cycle_time
 
-        hold_faulted_axes(master, state)
-        update_active_trajectory(master, state)
-        exchange(master, cycle_stats=cycle_stats, sleep_after=False)
+        if dc_absolute_schedule:
+            exchange_prepared(master, cycle_stats=cycle_stats)
+        else:
+            hold_faulted_axes(master, state)
+            update_active_trajectory(master, state)
+            exchange(master, cycle_stats=cycle_stats, sleep_after=False)
+
+        direct_tx_dc_time_ns = getattr(master, "last_direct_tx_dc_time_ns", None)
+        estimated_tx_dc_time_ns = getattr(master, "last_tx_dc_time_ns", None)
+        if direct_tx_dc_time_ns is not None and estimated_tx_dc_time_ns is not None:
+            cycle_stats.add(
+                "dc_tx_estimation_delta",
+                (estimated_tx_dc_time_ns - direct_tx_dc_time_ns) / 1_000_000_000.0,
+            )
+        tx_prepare_duration_ns = getattr(master, "last_tx_prepare_duration_ns", None)
+        if tx_prepare_duration_ns is not None:
+            cycle_stats.add("tx_prepare", tx_prepare_duration_ns / 1_000_000_000.0)
+        send_call_duration_ns = getattr(master, "last_send_call_duration_ns", None)
+        if send_call_duration_ns is not None:
+            cycle_stats.add("send_call", send_call_duration_ns / 1_000_000_000.0)
+        dc_phase_lock.update(getattr(master, "last_tx_dc_time_ns", None), cycle_stats)
+        record_tx_history(master, state, cycle_stats)
         update_homing_state(master, state)
+        log_csp_command_step_anomalies(master, state)
+        log_position_feedback_lag(master, state)
+        log_velocity_anomalies(master, state, cycle_stats)
+
+        if not dc_absolute_schedule:
+            next_cycle_time += master.cycle_time + dc_phase_lock.correction()
+            if cycle_start_time - next_cycle_time > master.cycle_time:
+                next_cycle_time = cycle_start_time + master.cycle_time
 
         now = time.monotonic()
         if clients and now - last_feedback_update_time >= FEEDBACK_PERIOD:
@@ -2138,6 +3244,131 @@ def run_server_loop(server, master, state):
         )
 
 
+def run_degraded_server_loop(server, master, state):
+    server.setblocking(False)
+    clients = []
+    next_client_id = 1
+    last_status_log_time = time.monotonic()
+
+    print(
+        "Axis server is running in initialization-error state: "
+        f"{state.get('initialization_error', '')}",
+        flush=True,
+    )
+
+    while True:
+        readable, _, _ = select.select([server], [], [], 0.05)
+        if server in readable:
+            conn, addr = server.accept()
+            conn.setblocking(False)
+            client = {
+                "id": next_client_id,
+                "conn": conn,
+                "addr": addr,
+                "buffer": "",
+                "last_feedback_time": 0.0,
+                "last_message_force": False,
+            }
+            clients.append(client)
+            next_client_id += 1
+            print(f"Client connected: id={client['id']} addr={addr}", flush=True)
+
+        for client in list(clients):
+            try:
+                if not service_client(client, master, state):
+                    close_client(client, state)
+                    clients.remove(client)
+                    continue
+                send_feedback_if_due(client, master, state)
+            except (ConnectionError, OSError, json.JSONDecodeError) as exc:
+                print(
+                    f"Client error: id={client['id']} error={exc}",
+                    flush=True,
+                )
+                close_client(client, state)
+                clients.remove(client)
+
+        last_status_log_time = log_status_if_due(
+            master,
+            state,
+            last_status_log_time,
+        )
+
+
+def default_diagnostics(axis_count_value, error_message=""):
+    text = error_message or "not initialized"
+    return [
+        {
+            "statusword": 0,
+            "error_code": 0,
+            "error_code_text": text,
+            "mode_display": 0,
+        }
+        for _ in range(axis_count_value)
+    ]
+
+
+def initial_server_state(
+    args,
+    positions,
+    software_position_limits,
+    initialized=True,
+    initialization_error="",
+):
+    return {
+        "drive_initialized": bool(initialized),
+        "initialization_error": initialization_error,
+        "target_positions": positions,
+        "target_velocities": [0.0 for _ in range(args.axis_count)],
+        "derived_velocities": [0.0 for _ in range(args.axis_count)],
+        "derived_velocity_positions": positions,
+        "derived_velocity_time": None,
+        "derived_velocity_alpha": max(
+            0.0,
+            min(1.0, args.derived_velocity_alpha),
+        ),
+        "motion_limits": [
+            [
+                args.max_velocity,
+                args.acceleration,
+                args.deceleration,
+                args.jerk,
+            ]
+            for _ in range(args.axis_count)
+        ],
+        "software_position_limits": software_position_limits,
+        "motion_mode": args.motion_mode,
+        "motion_modes": [
+            args.motion_mode
+            for _ in range(args.axis_count)
+        ],
+        "position_counts_per_unit": (
+            args.csp_counts_per_unit
+            if args.backend == "pysoem"
+            else 1.0
+        ),
+        "capabilities": {
+            "position_loop_gain": args.backend == "mock",
+            "profile_motion_limits": True,
+            "software_position_limits": True,
+            "csp_trajectory_feedback": True,
+        },
+        "trajectory": inactive_trajectory_state(),
+        "trajectory_sequence": 0,
+        "last_trajectory_complete_time": None,
+        "tx_history": deque(maxlen=max(1, TX_HISTORY_LENGTH)),
+        "homing": inactive_homing_state(),
+        "command_authority_owner": None,
+        "spin_wait_time": max(0.0, args.spin_wait_time),
+        "dc_phase_lock": args.dc_phase_lock,
+        "dc_absolute_schedule": args.dc_absolute_schedule,
+        "dc_send_offset_ns": args.dc_send_offset,
+        "dc_phase_kp": args.dc_phase_kp,
+        "dc_phase_ki": args.dc_phase_ki,
+        "dc_phase_max_correction": args.dc_phase_max_correction,
+    }
+
+
 def main():
     args = parse_args()
     if args.axis_count < 1:
@@ -2155,73 +3386,78 @@ def main():
     master = create_master(args, motion_limits)
 
     try:
-        initialize_drive(
-            master,
-            args.motion_mode,
-            args.pp_jerk,
-        )
-        for slave in master.slaves:
-            slave.rxpdo.profile_velocity = int(args.max_velocity)
+        drive_initialized = False
+        try:
+            initialize_drive(
+                master,
+                args.motion_mode,
+                args.pp_jerk,
+                args.csp_interpolation_mode,
+            )
+            drive_initialized = True
+        except Exception as exc:
+            initialization_error = str(exc)
+            print(
+                "Drive initialization failed; keeping Axis Server online: "
+                f"{initialization_error}",
+                flush=True,
+            )
+            master.close()
+            master.last_diagnostics = default_diagnostics(
+                args.axis_count,
+                initialization_error,
+            )
+            software_position_limits = [
+                [0.0, 0.0]
+                for _ in range(args.axis_count)
+            ]
+            positions = [0.0 for _ in range(args.axis_count)]
+            state = initial_server_state(
+                args,
+                positions,
+                software_position_limits,
+                initialized=False,
+                initialization_error=initialization_error,
+            )
+        else:
+            for slave in master.slaves:
+                slave.rxpdo.profile_velocity = int(args.max_velocity)
 
-        master.last_diagnostics = read_all_diagnostics(master)
-        software_position_limits = read_all_software_position_limits(master)
-        positions = actual_positions(master)
-        print(
-            "Drive initialized. "
-            f"backend={args.backend} "
-            f"axes={args.axis_count} "
-            f"cycle_time={args.cycle_time} "
-            f"spin_wait_time={args.spin_wait_time} "
-            f"csp_counts_per_unit={args.csp_counts_per_unit} "
-            f"jerk={args.jerk} "
-            f"pp_jerk={args.pp_jerk} "
-            f"derived_velocity_alpha={args.derived_velocity_alpha} "
-            f"statuswords={[f'0x{slave.txpdo.statusword:04X}' for slave in master.slaves]} "
-            f"software_position_limits={software_position_limits} "
-            f"AP={positions}",
-            flush=True,
-        )
-        state = {
-            "target_positions": positions,
-            "target_velocities": [0.0 for _ in range(args.axis_count)],
-            "derived_velocities": [0.0 for _ in range(args.axis_count)],
-            "derived_velocity_positions": positions,
-            "derived_velocity_time": None,
-            "derived_velocity_alpha": max(
-                0.0,
-                min(1.0, args.derived_velocity_alpha),
-            ),
-            "motion_limits": [
-                [
-                    args.max_velocity,
-                    args.acceleration,
-                    args.deceleration,
-                    args.jerk,
-                ]
-                for _ in range(args.axis_count)
-            ],
-            "software_position_limits": software_position_limits,
-            "motion_mode": args.motion_mode,
-            "motion_modes": [
-                args.motion_mode
-                for _ in range(args.axis_count)
-            ],
-            "position_counts_per_unit": (
-                args.csp_counts_per_unit
-                if args.backend == "pysoem"
-                else 1.0
-            ),
-            "capabilities": {
-                "position_loop_gain": args.backend == "mock",
-                "profile_motion_limits": True,
-                "software_position_limits": True,
-                "csp_trajectory_feedback": True,
-            },
-            "trajectory": inactive_trajectory_state(),
-            "homing": inactive_homing_state(),
-            "command_authority_owner": None,
-            "spin_wait_time": max(0.0, args.spin_wait_time),
-        }
+            master.last_diagnostics = read_all_diagnostics(master)
+            software_position_limits = read_all_software_position_limits(master)
+            positions = actual_positions(master)
+            print(
+                "Drive initialized. "
+                f"backend={args.backend} "
+                f"axes={args.axis_count} "
+                f"cycle_time={args.cycle_time} "
+                f"spin_wait_time={args.spin_wait_time} "
+                f"csp_counts_per_unit={args.csp_counts_per_unit} "
+                f"jerk={args.jerk} "
+                f"pp_jerk={args.pp_jerk} "
+                f"dc_phase_lock={args.dc_phase_lock} "
+                f"dc_absolute_schedule={args.dc_absolute_schedule} "
+                f"dc_send_offset_ns={args.dc_send_offset} "
+                f"dc_phase_kp={args.dc_phase_kp} "
+                f"dc_phase_ki={args.dc_phase_ki} "
+                f"txpdo_setpoint_feedback={args.txpdo_setpoint_feedback} "
+                f"configure_txpdo_setpoint_feedback={args.configure_txpdo_setpoint_feedback} "
+                f"txpdo_setpoint_feedback_object={args.txpdo_setpoint_feedback_object} "
+                f"restore_default_txpdo_mapping={args.restore_default_txpdo_mapping} "
+                f"csp_interpolation_mode={args.csp_interpolation_mode} "
+                f"csp_velocity_offset={args.csp_velocity_offset} "
+                f"derived_velocity_alpha={args.derived_velocity_alpha} "
+                f"statuswords={[f'0x{slave.txpdo.statusword:04X}' for slave in master.slaves]} "
+                f"software_position_limits={software_position_limits} "
+                f"AP={positions}",
+                flush=True,
+            )
+            state = initial_server_state(
+                args,
+                positions,
+                software_position_limits,
+                initialized=True,
+            )
 
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as server:
             server.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
@@ -2232,7 +3468,10 @@ def main():
                 f"backend={args.backend} axes={args.axis_count}",
                 flush=True,
             )
-            run_server_loop(server, master, state)
+            if drive_initialized:
+                run_server_loop(server, master, state)
+            else:
+                run_degraded_server_loop(server, master, state)
 
     finally:
         master.close()

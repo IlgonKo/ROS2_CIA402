@@ -7,13 +7,24 @@ AXIS_COUNT="${PYSOEM_AXIS_COUNT:-1}"
 PORT="${PYSOEM_AXIS_SERVER_PORT:-15000}"
 CYCLE_TIME="${PYSOEM_CYCLE_TIME:-0.01}"
 SPIN_WAIT_TIME="${PYSOEM_SPIN_WAIT_TIME:-0.00015}"
+CPUSET="${PYSOEM_AXIS_SERVER_CPUSET:-}"
 SYNC_MODE="${PYSOEM_SYNC_MODE:-0}"
+DC_ENABLED="${PYSOEM_DC_ENABLED:-0}"
+DC_SYNC0_SHIFT_TIME_NS="${PYSOEM_DC_SYNC0_SHIFT_TIME_NS:-0}"
+DC_PHASE_LOCK="${PYSOEM_DC_PHASE_LOCK:-0}"
+DC_ABSOLUTE_SCHEDULE="${PYSOEM_DC_ABSOLUTE_SCHEDULE:-0}"
+DC_SEND_OFFSET_NS="${PYSOEM_DC_SEND_OFFSET_NS:-800000}"
+DC_PHASE_KP="${PYSOEM_DC_PHASE_KP:-0.05}"
+DC_PHASE_KI="${PYSOEM_DC_PHASE_KI:-0.0005}"
+DC_PHASE_MAX_CORRECTION="${PYSOEM_DC_PHASE_MAX_CORRECTION:-0.001}"
 MAX_VELOCITY="${PYSOEM_MAX_VELOCITY:-50.0}"
 ACCELERATION="${PYSOEM_ACCELERATION:-100.0}"
 DECELERATION="${PYSOEM_DECELERATION:-100.0}"
 JERK="${PYSOEM_JERK:-1000.0}"
 PP_JERK="${PYSOEM_PP_JERK:-100000}"
 CSP_COUNTS_PER_UNIT="${PYSOEM_CSP_COUNTS_PER_UNIT:-1.0}"
+CSP_INTERPOLATION_MODE="${PYSOEM_CSP_INTERPOLATION_MODE:-1}"
+CSP_VELOCITY_OFFSET="${PYSOEM_CSP_VELOCITY_OFFSET:-0}"
 DERIVED_VELOCITY_ALPHA="${PYSOEM_DERIVED_VELOCITY_ALPHA:-0.2}"
 MOTION_MODE="${PYSOEM_MOTION_MODE:-pp}"
 
@@ -24,17 +35,29 @@ echo "AxisCount=${AXIS_COUNT}"
 echo "Port=${PORT}"
 echo "CycleTime=${CYCLE_TIME}"
 echo "SpinWaitTime=${SPIN_WAIT_TIME}"
+echo "CpuSet=${CPUSET:-all}"
 echo "SyncMode=${SYNC_MODE}"
+echo "DcEnabled=${DC_ENABLED}"
+echo "DcSync0ShiftTimeNs=${DC_SYNC0_SHIFT_TIME_NS}"
+echo "DcPhaseLock=${DC_PHASE_LOCK}"
+echo "DcAbsoluteSchedule=${DC_ABSOLUTE_SCHEDULE}"
+echo "DcSendOffsetNs=${DC_SEND_OFFSET_NS}"
+echo "DcPhaseKp=${DC_PHASE_KP}"
+echo "DcPhaseKi=${DC_PHASE_KI}"
+echo "DcPhaseMaxCorrection=${DC_PHASE_MAX_CORRECTION}"
 echo "MaxVelocity=${MAX_VELOCITY}"
 echo "Acceleration=${ACCELERATION}"
 echo "Deceleration=${DECELERATION}"
 echo "Jerk=${JERK}"
 echo "PpJerk=${PP_JERK}"
 echo "CspCountsPerUnit=${CSP_COUNTS_PER_UNIT}"
+echo "CspInterpolationMode=${CSP_INTERPOLATION_MODE}"
+echo "CspVelocityOffset=${CSP_VELOCITY_OFFSET}"
 echo "DerivedVelocityAlpha=${DERIVED_VELOCITY_ALPHA}"
 echo "MotionMode=${MOTION_MODE}"
 
-exec python3 -B /workspace/axis_server/server.py \
+SERVER_CMD=(
+  python3 -B /workspace/axis_server/server.py
   "${INTERFACE}" \
   --backend "${BACKEND}" \
   --host 0.0.0.0 \
@@ -42,12 +65,41 @@ exec python3 -B /workspace/axis_server/server.py \
   --cycle-time "${CYCLE_TIME}" \
   --spin-wait-time "${SPIN_WAIT_TIME}" \
   --sync-mode "${SYNC_MODE}" \
+  --dc-sync0-shift-time "${DC_SYNC0_SHIFT_TIME_NS}" \
+  --dc-send-offset "${DC_SEND_OFFSET_NS}" \
+  --dc-phase-kp "${DC_PHASE_KP}" \
+  --dc-phase-ki "${DC_PHASE_KI}" \
+  --dc-phase-max-correction "${DC_PHASE_MAX_CORRECTION}" \
   --max-velocity "${MAX_VELOCITY}" \
   --acceleration "${ACCELERATION}" \
   --deceleration "${DECELERATION}" \
   --jerk "${JERK}" \
   --pp-jerk "${PP_JERK}" \
   --csp-counts-per-unit "${CSP_COUNTS_PER_UNIT}" \
+  --csp-interpolation-mode "${CSP_INTERPOLATION_MODE}" \
   --derived-velocity-alpha "${DERIVED_VELOCITY_ALPHA}" \
   --axis-count "${AXIS_COUNT}" \
   --motion-mode "${MOTION_MODE}"
+)
+
+if [[ "${DC_ENABLED}" == "1" ]]; then
+  SERVER_CMD+=(--dc-enabled)
+fi
+
+if [[ "${DC_PHASE_LOCK}" == "1" ]]; then
+  SERVER_CMD+=(--dc-phase-lock)
+fi
+
+if [[ "${DC_ABSOLUTE_SCHEDULE}" == "1" ]]; then
+  SERVER_CMD+=(--dc-absolute-schedule)
+fi
+
+if [[ "${CSP_VELOCITY_OFFSET}" == "1" ]]; then
+  SERVER_CMD+=(--csp-velocity-offset)
+fi
+
+if [[ -n "${CPUSET}" ]]; then
+  exec taskset -c "${CPUSET}" "${SERVER_CMD[@]}"
+fi
+
+exec "${SERVER_CMD[@]}"

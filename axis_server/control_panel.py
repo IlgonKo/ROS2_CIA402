@@ -1025,6 +1025,7 @@ class AxisServerControlPanel:
         target_positions = self._values(feedback, "target_positions", 0.0)
         actual_positions = self._values(feedback, "actual_positions", 0.0)
         actual_velocities = self._values(feedback, "actual_velocities", 0.0)
+        setpoint_positions = self._values(feedback, "setpoint_positions", 0.0)
         command_positions = self._values(feedback, "command_positions", 0.0)
         command_velocities = self._values(feedback, "command_velocities", 0.0)
         statuswords = self._values(feedback, "statuswords", 0)
@@ -1099,7 +1100,12 @@ class AxisServerControlPanel:
 
         if selected_motion_mode == "csp":
             self.position_trace.set_series_names(
-                ["Actual Position mm", "Target Position mm", "CSP Command Position mm"]
+                [
+                    "Actual Position mm",
+                    "Target Position mm",
+                    "CSP Command Position mm",
+                    "Drive Setpoint Position mm",
+                ]
             )
             self.velocity_trace.set_series_names(
                 ["Actual Velocity mm/s", "Command Velocity mm/s"]
@@ -1109,6 +1115,7 @@ class AxisServerControlPanel:
                     self.position_count_to_unit(actual_positions[selected_axis]),
                     self.position_count_to_unit(target_positions[selected_axis]),
                     self.position_count_to_unit(command_positions[selected_axis]),
+                    self.position_count_to_unit(setpoint_positions[selected_axis]),
                 ]
             )
             self.velocity_trace.add_sample(

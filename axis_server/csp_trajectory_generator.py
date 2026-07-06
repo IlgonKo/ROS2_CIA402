@@ -322,17 +322,8 @@ class CspTrajectoryGenerator:
 
         v0 = v0 or 0.0
         v1 = v1 or 0.0
-        if a0 is None or a1 is None:
-            c0 = p0
-            c1 = v0
-            c2 = (3.0 * (p1 - p0) / duration - 2.0 * v0 - v1) / duration
-            c3 = (2.0 * (p0 - p1) / duration + v0 + v1) / (
-                duration * duration
-            )
-            position = c0 + c1 * t + c2 * t * t + c3 * t * t * t
-            velocity = c1 + 2.0 * c2 * t + 3.0 * c3 * t * t
-            acceleration = 2.0 * c2 + 6.0 * c3 * t
-            return position, velocity, acceleration
+        a0 = a0 if a0 is not None else 0.0
+        a1 = a1 if a1 is not None else 0.0
 
         c0 = p0
         c1 = v0

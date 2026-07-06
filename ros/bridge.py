@@ -71,6 +71,7 @@ class Cia402CommandBridgeNode(Node):
         self.sock = None
         self.sock_file = None
         self.sock_lock = threading.Lock()
+        self.has_axis_server_authority = False
         self.feedback_lock = threading.Lock()
         self.latest_actual_positions = [0.0 for _ in range(self.axis_count)]
         self.latest_actual_velocities = [0.0 for _ in range(self.axis_count)]
@@ -481,7 +482,18 @@ class Cia402CommandBridgeNode(Node):
         return result
 
     def send_trajectory_command(self, points):
-        self.request_axis_server_authority()
+        if not self.auto_request_authority:
+            self.get_logger().warn(
+                "Ignoring trajectory command because Axis Server authority "
+                "auto request is disabled. Request authority first."
+            )
+            return False
+
+        if not self.ensure_axis_server_authority():
+            self.get_logger().warn(
+                "Ignoring trajectory command until Axis Server authority is granted."
+            )
+            return False
         return self.send_json(
             {
                 "type": "trajectory_command",
@@ -491,16 +503,54 @@ class Cia402CommandBridgeNode(Node):
         )
 
     def send_trajectory_stop(self):
-        self.request_axis_server_authority()
+        if not self.auto_request_authority:
+            self.get_logger().warn(
+                "Ignoring trajectory stop because Axis Server authority "
+                "auto request is disabled. Request authority first."
+            )
+            return False
+
+        if not self.ensure_axis_server_authority():
+            self.get_logger().warn(
+                "Ignoring trajectory stop until Axis Server authority is granted."
+            )
+            return False
         return self.send_json({"type": "trajectory_stop", "mode": "controlled"})
 
-    def request_axis_server_authority(self):
+    def ensure_axis_server_authority(self):
+        if self.has_axis_server_authority:
+            return True
+        self.request_axis_server_authority()
+        return False
+
+    def request_axis_server_authority(self, force=False):
         self.auto_request_authority = True
-        return self.send_json({"type": "command_authority_request"})
+        return self.send_json(
+            {
+                "type": "command_authority_request",
+                "force": bool(force),
+            }
+        )
 
     def release_axis_server_authority(self):
         self.auto_request_authority = False
+        self.has_axis_server_authority = False
+        self.repeat_enabled = False
+        self.repeat_points = None
+        self.last_sent_repeat_target = None
+        self.repeat_waiting_to_send = False
         return self.send_json({"type": "command_authority_release"})
+
+    def update_axis_server_authority_state(self, authority):
+        if not isinstance(authority, dict):
+            return
+        if "owned_by_this_client" in authority:
+            self.has_axis_server_authority = bool(
+                authority.get("owned_by_this_client", False)
+            )
+            return
+        if "granted" in authority:
+            self.has_axis_server_authority = bool(authority.get("granted", False))
 
     def trajectory_points_to_axis_units(self, points):
         converted_points = []
@@ -714,9 +764,9 @@ class Cia402CommandBridgeNode(Node):
         )
 
     def command_authority_request_callback(self, _msg):
-        self.request_axis_server_authority()
+        self.request_axis_server_authority(force=True)
         self.get_logger().info(
-            "Requested Axis Server command authority; auto request enabled"
+            "Requested Axis Server command authority takeover; auto request enabled"
         )
 
     def command_authority_release_callback(self, _msg):
@@ -750,6 +800,7 @@ class Cia402CommandBridgeNode(Node):
             self.sock_file = sock_file
 
         self.get_logger().info("Connected to Axis Server")
+        self.has_axis_server_authority = False
         if self.auto_request_authority:
             self.request_axis_server_authority()
         else:
@@ -767,6 +818,7 @@ class Cia402CommandBridgeNode(Node):
             elif message.get("type") == "log":
                 self.get_logger().info(message.get("text", ""))
             elif message.get("type") == "command_authority":
+                self.update_axis_server_authority_state(message)
                 self.publish_string(self.command_authority_pub, message)
                 self.get_logger().info(message.get("message", ""))
             elif message.get("type") == "command_rejected":
@@ -833,6 +885,7 @@ class Cia402CommandBridgeNode(Node):
             self.command_authority_pub,
             message.get("command_authority", {}),
         )
+        self.update_axis_server_authority_state(message.get("command_authority", {}))
         self.update_repeat_motion(actual_positions)
 
     def update_repeat_motion(self, actual_positions):
@@ -844,8 +897,8 @@ class Cia402CommandBridgeNode(Node):
         now = time.monotonic()
         if self.last_sent_repeat_target is None:
             target = self.repeat_points[self.repeat_index]
-            self.send_trajectory_command([{"positions": target}])
-            self.last_sent_repeat_target = list(target)
+            if self.send_trajectory_command([{"positions": target}]):
+                self.last_sent_repeat_target = list(target)
             return
 
         if self.repeat_waiting_to_send or now < self.repeat_wait_until:
@@ -869,9 +922,11 @@ class Cia402CommandBridgeNode(Node):
             return
 
         target = self.repeat_points[self.repeat_index]
-        self.send_trajectory_command([{"positions": target}])
-        self.last_sent_repeat_target = list(target)
-        self.repeat_waiting_to_send = False
+        if self.send_trajectory_command([{"positions": target}]):
+            self.last_sent_repeat_target = list(target)
+            self.repeat_waiting_to_send = False
+        else:
+            self.repeat_waiting_to_send = False
 
     def send_json(self, message):
         payload = (json.dumps(message) + "\n").encode("utf-8")

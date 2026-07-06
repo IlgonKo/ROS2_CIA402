@@ -4,10 +4,24 @@ from ethercat.working_counter import WorkingCounter
 
 
 class MockMaster:
-    def __init__(self, slaves, cycle_time=0.001, csp_counts_per_unit=1.0):
+    def __init__(
+        self,
+        slaves,
+        cycle_time=0.001,
+        csp_counts_per_unit=1.0,
+        csp_velocity_offset_enabled=False,
+        csp_command_step_threshold=0.0,
+        csp_command_step_error_threshold=0.0,
+    ):
         self.slaves = slaves
         self.cycle_time = cycle_time
         self.csp_counts_per_unit = float(csp_counts_per_unit)
+        self.csp_velocity_offset_enabled = bool(csp_velocity_offset_enabled)
+        self.csp_command_step_threshold = float(csp_command_step_threshold)
+        self.csp_command_step_error_threshold = float(
+            csp_command_step_error_threshold
+        )
+        self.last_csp_command_steps = []
         self.dc = DistributedClock()
         self.working_counter = WorkingCounter()
         self.wkc = 0
@@ -120,21 +134,62 @@ class MockMaster:
         return self.wkc
 
     def _update_csp_targets(self):
-        for slave, generator in zip(
+        self.last_csp_command_steps = []
+        for axis_index, (slave, generator) in enumerate(zip(
             self.slaves,
             self.trajectory_generators,
-        ):
+        )):
             if slave.rxpdo.mode_of_operation != 8:
                 continue
 
             limits = slave.motion_limits
-            slave.rxpdo.target_position = generator.update(
+            previous_command_position = float(generator.command_position)
+            previous_sent_position = int(slave.rxpdo.target_position)
+            command_position = float(generator.update(
                 self.cycle_time,
                 limits.max_velocity * self.csp_counts_per_unit,
                 limits.acceleration * self.csp_counts_per_unit,
                 limits.deceleration * self.csp_counts_per_unit,
                 limits.jerk * self.csp_counts_per_unit,
-            )
+            ))
+            sent_position = int(round(command_position))
+            slave.rxpdo.target_position = sent_position
+            if self.csp_velocity_offset_enabled:
+                velocity_scale = max(self.csp_counts_per_unit, 1e-9)
+                slave.rxpdo.velocity_offset = int(round(
+                    float(generator.command_velocity) / velocity_scale
+                ))
+            else:
+                slave.rxpdo.velocity_offset = 0
+            command_step = command_position - previous_command_position
+            sent_step = sent_position - previous_sent_position
+            expected_step = float(generator.command_velocity) * self.cycle_time
+            step_error = sent_step - expected_step
+            if (
+                (
+                    self.csp_command_step_threshold > 0.0
+                    and abs(sent_step) >= self.csp_command_step_threshold
+                )
+                or (
+                    self.csp_command_step_error_threshold > 0.0
+                    and abs(step_error) >= self.csp_command_step_error_threshold
+                )
+            ):
+                self.last_csp_command_steps.append(
+                    {
+                        "axis": axis_index,
+                        "previous_command_position": previous_command_position,
+                        "command_position": command_position,
+                        "command_step": command_step,
+                        "previous_sent_position": previous_sent_position,
+                        "sent_position": sent_position,
+                        "sent_step": sent_step,
+                        "expected_step": expected_step,
+                        "step_error": step_error,
+                        "command_velocity": float(generator.command_velocity),
+                        "target_position": float(generator.target_position),
+                    }
+                )
 
     def _read_object(self, slave_index, index, subindex=0):
         slave = self.slaves[slave_index]

@@ -5,3 +5,4 @@ class TxPDO:
         self.actual_position = 0
         self.actual_velocity = 0
         self.actual_torque = 0
+        self.setpoint_position = 0

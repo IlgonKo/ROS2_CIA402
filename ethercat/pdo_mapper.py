@@ -15,3 +15,4 @@ class PdoMapper:
         self.txpdo.mode_of_operation_display = self.rxpdo.mode_of_operation
         self.txpdo.actual_position = self.axis.get_actual_position()
         self.txpdo.actual_velocity = self.axis.get_actual_velocity()
+        self.txpdo.setpoint_position = self.rxpdo.target_position
