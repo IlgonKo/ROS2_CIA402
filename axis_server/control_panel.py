@@ -62,11 +62,14 @@ def default_axis_names(axis_count):
 
 def read_runtime_config():
     env_file = load_env_file(PROJECT_ROOT / ".env")
-    host = os.environ.get("PYSOEM_SERVER_HOST", "127.0.0.1")
+    host = os.environ.get(
+        "AXIS_SERVER_HOST",
+        env_file.get("AXIS_SERVER_HOST", "127.0.0.1"),
+    )
     port = int(
         os.environ.get(
-            "PYSOEM_AXIS_SERVER_PORT",
-            env_file.get("PYSOEM_AXIS_SERVER_PORT", "15000"),
+            "AXIS_SERVER_PORT",
+            env_file.get("AXIS_SERVER_PORT", "15000"),
         )
     )
     axis_count = int(

@@ -3,17 +3,18 @@ set -euo pipefail
 
 INTERFACE="${PYSOEM_INTERFACE:-enp1s0}"
 BACKEND="${AXIS_SERVER_BACKEND:-pysoem}"
+DEVICE="${PYSOEM_DEVICE:-cmmt}"
 AXIS_COUNT="${PYSOEM_AXIS_COUNT:-1}"
-PORT="${PYSOEM_AXIS_SERVER_PORT:-15000}"
+PORT="${AXIS_SERVER_PORT:-15000}"
 CYCLE_TIME="${PYSOEM_CYCLE_TIME:-0.01}"
 SPIN_WAIT_TIME="${PYSOEM_SPIN_WAIT_TIME:-0.00015}"
-CPUSET="${PYSOEM_AXIS_SERVER_CPUSET:-}"
+CPUSET="${AXIS_SERVER_CPUSET:-}"
 SYNC_MODE="${PYSOEM_SYNC_MODE:-0}"
 DC_ENABLED="${PYSOEM_DC_ENABLED:-0}"
 DC_SYNC0_SHIFT_TIME_NS="${PYSOEM_DC_SYNC0_SHIFT_TIME_NS:-0}"
 DC_PHASE_LOCK="${PYSOEM_DC_PHASE_LOCK:-0}"
-DC_ABSOLUTE_SCHEDULE="${PYSOEM_DC_ABSOLUTE_SCHEDULE:-0}"
-DC_SEND_OFFSET_NS="${PYSOEM_DC_SEND_OFFSET_NS:-800000}"
+DC_ABSOLUTE_SHIFT="${PYSOEM_DC_ABSOLUTE_SHIFT:-0}"
+DC_PHASE_OFFSET_NS="${PYSOEM_DC_PHASE_OFFSET_NS:-800000}"
 DC_PHASE_KP="${PYSOEM_DC_PHASE_KP:-0.05}"
 DC_PHASE_KI="${PYSOEM_DC_PHASE_KI:-0.0005}"
 DC_PHASE_MAX_CORRECTION="${PYSOEM_DC_PHASE_MAX_CORRECTION:-0.001}"
@@ -30,6 +31,7 @@ MOTION_MODE="${PYSOEM_MOTION_MODE:-pp}"
 
 echo "Starting Axis Server"
 echo "Backend=${BACKEND}"
+echo "Device=${DEVICE}"
 echo "Interface=${INTERFACE}"
 echo "AxisCount=${AXIS_COUNT}"
 echo "Port=${PORT}"
@@ -40,8 +42,8 @@ echo "SyncMode=${SYNC_MODE}"
 echo "DcEnabled=${DC_ENABLED}"
 echo "DcSync0ShiftTimeNs=${DC_SYNC0_SHIFT_TIME_NS}"
 echo "DcPhaseLock=${DC_PHASE_LOCK}"
-echo "DcAbsoluteSchedule=${DC_ABSOLUTE_SCHEDULE}"
-echo "DcSendOffsetNs=${DC_SEND_OFFSET_NS}"
+echo "DcAbsoluteShift=${DC_ABSOLUTE_SHIFT}"
+echo "DcPhaseOffsetNs=${DC_PHASE_OFFSET_NS}"
 echo "DcPhaseKp=${DC_PHASE_KP}"
 echo "DcPhaseKi=${DC_PHASE_KI}"
 echo "DcPhaseMaxCorrection=${DC_PHASE_MAX_CORRECTION}"
@@ -60,13 +62,14 @@ SERVER_CMD=(
   python3 -B /workspace/axis_server/server.py
   "${INTERFACE}" \
   --backend "${BACKEND}" \
+  --device "${DEVICE}" \
   --host 0.0.0.0 \
   --port "${PORT}" \
   --cycle-time "${CYCLE_TIME}" \
   --spin-wait-time "${SPIN_WAIT_TIME}" \
   --sync-mode "${SYNC_MODE}" \
   --dc-sync0-shift-time "${DC_SYNC0_SHIFT_TIME_NS}" \
-  --dc-send-offset "${DC_SEND_OFFSET_NS}" \
+  --dc-phase-offset "${DC_PHASE_OFFSET_NS}" \
   --dc-phase-kp "${DC_PHASE_KP}" \
   --dc-phase-ki "${DC_PHASE_KI}" \
   --dc-phase-max-correction "${DC_PHASE_MAX_CORRECTION}" \
@@ -90,8 +93,8 @@ if [[ "${DC_PHASE_LOCK}" == "1" ]]; then
   SERVER_CMD+=(--dc-phase-lock)
 fi
 
-if [[ "${DC_ABSOLUTE_SCHEDULE}" == "1" ]]; then
-  SERVER_CMD+=(--dc-absolute-schedule)
+if [[ "${DC_ABSOLUTE_SHIFT}" == "1" ]]; then
+  SERVER_CMD+=(--dc-absolute-shift)
 fi
 
 if [[ "${CSP_VELOCITY_OFFSET}" == "1" ]]; then

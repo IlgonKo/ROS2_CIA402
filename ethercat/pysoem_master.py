@@ -6,10 +6,11 @@ import sys
 import time
 
 from axis_server.csp_trajectory_generator import CspTrajectoryGenerator
+from device import get_device_profile
+from device.cmmt.pdo_codec import CiA402PdoCodec
+from device.cmmt.rxpdo import RxPDO
+from device.cmmt.txpdo import TxPDO
 from ethercat.distributed_clock import DistributedClock
-from ethercat.pdo_codec import CiA402PdoCodec
-from ethercat.rxpdo import RxPDO
-from ethercat.txpdo import TxPDO
 from ethercat.working_counter import WorkingCounter
 
 
@@ -35,15 +36,13 @@ class PySOEMMaster:
         slave_count,
         cycle_time=0.001,
         motion_limits=None,
+        device_profile=None,
         csp_counts_per_unit=1.0,
         sync_mode=None,
         dc_enabled=False,
         dc_sync0_shift_time=0,
         pdo_codec=CiA402PdoCodec,
-        txpdo_setpoint_feedback=False,
-        configure_txpdo_setpoint_feedback=False,
-        txpdo_setpoint_feedback_object="6062",
-        restore_default_txpdo_mapping=True,
+        txpdo_setpoint_entry=False,
         csp_velocity_offset_enabled=False,
         csp_command_step_threshold=0.0,
         csp_command_step_error_threshold=0.0,
@@ -51,19 +50,13 @@ class PySOEMMaster:
         self.interface_name = interface_name
         self.slave_count = slave_count
         self.cycle_time = cycle_time
+        self.device_profile = device_profile or get_device_profile("cmmt")
         self.csp_counts_per_unit = float(csp_counts_per_unit)
         self.sync_mode = sync_mode
         self.dc_enabled = bool(dc_enabled)
         self.dc_sync0_shift_time = int(dc_sync0_shift_time)
         self.pdo_codec = pdo_codec
-        self.txpdo_setpoint_feedback = bool(txpdo_setpoint_feedback)
-        self.configure_txpdo_setpoint_feedback = bool(
-            configure_txpdo_setpoint_feedback
-        )
-        self.txpdo_setpoint_feedback_object = str(
-            txpdo_setpoint_feedback_object
-        ).strip()
-        self.restore_default_txpdo_mapping = bool(restore_default_txpdo_mapping)
+        self.txpdo_setpoint_entry = bool(txpdo_setpoint_entry)
         self.csp_velocity_offset_enabled = bool(csp_velocity_offset_enabled)
         self.csp_command_step_threshold = float(csp_command_step_threshold)
         self.csp_command_step_error_threshold = float(
@@ -115,12 +108,8 @@ class PySOEMMaster:
                 f"found {discovered_slaves}."
             )
 
-        if self.configure_txpdo_setpoint_feedback:
-            self._request_pre_operational(pysoem, timeout_us)
-            self._configure_setpoint_feedback_pdo_mapping()
-        elif self.restore_default_txpdo_mapping:
-            self._request_pre_operational(pysoem, timeout_us)
-            self._configure_default_txpdo_mapping()
+        self._request_pre_operational(pysoem, timeout_us)
+        self._configure_txpdo_mapping()
         self._master.config_map()
         self._configure_distributed_clocks()
 
@@ -436,14 +425,7 @@ class PySOEMMaster:
     def _read_inputs(self):
         for index, slave in enumerate(self.slaves):
             payload = self._master.slaves[index].input
-            if self.txpdo_setpoint_feedback:
-                self.pdo_codec.decode_txpdo_with_setpoint(
-                    payload,
-                    slave.txpdo,
-                    self.txpdo_setpoint_feedback_object,
-                )
-            else:
-                self.pdo_codec.decode_txpdo(payload, slave.txpdo)
+            self.pdo_codec.decode_txpdo(payload, slave.txpdo)
 
     def _request_pre_operational(self, pysoem, timeout_us):
         self._master.state = pysoem.PREOP_STATE
@@ -486,95 +468,13 @@ class PySOEMMaster:
             flush=True,
         )
 
-    def _configure_default_txpdo_mapping(self):
-        txpdo1_mapping = [
-            0x60410010,
-            0x60610008,
-            0x60640020,
-            0x606C0020,
-            0x60770010,
-            0x00000008,
-        ]
-        self._write_txpdo1_mapping(
-            txpdo1_mapping,
-            "Restored TxPDO1 mapping: default CMMT feedback layout",
+    def _configure_txpdo_mapping(self):
+        txpdo1_mapping, log_message = (
+            self.device_profile.txpdo_setpoint_mapping()
+            if self.txpdo_setpoint_entry
+            else self.device_profile.default_txpdo1_mapping()
         )
-
-    def _configure_setpoint_feedback_pdo_mapping(self):
-        replacement_mapping = self._txpdo_setpoint_feedback_replacement_mapping()
-        if replacement_mapping is not None:
-            txpdo1_mapping, setpoint_label = replacement_mapping
-            self._write_txpdo1_mapping(
-                txpdo1_mapping,
-                f"Configured TxPDO1 feedback mapping: {setpoint_label}",
-            )
-            return
-
-        setpoint_mapping_entry, setpoint_label = self._txpdo_setpoint_feedback_mapping()
-        txpdo1_mapping = [
-            0x60410010,
-            0x60610008,
-            0x60640020,
-            0x606C0020,
-            0x60770010,
-            setpoint_mapping_entry,
-            0x00000008,
-        ]
-        self._write_txpdo1_mapping(
-            txpdo1_mapping,
-            f"Configured TxPDO1 feedback mapping: added {setpoint_label}",
-        )
-
-    def _txpdo_setpoint_feedback_replacement_mapping(self):
-        feedback_object = self.txpdo_setpoint_feedback_object.lower()
-        if feedback_object in (
-            "6062_replace_6064",
-            "6062-replace-6064",
-            "0x6062_replace_0x6064",
-        ):
-            return (
-                [
-                    0x60410010,
-                    0x60610008,
-                    0x60620020,
-                    0x606C0020,
-                    0x60770010,
-                    0x00000008,
-                ],
-                "replaced 0x6064:00 actual position with 0x6062:00 setpoint position",
-            )
-
-        if feedback_object not in (
-            "6062_replace_606c",
-            "6062-replace-606c",
-            "0x6062_replace_0x606c",
-        ):
-            return None
-
-        return (
-            [
-                0x60410010,
-                0x60610008,
-                0x60640020,
-                0x60620020,
-                0x60770010,
-                0x00000008,
-            ],
-            "replaced 0x606C:00 actual velocity with 0x6062:00 setpoint position",
-        )
-
-    def _txpdo_setpoint_feedback_mapping(self):
-        feedback_object = self.txpdo_setpoint_feedback_object.lower()
-        if feedback_object in ("6062", "606200", "0x6062", "0x6062:00"):
-            return 0x60620020, "0x6062:00 setpoint position"
-        if feedback_object in ("217a01", "0x217a01", "0x217a:01"):
-            return 0x217A0140, "0x217A:01 fine interpolator output position"
-        raise ValueError(
-            "Unsupported TxPDO setpoint feedback object: "
-            f"{self.txpdo_setpoint_feedback_object}. "
-            "Supported values: 6062, 217A01, 6062_REPLACE_6064, "
-            "6062_REPLACE_606C."
-        )
+        self._write_txpdo1_mapping(txpdo1_mapping, log_message)
 
     def _write_txpdo1_mapping(self, txpdo1_mapping, log_message):
         for axis_index in range(self.slave_count):
@@ -592,30 +492,22 @@ class PySOEMMaster:
                 0x00,
                 len(txpdo1_mapping),
             )
+            self.slaves[axis_index].txpdo.select_mapping(txpdo1_mapping)
 
         print(log_message, flush=True)
 
     def _configure_sync_parameters(self):
-        if self.sync_mode is None:
+        configured = self.device_profile.configure_sync_parameters(
+            self,
+            self.slave_count,
+            self.sync_mode,
+            self.cycle_time,
+        )
+        if not configured:
             return
 
-        for axis_index in range(self.slave_count):
-            self.sdo_write_uint16(axis_index, 0x212E, 0x01, self.sync_mode)
-            self.sdo_write_float32(
-                axis_index,
-                0x212E,
-                0x02,
-                self.cycle_time,
-            )
-            self.sdo_write_float32(
-                axis_index,
-                0x212E,
-                0x09,
-                self.cycle_time,
-            )
-
         print(
-            "Configured CMMT sync parameters via 0x212E: "
+            f"Configured {self.device_profile.name.upper()} sync parameters: "
             f"mode={self.sync_mode} cycle_time={self.cycle_time}",
             flush=True,
         )
@@ -698,7 +590,7 @@ class PySOEMMaster:
                 slave.rxpdo.velocity_offset = int(round(
                     float(generator.command_velocity) / velocity_scale
                 ))
-            else:
+            elif slave.rxpdo.has_field("velocity_offset"):
                 slave.rxpdo.velocity_offset = 0
             command_step = command_position - previous_command_position
             sent_step = sent_position - previous_sent_position

@@ -4,7 +4,7 @@ import subprocess
 from pathlib import Path
 
 
-PROJECT_ROOT = Path(__file__).resolve().parents[1]
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_MANUAL_PATH = (
     PROJECT_ROOT / "Reference" / "CMMT-AS-_-S1_manual_2026-02o_8249086g1.pdf"
 )
@@ -217,8 +217,8 @@ def _join_text(left, right):
 
 def _clean_text(text):
     text = re.sub(r"\s+", " ", text).strip()
-    text = text.replace(" – ", "; ")
-    text = text.replace("– ", "; ")
+    text = text.replace(" \u2013 ", "; ")
+    text = text.replace("\u2013 ", "; ")
     text = re.sub(r"^(;\s*)+", "", text)
     return text
 

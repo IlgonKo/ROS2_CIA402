@@ -59,10 +59,15 @@ Runtime settings are stored in `.env`:
 PYSOEM_INTERFACE=enp1s0
 AXIS_SERVER_BACKEND=pysoem
 PYSOEM_AXIS_COUNT=1
-PYSOEM_AXIS_SERVER_PORT=15000
+AXIS_SERVER_PORT=15000
 PYSOEM_CYCLE_TIME=0.01
-PYSOEM_CSP_COUNTS_PER_UNIT=1.0
 PYSOEM_DERIVED_VELOCITY_ALPHA=0.2
+```
+
+CMMT-specific settings are stored in `device/cmmt/.env`:
+
+```text
+PYSOEM_CSP_COUNTS_PER_UNIT=1000.0
 PYSOEM_MOTION_MODE=pp
 ```
 
@@ -323,13 +328,13 @@ Bridge and ROS Control Panel. The ROS Bridge provides a MoveIt-compatible
 Action completion is controlled by `.env`:
 
 ```text
-CIA402_ACTION_GOAL_TOLERANCE=0.01
-CIA402_ACTION_RESULT_TIMEOUT=0.0
+ROS_BRIDGE_ACTION_GOAL_TOLERANCE=0.01
+ROS_BRIDGE_ACTION_RESULT_TIMEOUT=0.0
 ```
 
-`CIA402_ACTION_RESULT_TIMEOUT=0.0` means the Bridge waits until all axes are
+`ROS_BRIDGE_ACTION_RESULT_TIMEOUT=0.0` means the Bridge waits until all axes are
 inside tolerance or the goal is canceled. Increase
-`CIA402_ACTION_GOAL_TOLERANCE` if the drive feedback unit is coarse or if small
+`ROS_BRIDGE_ACTION_GOAL_TOLERANCE` if the drive feedback unit is coarse or if small
 settling errors should still count as reached.
 
 Rebuild the Bridge image after action-server changes:
@@ -348,9 +353,9 @@ bash scripts/ros/moveit.sh --move-group
 The ROS Bridge Axis Server endpoint is configured in `.env`:
 
 ```text
-PYSOEM_AXIS_SERVER_PORT=15000
-CIA402_AXIS_SERVER_HOST=192.168.0.12
-CIA402_AUTO_REQUEST_AUTHORITY=1
+AXIS_SERVER_PORT=15000
+AXIS_SERVER_HOST=192.168.0.12
+ROS_BRIDGE_AUTO_REQUEST_AUTHORITY=1
 ```
 
 Use `192.168.0.12` when the Axis Server runs on the Ubuntu EtherCAT host from a
@@ -358,7 +363,7 @@ Windows ROS container. Use `127.0.0.1` when ROS and Axis Server containers run
 on the same Linux host with host networking.
 
 By default, the ROS Bridge requests Axis Server command authority automatically
-after connecting. Set `CIA402_AUTO_REQUEST_AUTHORITY=0` if command authority
+after connecting. Set `ROS_BRIDGE_AUTO_REQUEST_AUTHORITY=0` if command authority
 should be managed by another client such as the local Axis Panel.
 
 Standard ROS motion command:
@@ -468,6 +473,6 @@ scripts/host/        Ubuntu EtherCAT host commands: start, stop, panel, service,
 scripts/ros/         ROS container launch helpers
 scripts/windows/     Windows sync helper and optional direct Axis Server launcher
 ros/                 ROS bridge/control panel and trace display
-ethercat/            Mock/PySOEM EtherCAT transport, PDO, and process-data code
-cia402/              Virtual CiA402 drive model
+ethercat/            Mock/PySOEM EtherCAT transport, distributed clock, and WKC code
+device/cmmt/         Festo CMMT profile, CiA402 OD/PDO codec, mock PDO mapper, and virtual servo
 ```

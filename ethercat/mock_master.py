@@ -159,7 +159,7 @@ class MockMaster:
                 slave.rxpdo.velocity_offset = int(round(
                     float(generator.command_velocity) / velocity_scale
                 ))
-            else:
+            elif slave.rxpdo.has_field("velocity_offset"):
                 slave.rxpdo.velocity_offset = 0
             command_step = command_position - previous_command_position
             sent_step = sent_position - previous_sent_position
@@ -209,6 +209,8 @@ class MockMaster:
             return slave.axis.servo.od.read(0x609A)
         if index == 0x607A:
             return slave.rxpdo.target_position
+        if index == 0x6062:
+            return slave.txpdo.setpoint_position
         if index == 0x607D:
             limits = slave.axis.get_software_position_limits()
             if subindex == 1:
@@ -233,7 +235,9 @@ class MockMaster:
         if index == 0x1001:
             return 0
         if index == 0x6081:
-            return slave.rxpdo.profile_velocity
+            if slave.rxpdo.has_field("profile_velocity"):
+                return slave.rxpdo.profile_velocity
+            return int(slave.motion_limits.max_velocity)
         if index == 0x6083:
             return slave.motion_limits.acceleration
         if index == 0x6084:
@@ -258,6 +262,8 @@ class MockMaster:
             slave.axis.servo.od.write(0x609A, int(value))
         elif index == 0x607A:
             slave.rxpdo.target_position = value
+        elif index == 0x6062:
+            slave.txpdo.setpoint_position = value
         elif index == 0x607D:
             limits = slave.axis.get_software_position_limits()
             negative_limit = limits["negative_limit"]
@@ -283,7 +289,8 @@ class MockMaster:
         elif index == 0x60A4 and subindex == 1:
             slave.axis.servo.od.write(0x60A4, int(value), 1)
         elif index == 0x6081:
-            slave.rxpdo.profile_velocity = int(value)
+            if slave.rxpdo.has_field("profile_velocity"):
+                slave.rxpdo.profile_velocity = int(value)
             slave.motion_limits.max_velocity = float(value)
             slave.axis.set_motion_limits(
                 slave.motion_limits.max_velocity,

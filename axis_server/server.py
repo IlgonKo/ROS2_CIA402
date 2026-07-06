@@ -13,8 +13,8 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-from cia402.virtual_servo import VirtualCiA402Servo
-from axis_server.cmmt_error_catalog import load_cmmt_error_catalog
+from device import available_device_names, get_device_profile
+from device.cmmt.virtual_servo import VirtualCiA402Servo
 from ethercat.mock_master import MockMaster
 from ethercat.mock_slave import MockSlave
 from ethercat.pysoem_master import PySOEMMaster
@@ -28,6 +28,7 @@ DERIVED_VELOCITY_ALPHA = float(
 )
 FEEDBACK_PERIOD = 0.05
 STATUS_LOG_PERIOD = float(os.environ.get("PYSOEM_STATUS_LOG_PERIOD", "1.0"))
+CYCLE_STATS_LOGS = os.environ.get("PYSOEM_CYCLE_STATS_LOGS", "1").strip() == "1"
 CYCLE_STATS_PERIOD = float(os.environ.get("PYSOEM_CYCLE_STATS_PERIOD", "1.0"))
 TX_HISTORY_LENGTH = int(os.environ.get("PYSOEM_TX_HISTORY_LENGTH", "16"))
 TRAJECTORY_DEBUG_LOGS = os.environ.get(
@@ -36,6 +37,10 @@ TRAJECTORY_DEBUG_LOGS = os.environ.get(
 ).strip() == "1"
 TRAJECTORY_SNAPSHOT_LOGS = os.environ.get(
     "PYSOEM_TRAJECTORY_SNAPSHOT_LOGS",
+    "0",
+).strip() == "1"
+ROS_BRIDGE_COMMAND_LOGS = os.environ.get(
+    "ROS_BRIDGE_COMMAND_LOGS",
     "0",
 ).strip() == "1"
 VELOCITY_ANOMALY_LOGS = os.environ.get(
@@ -68,100 +73,47 @@ CSP_COMMAND_STEP_THRESHOLD = float(
 CSP_COMMAND_STEP_ERROR_THRESHOLD = float(
     os.environ.get("PYSOEM_CSP_COMMAND_STEP_ERROR_THRESHOLD", "75.0")
 )
-PROFILE_POSITION_MODE = 1
-HOMING_MODE = 6
-CSP_MODE = 8
-CSV_MODE = 9
-PP_BASE_CONTROLWORD = 0x000F
-PP_NEW_SETPOINT_CONTROLWORD = 0x003F
-PP_SETPOINT_ACK_BIT = 12
-PP_SETPOINT_ACK_MASK = 1 << PP_SETPOINT_ACK_BIT
-PP_HANDSHAKE_MAX_CYCLES = 100
-HOMING_START_BIT = 1 << 4
-HOMING_REFERENCED_MASK = 1 << 15
-HOMING_ERROR_MASK = 1 << 13
+DEVICE_PROFILE = get_device_profile(os.environ.get("PYSOEM_DEVICE", "cmmt"))
+PROFILE_POSITION_MODE = DEVICE_PROFILE.PROFILE_POSITION_MODE
+HOMING_MODE = DEVICE_PROFILE.HOMING_MODE
+CSP_MODE = DEVICE_PROFILE.CSP_MODE
+CSV_MODE = DEVICE_PROFILE.CSV_MODE
+PP_BASE_CONTROLWORD = DEVICE_PROFILE.PP_BASE_CONTROLWORD
+PP_NEW_SETPOINT_CONTROLWORD = DEVICE_PROFILE.PP_NEW_SETPOINT_CONTROLWORD
+PP_SETPOINT_ACK_MASK = DEVICE_PROFILE.PP_SETPOINT_ACK_MASK
+PP_HANDSHAKE_MAX_CYCLES = DEVICE_PROFILE.PP_HANDSHAKE_MAX_CYCLES
+HOMING_START_BIT = DEVICE_PROFILE.HOMING_START_BIT
+HOMING_REFERENCED_MASK = DEVICE_PROFILE.HOMING_REFERENCED_MASK
+HOMING_ERROR_MASK = DEVICE_PROFILE.HOMING_ERROR_MASK
 HOMING_MIN_MONITOR_TIME = 0.05
-CMMT_MAIN_GROUPS = {
-    1: "Current",
-    2: "Voltage",
-    3: "Temperature",
-    5: "Motion",
-    6: "Configuration/parameterization",
-    7: "Monitoring",
-    8: "Communication",
-    9: "Safety engineering",
-    10: "Internal hardware",
-    11: "Software",
-    12: "Maintenance",
-    13: "Various",
-    16: "External device",
-    17: "Security (data)",
-    18: "Encoder",
+MOTION_MODES = DEVICE_PROFILE.MOTION_MODES
+
+COMMON_RXPDO_FIELDS = (
+    "controlword",
+    "mode_of_operation",
+)
+COMMON_TXPDO_FIELDS = (
+    "statusword",
+    "mode_of_operation_display",
+    "actual_position",
+    "actual_velocity",
+)
+MODE_RXPDO_FIELDS = {
+    "pp": (
+        "target_position",
+        "profile_velocity",
+    ),
+    "csp": (
+        "target_position",
+    ),
+    "csv": (
+        "target_velocity",
+    ),
+    "homing": (),
 }
-CMMT_SUBGROUPS = {
-    (1, 1): "Short circuit",
-    (1, 2): "I2t",
-    (1, 3): "Braking resistor",
-    (2, 1): "Supply",
-    (2, 2): "DC link circuit",
-    (2, 3): "Principal voltage",
-    (2, 4): "Encoder supply",
-    (3, 1): "Device",
-    (3, 2): "Output stage",
-    (3, 3): "Motor",
-    (5, 1): "Homing",
-    (5, 2): "Motion control",
-    (5, 3): "Interpolation",
-    (6, 0): "No allocation",
-    (6, 2): "Critical limits",
-    (6, 5): "Parameter set",
-    (7, 1): "Limitations",
-    (7, 2): "Motion monitoring",
-    (7, 3): "Critical limits",
-    (7, 4): "Zero angle detection",
-    (7, 5): "Analogue input",
-    (7, 11): "Friction",
-    (8, 0): "No allocation",
-    (8, 3): "PROFINET",
-    (8, 4): "EtherCAT",
-    (8, 6): "EtherNet",
-    (8, 9): "PROFIdrive",
-    (8, 12): "CiA 402",
-    (8, 13): "EtherNet/IP",
-    (8, 14): "MP",
-    (9, 0): "No allocation",
-    (9, 1): "STO",
-    (9, 2): "SBC",
-    (10, 1): "Module error",
-    (11, 0): "No allocation",
-    (11, 1): "Exception",
-    (11, 2): "Task",
-    (11, 3): "File system",
-    (11, 4): "Firmware update",
-    (11, 5): "Device configuration",
-    (11, 6): "LibRTE",
-    (11, 7): "Warm start",
-    (11, 8): "Version management",
-    (12, 1): "Operating time",
-    (13, 1): "Diagnostics",
-    (13, 2): "Auto-tuning",
-    (16, 1): "CDSB",
-    (17, 1): "User login",
-    (18, 0): "No allocation",
-    (18, 1): "EnDat",
-    (18, 2): "Hiperface",
-    (18, 3): "Quadrature incremental encoder",
-    (18, 4): "Nikon A",
-    (18, 5): "BiSS C",
-    (18, 6): "Sin/Cos",
-    (18, 7): "ProfiDrive",
-}
-CMMT_ERROR_CATALOG = load_cmmt_error_catalog()
-MOTION_MODES = {
-    "pp": PROFILE_POSITION_MODE,
-    "csp": CSP_MODE,
-    "csv": CSV_MODE,
-}
+TXPDO_SETPOINT_ENTRY_FIELDS = (
+    "setpoint_position",
+)
 
 
 def parse_args():
@@ -179,6 +131,12 @@ def parse_args():
         choices=["mock", "pysoem"],
         default=os.environ.get("AXIS_SERVER_BACKEND", "pysoem").lower(),
         help="Device backend. pysoem drives real EtherCAT slaves; mock uses VirtualCiA402Servo.",
+    )
+    parser.add_argument(
+        "--device",
+        choices=available_device_names(),
+        default=DEVICE_PROFILE.name,
+        help="Connected drive device profile.",
     )
     parser.add_argument("--host", default="0.0.0.0")
     parser.add_argument("--port", type=int, default=15000)
@@ -201,7 +159,7 @@ def parse_args():
         "--sync-mode",
         default=os.environ.get("PYSOEM_SYNC_MODE", "0"),
         help=(
-            "Optional CMMT EtherCAT sync mode written via 0x212E before OP. "
+            "Optional drive EtherCAT sync mode configured before OP. "
             "0=FreeRun, 1=sync with process data, 2=DC Sync0. "
             "Cycle time follows --cycle-time."
         ),
@@ -222,22 +180,26 @@ def parse_args():
         "--dc-phase-lock",
         action="store_true",
         default=os.environ.get("PYSOEM_DC_PHASE_LOCK", "0").strip() == "1",
-        help="PI-correct the host wake-up time against EtherCAT DC phase.",
-    )
-    parser.add_argument(
-        "--dc-absolute-schedule",
-        action="store_true",
-        default=os.environ.get("PYSOEM_DC_ABSOLUTE_SCHEDULE", "0").strip() == "1",
         help=(
-            "Schedule each PDO send from the current EtherCAT DC phase instead "
-            "of a host-clock periodic deadline."
+            "Lock the master PDO send phase to EtherCAT DC Sync0. "
+            "Use --dc-absolute-shift to select absolute scheduling; otherwise "
+            "PI correction is used."
         ),
     )
     parser.add_argument(
-        "--dc-send-offset",
+        "--dc-absolute-shift",
+        action="store_true",
+        default=os.environ.get("PYSOEM_DC_ABSOLUTE_SHIFT", "0").strip() == "1",
+        help=(
+            "Schedule each PDO send from the current EtherCAT DC phase instead "
+            "of using PI correction on a host-clock periodic deadline."
+        ),
+    )
+    parser.add_argument(
+        "--dc-phase-offset",
         type=int,
-        default=int(os.environ.get("PYSOEM_DC_SEND_OFFSET_NS", "800000")),
-        help="Target PDO send offset before Sync0 in nanoseconds.",
+        default=int(os.environ.get("PYSOEM_DC_PHASE_OFFSET_NS", "800000")),
+        help="Target PDO send phase offset before Sync0 in nanoseconds.",
     )
     parser.add_argument(
         "--dc-phase-kp",
@@ -287,7 +249,7 @@ def parse_args():
         "--pp-jerk",
         type=int,
         default=int(os.environ.get("PYSOEM_PP_JERK", "100000")),
-        help="Profile position jerk written to 0x60A4:01 as UDINT.",
+        help="Profile position jerk configured on the drive.",
     )
     parser.add_argument(
         "--csp-counts-per-unit",
@@ -318,43 +280,13 @@ def parse_args():
         ),
     )
     parser.add_argument(
-        "--txpdo-setpoint-feedback",
+        "--txpdo-setpoint-entry",
         action="store_true",
-        default=os.environ.get("PYSOEM_TXPDO_SETPOINT_FEEDBACK", "0").strip() == "1",
+        default=os.environ.get("PYSOEM_TXPDO_SETPOINT_ENTRY", "0").strip() == "1",
         help=(
-            "Decode the selected setpoint feedback object from TxPDO1. Enable "
-            "only when the drive TxPDO mapping already contains that object."
-        ),
-    )
-    parser.add_argument(
-        "--configure-txpdo-setpoint-feedback",
-        action="store_true",
-        default=(
-            os.environ.get("PYSOEM_CONFIGURE_TXPDO_SETPOINT_FEEDBACK", "0").strip()
-            == "1"
-        ),
-        help=(
-            "Try to remap TxPDO1 via SDO so it contains the selected "
-            "setpoint feedback object. "
-            "This can be rejected by CMMT at SAFE_OP; keep disabled unless testing."
-        ),
-    )
-    parser.add_argument(
-        "--txpdo-setpoint-feedback-object",
-        default=os.environ.get("PYSOEM_TXPDO_SETPOINT_FEEDBACK_OBJECT", "6062"),
-        help=(
-            "TxPDO feedback object added/decoded by setpoint-feedback mode. "
-            "Supported values: 6062, 217A01."
-        ),
-    )
-    parser.add_argument(
-        "--restore-default-txpdo-mapping",
-        action="store_true",
-        default=os.environ.get("PYSOEM_RESTORE_DEFAULT_TXPDO_MAPPING", "1").strip()
-        == "1",
-        help=(
-            "Restore TxPDO1 to the default CMMT feedback layout before config_map. "
-            "Useful after a failed experimental remap."
+            "Use CMMT TxPDO setpoint entry layout. "
+            "0/default uses TxPDO.MAPPING_ENTRIES; 1 uses "
+            "TxPDO.SETPOINT_REPLACE_ENTRIES."
         ),
     )
     parser.add_argument(
@@ -362,8 +294,8 @@ def parse_args():
         type=int,
         default=int(os.environ.get("PYSOEM_CSP_INTERPOLATION_MODE", "1")),
         help=(
-            "CMMT CSP interpolation mode written to 0x217B:0D. "
-            "CMMT enum: 1=CSP, 4=CSP-V, 5=CSP-T, 6=CSP-VT."
+            "Device CSP interpolation mode. "
+            "For CMMT: 1=CSP, 4=CSP-V, 5=CSP-T, 6=CSP-VT."
         ),
     )
     parser.add_argument(
@@ -422,6 +354,8 @@ def create_master(args, motion_limits):
                 limits["deceleration"],
                 limits["jerk"],
             )
+        require_pdo_fields_for_mode(master, args.motion_mode)
+        require_txpdo_fields(master)
         return master
 
     return PySOEMMaster(
@@ -429,18 +363,75 @@ def create_master(args, motion_limits):
         slave_count=args.axis_count,
         cycle_time=args.cycle_time,
         motion_limits=motion_limits,
+        device_profile=get_device_profile(args.device),
         csp_counts_per_unit=args.csp_counts_per_unit,
         sync_mode=sync_mode,
         dc_enabled=args.dc_enabled,
         dc_sync0_shift_time=args.dc_sync0_shift_time,
-        txpdo_setpoint_feedback=args.txpdo_setpoint_feedback,
-        configure_txpdo_setpoint_feedback=args.configure_txpdo_setpoint_feedback,
-        txpdo_setpoint_feedback_object=args.txpdo_setpoint_feedback_object,
-        restore_default_txpdo_mapping=args.restore_default_txpdo_mapping,
+        txpdo_setpoint_entry=args.txpdo_setpoint_entry,
         csp_velocity_offset_enabled=args.csp_velocity_offset,
         csp_command_step_threshold=args.csp_command_step_threshold,
         csp_command_step_error_threshold=args.csp_command_step_error_threshold,
     )
+
+
+def required_rxpdo_fields_for_mode(mode_name, csp_velocity_offset_enabled=False):
+    fields = list(COMMON_RXPDO_FIELDS)
+    fields.extend(MODE_RXPDO_FIELDS.get(mode_name, ()))
+    if mode_name == "csp" and csp_velocity_offset_enabled:
+        fields.append("velocity_offset")
+    return tuple(dict.fromkeys(fields))
+
+
+def required_txpdo_fields_for_entry(setpoint_entry_enabled=False):
+    if setpoint_entry_enabled:
+        fields = [
+            field for field in COMMON_TXPDO_FIELDS
+            if field != "actual_position"
+        ]
+        fields.extend(TXPDO_SETPOINT_ENTRY_FIELDS)
+    else:
+        fields = list(COMMON_TXPDO_FIELDS)
+    return tuple(dict.fromkeys(fields))
+
+
+def require_pdo_fields_for_mode(master, mode_name, axis_index=None):
+    axis_indices = (
+        range(axis_count(master))
+        if axis_index is None
+        else [axis_index]
+    )
+    rxpdo_fields = required_rxpdo_fields_for_mode(
+        mode_name,
+        getattr(master, "csp_velocity_offset_enabled", False),
+    )
+    for current_axis in axis_indices:
+        require_pdo_fields(
+            master.slaves[current_axis].rxpdo,
+            rxpdo_fields,
+            context=f"Axis {current_axis} RxPDO {mode_name.upper()}",
+        )
+
+
+def require_txpdo_fields(master):
+    txpdo_fields = required_txpdo_fields_for_entry(
+        getattr(master, "txpdo_setpoint_entry", False),
+    )
+    for axis_index, slave in enumerate(master.slaves):
+        require_pdo_fields(
+            slave.txpdo,
+            txpdo_fields,
+            context=f"Axis {axis_index} TxPDO",
+        )
+
+
+def require_pdo_fields(pdo, fields, context):
+    missing = [field for field in fields if not pdo.has_field(field)]
+    if missing:
+        raise RuntimeError(
+            f"{context} is missing required PDO field(s): "
+            f"{', '.join(missing)}"
+        )
 
 
 def parse_optional_sync_mode(raw_value):
@@ -508,14 +499,14 @@ class DcPhaseLock:
         self,
         enabled,
         cycle_time,
-        send_offset_ns,
+        phase_offset_ns,
         kp,
         ki,
         max_correction,
     ):
         self.enabled = bool(enabled)
         self.cycle_time_ns = max(1, int(round(float(cycle_time) * 1_000_000_000.0)))
-        self.send_offset_ns = int(send_offset_ns)
+        self.phase_offset_ns = int(phase_offset_ns)
         self.kp = float(kp)
         self.ki = float(ki)
         self.max_correction = abs(float(max_correction))
@@ -523,7 +514,7 @@ class DcPhaseLock:
         self.correction_s = 0.0
 
     def target_phase_ns(self):
-        return (self.cycle_time_ns - self.send_offset_ns) % self.cycle_time_ns
+        return (self.cycle_time_ns - self.phase_offset_ns) % self.cycle_time_ns
 
     def correction(self):
         return self.correction_s if self.enabled else 0.0
@@ -640,28 +631,7 @@ def wait_status_all(master, expected_status, max_cycles=None, timeout_s=2.0):
 
 
 def read_drive_diagnostics(master, axis_index):
-    diagnostics = {}
-
-    try:
-        diagnostics["statusword"] = master.sdo_read_uint16(axis_index, 0x6041, 0)
-    except Exception as exc:
-        diagnostics["statusword"] = f"read failed: {exc}"
-
-    try:
-        diagnostics["error_code"] = master.sdo_read_uint32(axis_index, 0x2145, 0x0C)
-    except Exception as exc:
-        diagnostics["error_code"] = f"read failed: {exc}"
-
-    diagnostics["error_code_text"] = format_cmmt_error_code(
-        diagnostics["error_code"]
-    )
-
-    try:
-        diagnostics["mode_display"] = master.sdo_read_int8(axis_index, 0x6061, 0)
-    except Exception as exc:
-        diagnostics["mode_display"] = f"read failed: {exc}"
-
-    return diagnostics
+    return DEVICE_PROFILE.read_diagnostics(master, axis_index)
 
 
 def read_all_diagnostics(master):
@@ -685,47 +655,6 @@ def format_diagnostics(diagnostics):
     )
 
 
-def format_cmmt_error_code(error_code):
-    if not isinstance(error_code, int):
-        return "read fail"
-    if error_code == 0:
-        return "No error"
-
-    catalog_entry = CMMT_ERROR_CATALOG.get(error_code)
-    if catalog_entry is not None:
-        return format_cmmt_catalog_entry(catalog_entry)
-
-    main_group = (error_code >> 24) & 0xFF
-    subgroup = (error_code >> 16) & 0xFF
-    error_number = error_code & 0xFFFF
-    if main_group or subgroup:
-        main_text = CMMT_MAIN_GROUPS.get(main_group, "Unknown main group")
-        subgroup_text = CMMT_SUBGROUPS.get(
-            (main_group, subgroup),
-            "Unknown subgroup",
-        )
-        return (
-            f"Error {error_number} | "
-            f"{main_group:02d} {main_text} / "
-            f"{subgroup:02d} {subgroup_text}"
-        )
-
-    return f"Error {error_number} | CMMT 16-bit error number"
-
-
-def format_cmmt_catalog_entry(entry):
-    parts = [
-        f"{entry['id']} {entry['message']}",
-    ]
-    if entry.get("description"):
-        parts.append(entry["description"])
-    if entry.get("remedy"):
-        parts.append(f"Remedy: {entry['remedy']}")
-    if entry.get("classification"):
-        parts.append(f"Classification: {entry['classification']}")
-    return " | ".join(parts)
-
-
 def format_axis_diagnostics(diagnostics_list):
     return " | ".join(
         f"A{index}:{format_diagnostics(diagnostics)}"
@@ -734,12 +663,11 @@ def format_axis_diagnostics(diagnostics_list):
 
 
 def mode_code(mode_name):
-    if mode_name == "homing":
-        return HOMING_MODE
-    return MOTION_MODES[mode_name]
+    return DEVICE_PROFILE.mode_code(mode_name)
 
 
 def configure_motion_mode(master, mode_name, axis_index=None):
+    require_pdo_fields_for_mode(master, mode_name, axis_index)
     code = mode_code(mode_name)
     configure_mode_code(master, code, axis_index)
 
@@ -755,13 +683,13 @@ def configure_mode_code(master, code, axis_index=None):
         master.set_mode_of_operation_all(code)
 
     for current_axis in axis_indices:
-        master.slaves[current_axis].rxpdo.mode_of_operation = code
-        master.sdo_write_int8(current_axis, 0x6060, 0, code)
+        DEVICE_PROFILE.configure_mode_code(master, current_axis, code)
     exchange(master, cycles=5)
 
 
 def initialize_drive(master, motion_mode, pp_jerk, csp_interpolation_mode):
     master.connect()
+    require_txpdo_fields(master)
     write_csp_interpolation_modes(master, csp_interpolation_mode)
     configure_motion_mode(master, motion_mode)
     for axis_index in range(axis_count(master)):
@@ -802,11 +730,14 @@ def write_csp_interpolation_modes(master, csp_interpolation_mode):
 
     for axis_index in range(axis_count(master)):
         try:
-            master.sdo_write_uint32(axis_index, 0x217B, 0x0D, value)
-            readback = master.sdo_read_uint32(axis_index, 0x217B, 0x0D)
+            readback = DEVICE_PROFILE.write_csp_interpolation_mode(
+                master,
+                axis_index,
+                value,
+            )
             print(
                 "Axis "
-                f"{axis_index}: CSP interpolation mode 0x217B:0D "
+                f"{axis_index}: CSP interpolation mode "
                 f"set to {value} readback={readback}",
                 flush=True,
             )
@@ -814,7 +745,7 @@ def write_csp_interpolation_modes(master, csp_interpolation_mode):
             print(
                 "Axis "
                 f"{axis_index}: failed to set CSP interpolation mode "
-                f"0x217B:0D to {value}; continuing ({exc})",
+                f"to {value}; continuing ({exc})",
                 flush=True,
             )
 
@@ -1189,12 +1120,13 @@ def handle_trajectory_command(message, master, state):
     }
     state["trajectory_sequence"] = state.get("trajectory_sequence", 0) + 1
     log_trajectory_snapshot("start_active", master, state, axes, points)
-    print(
-        "Received trajectory_command: "
-        f"axes={axes} points={len(points)} "
-        f"duration={points[-1]['time_from_start']:.3f}",
-        flush=True,
-    )
+    if ROS_BRIDGE_COMMAND_LOGS:
+        print(
+            "Received trajectory_command: "
+            f"axes={axes} points={len(points)} "
+            f"duration={points[-1]['time_from_start']:.3f}",
+            flush=True,
+        )
 
 
 def axis_timed_points(points, local_index):
@@ -1332,7 +1264,7 @@ def retime_trajectory_to_motion_limits(master, axes, points):
         current_time += required_dt
         current["time_from_start"] = current_time
 
-    if adjusted:
+    if adjusted and ROS_BRIDGE_COMMAND_LOGS:
         print(
             "Retimed trajectory to motion limits: "
             f"requested_duration={points[-1]['time_from_start']:.6f} "
@@ -2141,7 +2073,8 @@ def handle_motion_limits(message, master, state):
             deceleration,
             jerk,
         )
-        master.slaves[axis_index].rxpdo.profile_velocity = int(max_velocity)
+        if master.slaves[axis_index].rxpdo.has_field("profile_velocity"):
+            master.slaves[axis_index].rxpdo.profile_velocity = int(max_velocity)
         write_profile_motion_limits(master, axis_index)
 
     print(f"Received motion_limits: {state['motion_limits']}", flush=True)
@@ -2208,6 +2141,9 @@ def handle_motion_mode(message, master, state):
         return
 
     for axis_index in axis_indices:
+        require_pdo_fields_for_mode(master, requested_mode, axis_index)
+
+    for axis_index in axis_indices:
         hold_axis_at_actual_position(master, state, axis_index)
     master.set_target_positions(state["target_positions"])
 
@@ -2248,6 +2184,8 @@ def handle_target_velocities(message, master, state):
     if state["motion_mode"] != "csv":
         configure_motion_mode(master, "csv")
         state["motion_mode"] = "csv"
+    else:
+        require_pdo_fields_for_mode(master, "csv")
 
     state["target_velocities"] = velocities[:axis_count(master)]
     for axis_index, velocity in enumerate(state["target_velocities"]):
@@ -2593,8 +2531,8 @@ def format_latest_cycle_value(cycle_stats, name):
 
 def velocity_anomaly_dc_snapshot(master, state, cycle_stats):
     cycle_time_ns = max(1, int(round(float(master.cycle_time) * 1_000_000_000.0)))
-    send_offset_ns = int(state.get("dc_send_offset_ns", 0))
-    target_phase_ns = (cycle_time_ns - send_offset_ns) % cycle_time_ns
+    phase_offset_ns = int(state.get("dc_phase_offset_ns", 0))
+    target_phase_ns = (cycle_time_ns - phase_offset_ns) % cycle_time_ns
     tx_dc_time_ns = getattr(master, "last_tx_dc_time_ns", None)
     direct_tx_dc_time_ns = getattr(master, "last_direct_tx_dc_time_ns", None)
     actual_phase_ns = None
@@ -2943,6 +2881,7 @@ def log_status_if_due(master, state, last_status_log_time):
 
 def command_profile_positions(master, target_positions, axis_indices):
     for axis_index in axis_indices:
+        require_pdo_fields_for_mode(master, "pp", axis_index)
         target_position = target_positions[axis_index]
         slave = master.slaves[axis_index]
         slave.rxpdo.mode_of_operation = PROFILE_POSITION_MODE
@@ -3016,47 +2955,27 @@ def command_csp_positions(master, target_positions, axis_indices):
 
 def write_profile_motion_limits(master, axis_index):
     limits = master.slaves[axis_index].motion_limits
-    master.sdo_write_uint32(
-        axis_index,
-        0x6081,
-        0,
-        max(0, int(limits.max_velocity)),
-    )
-    master.sdo_write_uint32(
-        axis_index,
-        0x6083,
-        0,
-        max(0, int(limits.acceleration)),
-    )
-    master.sdo_write_uint32(
-        axis_index,
-        0x6084,
-        0,
-        max(0, int(limits.deceleration)),
-    )
+    DEVICE_PROFILE.write_profile_motion_limits(master, axis_index, limits)
 
 
 def write_profile_jerk(master, axis_index, pp_jerk):
     value = max(0, int(pp_jerk))
     try:
-        master.sdo_write_uint32(axis_index, 0x60A4, 1, value)
+        DEVICE_PROFILE.write_profile_jerk(master, axis_index, value)
         print(
-            f"Axis {axis_index}: PP jerk 0x60A4:01 set to {value}",
+            f"Axis {axis_index}: PP jerk set to {value}",
             flush=True,
         )
     except Exception as exc:
         print(
-            f"Axis {axis_index}: failed to set PP jerk 0x60A4:01 "
+            f"Axis {axis_index}: failed to set PP jerk "
             f"to {value}; continuing ({exc})",
             flush=True,
         )
 
 
 def read_software_position_limits(master, axis_index):
-    return [
-        master.sdo_read_int32(axis_index, 0x607D, 1),
-        master.sdo_read_int32(axis_index, 0x607D, 2),
-    ]
+    return DEVICE_PROFILE.read_software_position_limits(master, axis_index)
 
 
 def read_all_software_position_limits(master):
@@ -3067,7 +2986,7 @@ def read_all_software_position_limits(master):
         except Exception as exc:
             print(
                 f"Axis {axis_index}: failed to read software position limits "
-                f"0x607D:01/02 ({exc})",
+                f"({exc})",
                 flush=True,
             )
             limits.append([0, 0])
@@ -3081,8 +3000,12 @@ def write_software_position_limits(
     negative_limit,
     positive_limit,
 ):
-    master.sdo_write_int32(axis_index, 0x607D, 1, negative_limit)
-    master.sdo_write_int32(axis_index, 0x607D, 2, positive_limit)
+    DEVICE_PROFILE.write_software_position_limits(
+        master,
+        axis_index,
+        negative_limit,
+        positive_limit,
+    )
 
 
 def allocate_client_id(clients):
@@ -3127,18 +3050,22 @@ def run_server_loop(server, master, state):
     last_cycle_stats_log_time = time.monotonic()
     next_cycle_time = time.monotonic()
     spin_wait_time = float(state.get("spin_wait_time", 0.0))
-    dc_absolute_schedule = bool(state.get("dc_absolute_schedule", False))
+    dc_phase_lock_enabled = bool(state.get("dc_phase_lock", False))
+    dc_absolute_shift = (
+        dc_phase_lock_enabled
+        and bool(state.get("dc_absolute_shift", False))
+    )
     dc_phase_lock = DcPhaseLock(
-        state.get("dc_phase_lock", False),
+        dc_phase_lock_enabled,
         master.cycle_time,
-        state.get("dc_send_offset_ns", 800000),
+        state.get("dc_phase_offset_ns", 800000),
         state.get("dc_phase_kp", 0.05),
         state.get("dc_phase_ki", 0.0005),
         state.get("dc_phase_max_correction", 0.001),
     )
 
     while True:
-        if dc_absolute_schedule:
+        if dc_absolute_shift:
             hold_faulted_axes(master, state)
             update_active_trajectory(master, state)
             master.prepare_processdata()
@@ -3159,7 +3086,7 @@ def run_server_loop(server, master, state):
         if deadline_late > 0.0:
             cycle_stats.add("deadline_late", deadline_late)
 
-        if dc_absolute_schedule:
+        if dc_absolute_shift:
             exchange_prepared(master, cycle_stats=cycle_stats)
         else:
             hold_faulted_axes(master, state)
@@ -3186,7 +3113,7 @@ def run_server_loop(server, master, state):
         log_position_feedback_lag(master, state)
         log_velocity_anomalies(master, state, cycle_stats)
 
-        if not dc_absolute_schedule:
+        if not dc_absolute_shift:
             next_cycle_time += master.cycle_time + dc_phase_lock.correction()
             if cycle_start_time - next_cycle_time > master.cycle_time:
                 next_cycle_time = cycle_start_time + master.cycle_time
@@ -3196,7 +3123,11 @@ def run_server_loop(server, master, state):
             update_derived_velocities(master, state, now)
             last_feedback_update_time = now
 
-        if now - last_cycle_stats_log_time >= CYCLE_STATS_PERIOD:
+        if (
+            CYCLE_STATS_LOGS
+            and CYCLE_STATS_PERIOD > 0.0
+            and now - last_cycle_stats_log_time >= CYCLE_STATS_PERIOD
+        ):
             report = cycle_stats.report_and_reset()
             if report:
                 print(f"EtherCAT cycle stats: {report}", flush=True)
@@ -3361,8 +3292,8 @@ def initial_server_state(
         "command_authority_owner": None,
         "spin_wait_time": max(0.0, args.spin_wait_time),
         "dc_phase_lock": args.dc_phase_lock,
-        "dc_absolute_schedule": args.dc_absolute_schedule,
-        "dc_send_offset_ns": args.dc_send_offset,
+        "dc_absolute_shift": args.dc_absolute_shift,
+        "dc_phase_offset_ns": args.dc_phase_offset,
         "dc_phase_kp": args.dc_phase_kp,
         "dc_phase_ki": args.dc_phase_ki,
         "dc_phase_max_correction": args.dc_phase_max_correction,
@@ -3421,7 +3352,8 @@ def main():
             )
         else:
             for slave in master.slaves:
-                slave.rxpdo.profile_velocity = int(args.max_velocity)
+                if slave.rxpdo.has_field("profile_velocity"):
+                    slave.rxpdo.profile_velocity = int(args.max_velocity)
 
             master.last_diagnostics = read_all_diagnostics(master)
             software_position_limits = read_all_software_position_limits(master)
@@ -3436,14 +3368,11 @@ def main():
                 f"jerk={args.jerk} "
                 f"pp_jerk={args.pp_jerk} "
                 f"dc_phase_lock={args.dc_phase_lock} "
-                f"dc_absolute_schedule={args.dc_absolute_schedule} "
-                f"dc_send_offset_ns={args.dc_send_offset} "
+                f"dc_absolute_shift={args.dc_absolute_shift} "
+                f"dc_phase_offset_ns={args.dc_phase_offset} "
                 f"dc_phase_kp={args.dc_phase_kp} "
                 f"dc_phase_ki={args.dc_phase_ki} "
-                f"txpdo_setpoint_feedback={args.txpdo_setpoint_feedback} "
-                f"configure_txpdo_setpoint_feedback={args.configure_txpdo_setpoint_feedback} "
-                f"txpdo_setpoint_feedback_object={args.txpdo_setpoint_feedback_object} "
-                f"restore_default_txpdo_mapping={args.restore_default_txpdo_mapping} "
+                f"txpdo_setpoint_entry={args.txpdo_setpoint_entry} "
                 f"csp_interpolation_mode={args.csp_interpolation_mode} "
                 f"csp_velocity_offset={args.csp_velocity_offset} "
                 f"derived_velocity_alpha={args.derived_velocity_alpha} "

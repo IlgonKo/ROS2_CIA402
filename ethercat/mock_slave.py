@@ -1,6 +1,6 @@
-from ethercat.rxpdo import RxPDO
-from ethercat.txpdo import TxPDO
-from ethercat.pdo_mapper import PdoMapper
+from device.cmmt.mock_pdo_adapter import MockPdoAdapter
+from device.cmmt.rxpdo import RxPDO
+from device.cmmt.txpdo import TxPDO
 from ethercat.pysoem_master import AxisMotionLimits
 
 
@@ -16,7 +16,7 @@ class MockSlave:
             float(limits["deceleration"]),
             float(limits.get("jerk", 0.0)),
         )
-        self.mapper = PdoMapper(
+        self.pdo_adapter = MockPdoAdapter(
             self.axis,
             self.rxpdo,
             self.txpdo,
@@ -24,10 +24,10 @@ class MockSlave:
 
     def process(self):
         # RxPDO -> Axis
-        self.mapper.rxpdo_to_axis()
+        self.pdo_adapter.rxpdo_to_axis()
 
         # Axis -> VirtualServo cycle
         self.axis.update()
 
         # Axis -> TxPDO
-        self.mapper.axis_to_txpdo()
+        self.pdo_adapter.axis_to_txpdo()

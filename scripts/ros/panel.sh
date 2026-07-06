@@ -5,6 +5,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 COMPOSE_FILE="${PROJECT_ROOT}/docker/ros/compose.yaml"
 ENV_FILE="${PROJECT_ROOT}/.env"
+source "${PROJECT_ROOT}/scripts/env.sh"
 DISPLAY_VALUE="${DISPLAY:-:0}"
 BUILD_PANEL=0
 
@@ -29,15 +30,17 @@ if [[ ! -f "${ENV_FILE}" ]]; then
   exit 1
 fi
 
+COMPOSE_ENV_FILE="$(prepare_compose_env_file "${PROJECT_ROOT}")"
+
 if [[ "${BUILD_PANEL}" == "1" ]]; then
   echo "Building ROS Control Panel image"
-  docker compose -f "${COMPOSE_FILE}" --env-file "${ENV_FILE}" build ros_control_panel
+  docker compose -f "${COMPOSE_FILE}" --env-file "${COMPOSE_ENV_FILE}" build ros_control_panel
 fi
 
 if command -v xhost >/dev/null 2>&1; then
   xhost +local:root >/dev/null
 fi
 
-exec docker compose -f "${COMPOSE_FILE}" --env-file "${ENV_FILE}" --profile panel run --rm \
+exec docker compose -f "${COMPOSE_FILE}" --env-file "${COMPOSE_ENV_FILE}" --profile panel run --rm \
   -e DISPLAY="${DISPLAY_VALUE}" \
   ros_control_panel

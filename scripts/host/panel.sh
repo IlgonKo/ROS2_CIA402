@@ -5,6 +5,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 COMPOSE_FILE="${PROJECT_ROOT}/docker/axis_server/compose.yaml"
 ENV_FILE="${PROJECT_ROOT}/.env"
+source "${PROJECT_ROOT}/scripts/env.sh"
 SERVER_CONTAINER_NAME="${PYSOEM_CONTAINER_NAME:-ros_cia402_axis_server}"
 DISPLAY_VALUE="${DISPLAY:-:0}"
 BUILD_PANEL=0
@@ -41,11 +42,13 @@ if [[ ! -f "${ENV_FILE}" ]]; then
   exit 1
 fi
 
+COMPOSE_ENV_FILE="$(prepare_compose_env_file "${PROJECT_ROOT}")"
+
 if [[ "${BUILD_PANEL}" == "1" ]]; then
-  docker compose -f "${COMPOSE_FILE}" --env-file "${ENV_FILE}" build axis_panel
+  docker compose -f "${COMPOSE_FILE}" --env-file "${COMPOSE_ENV_FILE}" build axis_panel
 fi
 
-exec docker compose -f "${COMPOSE_FILE}" --env-file "${ENV_FILE}" run --rm \
+exec docker compose -f "${COMPOSE_FILE}" --env-file "${COMPOSE_ENV_FILE}" run --rm \
   -e DISPLAY="${DISPLAY_VALUE}" \
-  -e PYSOEM_SERVER_HOST="${PYSOEM_SERVER_HOST:-127.0.0.1}" \
+  -e AXIS_SERVER_HOST="${AXIS_SERVER_HOST:-127.0.0.1}" \
   axis_panel

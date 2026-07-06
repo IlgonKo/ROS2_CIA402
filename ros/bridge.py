@@ -44,27 +44,27 @@ class Cia402CommandBridgeNode(Node):
         self.axis_count = get_axis_count()
         self.axis_names = get_axis_names()
         self.host = os.environ.get(
-            "CIA402_AXIS_SERVER_HOST",
-            os.environ.get("CIA402_PYSOEM_HOST", DEFAULT_HOST),
+            "AXIS_SERVER_HOST",
+            DEFAULT_HOST,
         )
         self.port = int(
             os.environ.get(
-                "PYSOEM_AXIS_SERVER_PORT",
+                "AXIS_SERVER_PORT",
                 DEFAULT_PORT,
             )
         )
         self.auto_request_authority = (
-            os.environ.get("CIA402_AUTO_REQUEST_AUTHORITY", "1").strip() != "0"
+            os.environ.get("ROS_BRIDGE_AUTO_REQUEST_AUTHORITY", "1").strip() != "0"
         )
         self.action_goal_tolerance = float(
             os.environ.get(
-                "CIA402_ACTION_GOAL_TOLERANCE",
+                "ROS_BRIDGE_ACTION_GOAL_TOLERANCE",
                 str(DEFAULT_ACTION_GOAL_TOLERANCE),
             )
         )
         self.action_result_timeout = float(
             os.environ.get(
-                "CIA402_ACTION_RESULT_TIMEOUT",
+                "ROS_BRIDGE_ACTION_RESULT_TIMEOUT",
                 str(DEFAULT_ACTION_RESULT_TIMEOUT),
             )
         )
@@ -77,7 +77,7 @@ class Cia402CommandBridgeNode(Node):
         self.latest_actual_velocities = [0.0 for _ in range(self.axis_count)]
         self.position_counts_per_unit = float(
             os.environ.get(
-                "CIA402_POSITION_COUNTS_PER_UNIT",
+                "ROS_BRIDGE_POSITION_COUNTS_PER_UNIT",
                 os.environ.get("PYSOEM_CSP_COUNTS_PER_UNIT", "1.0"),
             )
         )

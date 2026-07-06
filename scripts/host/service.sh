@@ -5,6 +5,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 COMPOSE_FILE="${PROJECT_ROOT}/docker/axis_server/compose.yaml"
 ENV_FILE="${PROJECT_ROOT}/.env"
+source "${PROJECT_ROOT}/scripts/env.sh"
 SERVICE_NAME="ros-cia402-axis-server.service"
 LEGACY_SERVICE_NAME="ros2-cia402-pysoem.service"
 SERVICE_FILE="/etc/systemd/system/${SERVICE_NAME}"
@@ -29,6 +30,8 @@ install_service() {
     exit 1
   fi
 
+  COMPOSE_ENV_FILE="$(prepare_compose_env_file "${PROJECT_ROOT}")"
+
   systemctl disable --now "${LEGACY_SERVICE_NAME}" 2>/dev/null || true
   rm -f "${LEGACY_SERVICE_FILE}"
 
@@ -45,8 +48,8 @@ RemainAfterExit=yes
 WorkingDirectory=${PROJECT_ROOT}
 ExecStartPre=-/usr/bin/docker rm -f ros_cia402_axis_server
 ExecStartPre=-/usr/bin/docker rm -f ros2_cia402_pysoem_host
-ExecStart=/usr/bin/docker compose -f ${COMPOSE_FILE} --env-file ${ENV_FILE} up -d axis_server
-ExecStop=/usr/bin/docker compose -f ${COMPOSE_FILE} --env-file ${ENV_FILE} down
+ExecStart=/usr/bin/bash -lc 'source ${PROJECT_ROOT}/scripts/env.sh; COMPOSE_ENV_FILE="\$(prepare_compose_env_file ${PROJECT_ROOT})"; exec /usr/bin/docker compose -f ${COMPOSE_FILE} --env-file "\${COMPOSE_ENV_FILE}" up -d axis_server'
+ExecStop=/usr/bin/bash -lc 'source ${PROJECT_ROOT}/scripts/env.sh; COMPOSE_ENV_FILE="\$(prepare_compose_env_file ${PROJECT_ROOT})"; exec /usr/bin/docker compose -f ${COMPOSE_FILE} --env-file "\${COMPOSE_ENV_FILE}" down'
 TimeoutStartSec=0
 
 [Install]
@@ -54,7 +57,7 @@ WantedBy=multi-user.target
 EOF
 
   cd "${PROJECT_ROOT}"
-  docker compose -f "${COMPOSE_FILE}" --env-file "${ENV_FILE}" build axis_server
+  docker compose -f "${COMPOSE_FILE}" --env-file "${COMPOSE_ENV_FILE}" build axis_server
   docker rm -f ros_cia402_axis_server 2>/dev/null || true
   docker rm -f ros2_cia402_pysoem_host 2>/dev/null || true
 
@@ -63,8 +66,8 @@ EOF
   systemctl restart "${SERVICE_NAME}"
 
   echo "Installed and started ${SERVICE_NAME}"
-  echo "Runtime settings are read from ${PROJECT_ROOT}/.env"
-  cat "${PROJECT_ROOT}/.env"
+  echo "Runtime settings are read from ${COMPOSE_ENV_FILE}"
+  cat "${COMPOSE_ENV_FILE}"
   echo ""
   systemctl --no-pager status "${SERVICE_NAME}"
 }

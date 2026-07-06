@@ -1,13 +1,13 @@
 from interfaces.servo_interface import ServoInterface
-from cia402.object_dictionary import ObjectDictionary
-from cia402.state_machine import CiA402StateMachine
+from device.cmmt.mock_object_dictionary import MockObjectDictionary
+from device.cmmt.state_machine import CiA402StateMachine
 
 
 class VirtualCiA402Servo(ServoInterface): 
     def __init__(self, cycle_time=0.001):
         self.cycle_time = cycle_time
 
-        self.od = ObjectDictionary()
+        self.od = MockObjectDictionary()
         self.sm = CiA402StateMachine()
 
         self.actual_position = 0.0

@@ -28,5 +28,7 @@ Thumbs.db
 
 # Local runtime artifacts
 .env
+device/*/.env
+.runtime/
 *.log
 *.tmp
