@@ -16,6 +16,8 @@ GUI_PERIOD_MS = 50
 RECONNECT_PERIOD = 1.0
 HISTORY_SIZE = 500
 REPEAT_TOLERANCE = 10.0
+PANEL_SDO_READ_DELAY = 1.0
+PANEL_SDO_READ_PERIOD = 0.1
 STATUSWORD_BITS = [
     (0, "Ready"),
     (1, "Switched"),
@@ -107,14 +109,17 @@ class AxisServerClient:
         self.last_error = ""
         self.feedback = {
             "target_positions": [0.0 for _ in range(axis_count)],
+            "target_velocities": [0.0 for _ in range(axis_count)],
             "actual_positions": [0.0 for _ in range(axis_count)],
             "actual_velocities": [0.0 for _ in range(axis_count)],
             "command_positions": [0.0 for _ in range(axis_count)],
             "position_counts_per_unit": 1.0,
             "statuswords": [0 for _ in range(axis_count)],
             "motion_limits": [0.0 for _ in range(axis_count * 4)],
+            "profile_settings": [0.0 for _ in range(axis_count * 4)],
             "software_position_limits": [0.0 for _ in range(axis_count * 2)],
             "motion_mode": "pp",
+            "server_mode": "basic",
             "capabilities": {},
             "diagnostics": [],
             "command_authority": {
@@ -124,6 +129,8 @@ class AxisServerClient:
             },
         }
         self.last_notice = ""
+        self.last_diagnosis_result = ""
+        self.sdo_read_results = []
         self.thread = threading.Thread(target=self._connection_loop, daemon=True)
 
     def start(self):
@@ -178,20 +185,109 @@ class AxisServerClient:
                 self._store_feedback(message)
             elif message.get("type") in {"command_authority", "command_rejected"}:
                 self._store_notice(message)
+            elif message.get("type") in {"axis/param_read", "axis/param_write"}:
+                self._store_diagnosis_result(message)
 
     def _store_feedback(self, message):
         with self.lock:
             self.feedback = message
+            for result in self.sdo_read_results:
+                self._apply_param_read_result(result)
 
     def _store_notice(self, message):
         with self.lock:
             self.last_notice = str(message.get("message", ""))
 
+    def _store_diagnosis_result(self, message):
+        with self.lock:
+            self.last_diagnosis_result = json.dumps(message, ensure_ascii=False)
+            if message.get("type") == "axis/param_read" and message.get("ok"):
+                self.sdo_read_results.append(dict(message))
+                self._apply_param_read_result(message)
+
+    def _apply_param_read_result(self, message):
+        axis_index = int(message.get("axis", 0))
+        if axis_index < 0 or axis_index >= self.axis_count:
+            return
+
+        index = int(message.get("index", 0))
+        subindex = int(message.get("subindex", 0))
+        value = message.get("value")
+        if value is None:
+            return
+
+        if index == 0x6041 and subindex == 0:
+            self.feedback.setdefault("statuswords", [0 for _ in range(self.axis_count)])
+            self.feedback["statuswords"][axis_index] = int(value)
+            self._diagnostics_for_axis(axis_index)["statusword"] = int(value)
+        elif index == 0x2145 and subindex == 0x0C:
+            diagnostics = self._diagnostics_for_axis(axis_index)
+            diagnostics["error_code"] = int(value)
+            diagnostics["error_code_text"] = (
+                "No error"
+                if int(value) == 0
+                else f"Error {int(value)}"
+            )
+        elif index == 0x6061 and subindex == 0:
+            self._diagnostics_for_axis(axis_index)["mode_display"] = int(value)
+        elif index == 0x607D and subindex in (1, 2):
+            limits = self.feedback.setdefault(
+                "software_position_limits",
+                [0.0 for _ in range(self.axis_count * 2)],
+            )
+            limits[axis_index * 2 + subindex - 1] = float(value)
+        elif index == 0x6081 and subindex == 0:
+            self._set_flat_feedback_value("profile_settings", 4, axis_index, 0, value)
+        elif index == 0x6083 and subindex == 0:
+            self._set_flat_feedback_value("profile_settings", 4, axis_index, 1, value)
+        elif index == 0x6084 and subindex == 0:
+            self._set_flat_feedback_value("profile_settings", 4, axis_index, 2, value)
+        elif index == 0x60A4 and subindex == 1:
+            self._set_flat_feedback_value("profile_settings", 4, axis_index, 3, value)
+        elif index == 0x607F and subindex == 0:
+            self._set_flat_feedback_value("motion_limits", 4, axis_index, 0, value)
+        elif index == 0x2183 and subindex == 0x0C:
+            self._set_flat_feedback_value(
+                "motion_limits",
+                4,
+                axis_index,
+                1,
+                float(value) * 1000.0,
+            )
+        elif index == 0x60C5 and subindex == 0:
+            self._set_flat_feedback_value("motion_limits", 4, axis_index, 2, value)
+        elif index == 0x60C6 and subindex == 0:
+            self._set_flat_feedback_value("motion_limits", 4, axis_index, 3, value)
+
+    def _diagnostics_for_axis(self, axis_index):
+        diagnostics = self.feedback.setdefault("diagnostics", [])
+        while len(diagnostics) <= axis_index:
+            diagnostics.append({})
+        return diagnostics[axis_index]
+
+    def _set_flat_feedback_value(self, key, fields_per_axis, axis_index, field, value):
+        flat = self.feedback.setdefault(
+            key,
+            [0.0 for _ in range(self.axis_count * fields_per_axis)],
+        )
+        required = self.axis_count * fields_per_axis
+        while len(flat) < required:
+            flat.append(0.0)
+        flat[axis_index * fields_per_axis + field] = float(value)
+
     def get_snapshot(self):
         with self.lock:
             notice = self.last_notice
             self.last_notice = ""
-            return self.connected, self.last_error, dict(self.feedback), notice
+            diagnosis_result = self.last_diagnosis_result
+            self.last_diagnosis_result = ""
+            return (
+                self.connected,
+                self.last_error,
+                dict(self.feedback),
+                notice,
+                diagnosis_result,
+            )
 
     def send_json(self, message):
         payload = (json.dumps(message) + "\n").encode("utf-8")
@@ -200,84 +296,162 @@ class AxisServerClient:
                 raise ConnectionError("Axis server is not connected")
             self.sock.sendall(payload)
 
-    def send_manual_move_absolute(self, positions):
-        self.send_json(
-            {
-                "type": "manual_move_absolute",
-                "positions": [float(value) for value in positions],
-            }
-        )
-
-    def send_motion_limits(self, limits):
-        self.send_json(
-            {
-                "type": "motion_limits",
-                "limits": [
-                    [float(value) for value in axis_limits]
-                    for axis_limits in limits
-                ],
-            }
-        )
-
-    def send_software_position_limits(self, limits):
-        self.send_json(
-            {
-                "type": "software_position_limits",
-                "limits": [
-                    [float(value) for value in axis_limits]
-                    for axis_limits in limits
-                ],
-            }
-        )
-
-    def send_motion_mode(self, mode, axis_index=None):
+    def send_axis_move_absolute(self, axis_index, position, profile_velocity=None):
         message = {
-            "type": "motion_mode",
-            "mode": str(mode).lower(),
+            "cmd": "axis/move_abs",
+            "axis": int(axis_index),
+            "position": float(position),
         }
-        if axis_index is not None:
-            message["axis"] = int(axis_index)
-
+        if profile_velocity is not None:
+            message["profile_velocity"] = float(profile_velocity)
         self.send_json(message)
 
-    def send_controlword(self, controlword, axis_index=None):
-        message = {
-            "type": "controlword",
-            "controlword": int(controlword),
-        }
-        if axis_index is not None:
-            message["axis"] = int(axis_index)
-
-        self.send_json(message)
-
-    def send_manual_move_relative(self, axis_index, distance):
+    def send_target_velocity(self, axis_index, velocity):
         self.send_json(
             {
-                "type": "manual_move_relative",
+                "cmd": "axis/target_velocity",
                 "axis": int(axis_index),
-                "distance": float(distance),
+                "velocity": float(velocity),
             }
         )
 
-    def send_manual_stop(self):
-        self.send_json({"type": "manual_stop", "mode": "controlled"})
+    def send_profile_settings(self, axis_index, profile_settings):
+        self.send_json(
+            {
+                "cmd": "axis/profile",
+                "axis": int(axis_index),
+                "profile_velocity": float(profile_settings[0]),
+                "profile_acceleration": float(profile_settings[1]),
+                "profile_deceleration": float(profile_settings[2]),
+                "profile_jerk": float(profile_settings[3]),
+            }
+        )
+
+    def send_axis_motion_limits(self, axis_index, axis_limits):
+        self.send_json(
+            {
+                "cmd": "axis/motion_limits",
+                "axis": int(axis_index),
+                "positive_velocity_limit": float(axis_limits[0]),
+                "negative_velocity_limit": float(axis_limits[1]),
+                "max_acceleration": float(axis_limits[2]),
+                "max_deceleration": float(axis_limits[3]),
+            }
+        )
+
+    def send_axis_software_position_limits(
+        self,
+        axis_index,
+        negative_limit,
+        positive_limit,
+    ):
+        self.send_json(
+            {
+                "cmd": "axis/software_position_limits",
+                "axis": int(axis_index),
+                "negative_limit": float(negative_limit),
+                "positive_limit": float(positive_limit),
+            }
+        )
+
+    def send_motion_mode(self, mode, axis_index):
+        self.send_json(
+            {
+                "cmd": "axis/mode",
+                "axis": int(axis_index),
+                "mode": str(mode).lower(),
+            }
+        )
+
+    def send_controlword(self, controlword, axis_index):
+        self.send_json(
+            {
+                "cmd": "debug/controlword",
+                "axis": int(axis_index),
+                "controlword": int(controlword),
+            }
+        )
+
+    def send_axis_move_relative(self, axis_index, distance, profile_velocity=None):
+        message = {
+            "cmd": "axis/move_rel",
+            "axis": int(axis_index),
+            "distance": float(distance),
+        }
+        if profile_velocity is not None:
+            message["profile_velocity"] = float(profile_velocity)
+        self.send_json(message)
+
+    def send_jog_start(self, axis_index, direction, speed="slow"):
+        self.send_json(
+            {
+                "cmd": "axis/jog_start",
+                "axis": int(axis_index),
+                "direction": str(direction),
+                "speed": str(speed),
+            }
+        )
+
+    def send_jog_stop(self, axis_index):
+        self.send_json(
+            {
+                "cmd": "axis/jog_stop",
+                "axis": int(axis_index),
+            }
+        )
+
+    def send_axis_stop(self, axis_index):
+        self.send_json(
+            {
+                "cmd": "axis/stop",
+                "axis": int(axis_index),
+            }
+        )
 
     def send_homing_start(self, axis_index):
         self.send_json(
             {
-                "type": "homing_start",
+                "cmd": "axis/home",
                 "axis": int(axis_index),
             }
         )
 
-    def send_alarm_ack(self):
-        self.send_json({"type": "alarm_ack"})
+    def send_axis_reset(self, axis_index):
+        self.send_json(
+            {
+                "cmd": "axis/reset",
+                "axis": int(axis_index),
+            }
+        )
 
     def request_command_authority(self):
         self.send_json({"type": "command_authority_request"})
 
     def release_command_authority(self):
         self.send_json({"type": "command_authority_release"})
+
+    def send_param_read(self, axis_index, index, subindex, data_type):
+        self.send_json(
+            {
+                "cmd": "axis/param_read",
+                "axis": int(axis_index),
+                "index": str(index),
+                "subindex": str(subindex),
+                "data_type": str(data_type),
+            }
+        )
+
+    def send_param_write(self, axis_index, index, subindex, data_type, value):
+        self.send_json(
+            {
+                "cmd": "axis/param_write",
+                "axis": int(axis_index),
+                "index": str(index),
+                "subindex": str(subindex),
+                "data_type": str(data_type),
+                "value": value,
+            }
+        )
 
 
 class TraceCanvas:
@@ -440,19 +614,21 @@ class AxisServerControlPanel:
         self.root.geometry("1180x820")
         self.root.protocol("WM_DELETE_WINDOW", self.close)
 
+        self.profile_vars = [tk.StringVar(value="0.0") for _ in range(4)]
         self.limit_vars = [tk.StringVar(value="0.0") for _ in range(4)]
         self.software_limit_vars = [
             tk.StringVar(value="0.0"),
             tk.StringVar(value="0.0"),
         ]
         self.command_var = tk.StringVar(value="0.0")
+        self.target_velocity_command_var = tk.StringVar(value="0.0")
         self.target_var = tk.StringVar(value="0.0")
+        self.target_velocity_var = tk.StringVar(value="0.0")
         self.actual_position_var = tk.StringVar(value="0.0")
         self.actual_velocity_var = tk.StringVar(value="0.0")
         self.command_velocity_var = tk.StringVar(value="0.0")
         self.statusword_var = tk.StringVar(value="0x0000")
         self.error_code_var = tk.StringVar(value="No error")
-        self.jerk_entries = []
         self.repeat_point_a_var = tk.StringVar(value="0.0")
         self.repeat_point_b_var = tk.StringVar(value="0.0")
         self.repeat_period_var = tk.StringVar(value="2.0")
@@ -463,14 +639,25 @@ class AxisServerControlPanel:
         self.command_authority_var = tk.StringVar(value="Authority: available")
         self.command_authority_button_var = tk.StringVar(value="Request Authority")
         self.scale_var = tk.StringVar(value="CSP scale: 1.0 count/unit")
+        self.diagnosis_index_var = tk.StringVar(value="0x607F")
+        self.diagnosis_subindex_var = tk.StringVar(value="0x00")
+        self.diagnosis_type_var = tk.StringVar(value="uint32")
+        self.diagnosis_value_var = tk.StringVar(value="0")
+        self.diagnosis_result_var = tk.StringVar(value="No SDO request yet.")
         self.motion_mode_var = tk.StringVar(value="pp")
         self.server_motion_mode = "pp"
+        self.server_mode = "basic"
         self.server_capabilities = {}
         self.dirty_vars = set()
         self.statusword_lamps = []
         self.latest_target_positions = [0.0 for _ in range(self.axis_count)]
+        self.latest_target_velocities = [0.0 for _ in range(self.axis_count)]
         self.latest_actual_positions = [0.0 for _ in range(self.axis_count)]
         self.latest_motion_limits = [
+            [0.0, 0.0, 0.0, 0.0]
+            for _ in range(self.axis_count)
+        ]
+        self.latest_profile_settings = [
             [0.0, 0.0, 0.0, 0.0]
             for _ in range(self.axis_count)
         ]
@@ -480,14 +667,21 @@ class AxisServerControlPanel:
         ]
         self.latest_motion_modes = ["pp" for _ in range(self.axis_count)]
         self.position_counts_per_unit = 1000.0
+        self.csp_mode_button = None
+        self.manual_controlword_frame = None
+        self.manual_controlword_buttons = []
 
         self.repeat_enabled = False
+        self.jog_active_axis = None
         self.repeat_axis_index = 0
         self.repeat_points = None
         self.repeat_index = 0
         self.repeat_wait_until = 0.0
         self.last_sent_repeat_target = None
         self.repeat_waiting_to_send = False
+        self.panel_sdo_read_queue = []
+        self.panel_sdo_read_next_time = 0.0
+        self.panel_sdo_read_connected = False
 
         self._build_ui()
         self.update_mode_dependent_controls()
@@ -560,13 +754,14 @@ class AxisServerControlPanel:
             variable=self.motion_mode_var,
             command=self.apply_motion_mode,
         ).pack(side="left", padx=8, pady=5)
-        ttk.Radiobutton(
+        self.csp_mode_button = ttk.Radiobutton(
             mode_frame,
             text="CSP",
             value="csp",
             variable=self.motion_mode_var,
             command=self.apply_motion_mode,
-        ).pack(side="left", padx=8, pady=5)
+        )
+        self.csp_mode_button.pack(side="left", padx=8, pady=5)
         ttk.Radiobutton(
             mode_frame,
             text="CSV",
@@ -579,19 +774,26 @@ class AxisServerControlPanel:
             text="CSV is available through the TCP protocol only.",
         ).pack(side="left", padx=12, pady=5)
 
-        detail = ttk.LabelFrame(outer, text="Selected Axis Command / Feedback")
+        notebook = ttk.Notebook(outer)
+        notebook.pack(fill="x", pady=(0, 10))
+
+        motion_tab = ttk.Frame(notebook, padding=6)
+        settings_tab = ttk.Frame(notebook, padding=6)
+        limits_tab = ttk.Frame(notebook, padding=6)
+        diagnosis_tab = ttk.Frame(notebook, padding=6)
+        notebook.add(motion_tab, text="Motion")
+        notebook.add(settings_tab, text="Settings")
+        notebook.add(limits_tab, text="Limits")
+        notebook.add(diagnosis_tab, text="Diagnosis")
+
+        detail = ttk.LabelFrame(motion_tab, text="Selected Axis Command / Feedback")
         detail.pack(fill="x")
 
         fields = [
             ("Selected Axis", self.selected_axis_label_var, "label"),
-            ("Max Velocity mm/s", self.limit_vars[0], "entry"),
-            ("Accel mm/s^2", self.limit_vars[1], "entry"),
-            ("Decel mm/s^2", self.limit_vars[2], "entry"),
-            ("Jerk mm/s^3", self.limit_vars[3], "entry_jerk"),
-            ("Negative SW Limit mm", self.software_limit_vars[0], "entry_sw"),
-            ("Positive SW Limit mm", self.software_limit_vars[1], "entry_sw"),
-            ("Command Position mm", self.command_var, "entry"),
-            ("Target Position mm", self.target_var, "label"),
+            ("Target Position mm", self.command_var, "entry"),
+            ("Profile Velocity mm/s", self.profile_vars[0], "entry"),
+            ("Active Target Position mm", self.target_var, "label"),
             ("Actual Position mm", self.actual_position_var, "label"),
             ("Actual Velocity mm/s", self.actual_velocity_var, "label"),
             ("Command Velocity mm/s", self.command_velocity_var, "label"),
@@ -614,8 +816,6 @@ class AxisServerControlPanel:
                     lambda _event, watched_var=var: self.mark_dirty(watched_var),
                 )
                 entry.grid(row=row, column=column + 1, padx=5, pady=5, sticky="ew")
-                if kind == "entry_jerk":
-                    self.jerk_entries.append(entry)
             else:
                 ttk.Label(detail, textvariable=var, anchor="e", width=16).grid(
                     row=row,
@@ -648,25 +848,14 @@ class AxisServerControlPanel:
             sticky="ew",
         )
         detail.columnconfigure(1, weight=1)
-        buttons = ttk.Frame(outer)
+
+        buttons = ttk.Frame(motion_tab)
         buttons.pack(fill="x", pady=(12, 8))
-        ttk.Button(buttons, text="Apply Limits", command=self.apply_limits).pack(
+        ttk.Button(buttons, text="Run", command=self.send_command).pack(
             side="left",
             padx=4,
         )
-        ttk.Button(
-            buttons,
-            text="Apply SW Limits",
-            command=self.apply_software_limits,
-        ).pack(
-            side="left",
-            padx=4,
-        )
-        ttk.Button(buttons, text="Send Command", command=self.send_command).pack(
-            side="left",
-            padx=4,
-        )
-        ttk.Button(buttons, text="Manual Stop", command=self.manual_stop).pack(
+        ttk.Button(buttons, text="Stop", command=self.axis_stop).pack(
             side="left",
             padx=4,
         )
@@ -674,29 +863,31 @@ class AxisServerControlPanel:
             side="left",
             padx=4,
         )
-        ttk.Label(buttons, text="Manual CW").pack(side="left", padx=(12, 4))
+        ttk.Button(buttons, text="Alarm Ack", command=self.axis_reset).pack(
+            side="left",
+            padx=4,
+        )
+        self.manual_controlword_frame = ttk.Frame(buttons)
+        self.manual_controlword_frame.pack(side="left", padx=(12, 0))
+        ttk.Label(self.manual_controlword_frame, text="Manual CW").pack(
+            side="left",
+            padx=(0, 4),
+        )
         for label, value in [
             ("Shutdown", 0x0006),
             ("Switch On", 0x0007),
             ("Enable Op", 0x000F),
             ("Disable Voltage", 0x0000),
         ]:
-            ttk.Button(
-                buttons,
+            button = ttk.Button(
+                self.manual_controlword_frame,
                 text=label,
                 command=lambda cw=value: self.send_manual_controlword(cw),
-            ).pack(side="left", padx=2)
-        ttk.Button(
-            buttons,
-            text="Apply Limits + Send",
-            command=self.apply_limits_and_send,
-        ).pack(side="left", padx=(12, 4))
-        ttk.Button(buttons, text="Alarm Ack", command=self.alarm_ack).pack(
-            side="left",
-            padx=4,
-        )
+            )
+            button.pack(side="left", padx=2)
+            self.manual_controlword_buttons.append(button)
 
-        jog = ttk.LabelFrame(outer, text="Jog")
+        jog = ttk.LabelFrame(motion_tab, text="Jog")
         jog.pack(fill="x", pady=(4, 10))
         ttk.Label(jog, text="Selected Axis").pack(side="left", padx=(8, 4), pady=6)
         ttk.Label(jog, textvariable=self.selected_axis_label_var, width=8).pack(
@@ -704,25 +895,33 @@ class AxisServerControlPanel:
             padx=4,
             pady=6,
         )
-        ttk.Label(jog, text="Step mm").pack(side="left", padx=(12, 4), pady=6)
-        ttk.Entry(
-            jog,
-            textvariable=self.jog_step_var,
-            justify="right",
-            width=12,
-        ).pack(side="left", padx=4, pady=6)
-        ttk.Button(
+        ttk.Label(jog, text="Speed").pack(side="left", padx=(12, 4), pady=6)
+        ttk.Label(jog, text="slow").pack(side="left", padx=4, pady=6)
+        jog_negative = ttk.Button(
             jog,
             text="Jog -",
-            command=lambda: self.send_jog(-1.0),
-        ).pack(side="left", padx=4, pady=6)
-        ttk.Button(
+        )
+        jog_negative.pack(side="left", padx=4, pady=6)
+        jog_negative.bind(
+            "<ButtonPress-1>",
+            lambda _event: self.jog_start("negative"),
+        )
+        jog_negative.bind("<ButtonRelease-1>", lambda _event: self.jog_stop())
+        jog_negative.bind("<Leave>", lambda _event: self.jog_stop())
+
+        jog_positive = ttk.Button(
             jog,
             text="Jog +",
-            command=lambda: self.send_jog(1.0),
-        ).pack(side="left", padx=4, pady=6)
+        )
+        jog_positive.pack(side="left", padx=4, pady=6)
+        jog_positive.bind(
+            "<ButtonPress-1>",
+            lambda _event: self.jog_start("positive"),
+        )
+        jog_positive.bind("<ButtonRelease-1>", lambda _event: self.jog_stop())
+        jog_positive.bind("<Leave>", lambda _event: self.jog_stop())
 
-        repeat = ttk.LabelFrame(outer, text="Repeat Motion")
+        repeat = ttk.LabelFrame(motion_tab, text="Repeat Motion")
         repeat.pack(fill="x", pady=(4, 10))
         ttk.Label(repeat, text="Selected Axis").grid(row=0, column=0, padx=5, pady=4)
         ttk.Label(repeat, textvariable=self.selected_axis_label_var).grid(
@@ -766,6 +965,174 @@ class AxisServerControlPanel:
             pady=4,
         )
 
+        profile_frame = ttk.LabelFrame(settings_tab, text="Selected Axis PP Profile")
+        profile_frame.pack(fill="x", pady=(0, 10))
+        profile_fields = [
+            ("Profile Velocity mm/s", self.profile_vars[0]),
+            ("Profile Accel mm/s^2", self.profile_vars[1]),
+            ("Profile Decel mm/s^2", self.profile_vars[2]),
+            ("Profile Jerk mm/s^3", self.profile_vars[3]),
+        ]
+        for index, (label, var) in enumerate(profile_fields):
+            ttk.Label(profile_frame, text=label).grid(
+                row=0,
+                column=index * 2,
+                padx=5,
+                pady=5,
+                sticky="e",
+            )
+            entry = ttk.Entry(profile_frame, textvariable=var, justify="right", width=14)
+            entry.bind(
+                "<KeyRelease>",
+                lambda _event, watched_var=var: self.mark_dirty(watched_var),
+            )
+            entry.grid(row=0, column=index * 2 + 1, padx=5, pady=5, sticky="ew")
+            profile_frame.columnconfigure(index * 2 + 1, weight=1)
+
+        settings_buttons = ttk.Frame(settings_tab)
+        settings_buttons.pack(fill="x", pady=(4, 0))
+        ttk.Button(
+            settings_buttons,
+            text="Apply PP Profile",
+            command=self.apply_profile_settings,
+        ).pack(side="left", padx=4)
+
+        limit_frame = ttk.LabelFrame(limits_tab, text="Selected Axis Motion Limits")
+        limit_frame.pack(fill="x", pady=(0, 10))
+        limit_fields = [
+            ("Max Profile Velocity (+) mm/s", self.limit_vars[0]),
+            ("Max Profile Velocity (-) mm/s", self.limit_vars[1]),
+            ("Max Accel mm/s^2", self.limit_vars[2]),
+            ("Max Decel mm/s^2", self.limit_vars[3]),
+        ]
+        for index, (label, var) in enumerate(limit_fields):
+            ttk.Label(limit_frame, text=label).grid(
+                row=0,
+                column=index * 2,
+                padx=5,
+                pady=5,
+                sticky="e",
+            )
+            entry = ttk.Entry(limit_frame, textvariable=var, justify="right", width=14)
+            entry.bind(
+                "<KeyRelease>",
+                lambda _event, watched_var=var: self.mark_dirty(watched_var),
+            )
+            entry.grid(row=0, column=index * 2 + 1, padx=5, pady=5, sticky="ew")
+            limit_frame.columnconfigure(index * 2 + 1, weight=1)
+
+        sw_limit_frame = ttk.LabelFrame(limits_tab, text="Selected Axis Software Position Limits")
+        sw_limit_frame.pack(fill="x", pady=(0, 10))
+        sw_limit_fields = [
+            ("Negative SW Limit mm", self.software_limit_vars[0]),
+            ("Positive SW Limit mm", self.software_limit_vars[1]),
+        ]
+        for index, (label, var) in enumerate(sw_limit_fields):
+            ttk.Label(sw_limit_frame, text=label).grid(
+                row=0,
+                column=index * 2,
+                padx=5,
+                pady=5,
+                sticky="e",
+            )
+            entry = ttk.Entry(sw_limit_frame, textvariable=var, justify="right", width=14)
+            entry.bind(
+                "<KeyRelease>",
+                lambda _event, watched_var=var: self.mark_dirty(watched_var),
+            )
+            entry.grid(row=0, column=index * 2 + 1, padx=5, pady=5, sticky="ew")
+            sw_limit_frame.columnconfigure(index * 2 + 1, weight=1)
+
+        limit_buttons = ttk.Frame(limits_tab)
+        limit_buttons.pack(fill="x", pady=(4, 0))
+        ttk.Button(
+            limit_buttons,
+            text="Apply Motion Limits",
+            command=self.apply_motion_limits,
+        ).pack(
+            side="left",
+            padx=4,
+        )
+        ttk.Button(
+            limit_buttons,
+            text="Apply SW Limits",
+            command=self.apply_software_limits,
+        ).pack(
+            side="left",
+            padx=4,
+        )
+
+        diagnosis_frame = ttk.LabelFrame(diagnosis_tab, text="Selected Axis SDO")
+        diagnosis_frame.pack(fill="x", pady=(0, 10))
+        diagnosis_fields = [
+            ("Index", self.diagnosis_index_var, "entry"),
+            ("Subindex", self.diagnosis_subindex_var, "entry"),
+            ("Type", self.diagnosis_type_var, "combo"),
+            ("Value", self.diagnosis_value_var, "entry"),
+        ]
+        for index, (label, var, kind) in enumerate(diagnosis_fields):
+            ttk.Label(diagnosis_frame, text=label).grid(
+                row=0,
+                column=index * 2,
+                padx=5,
+                pady=5,
+                sticky="e",
+            )
+            if kind == "combo":
+                widget = ttk.Combobox(
+                    diagnosis_frame,
+                    textvariable=var,
+                    values=[
+                        "uint8",
+                        "int8",
+                        "uint16",
+                        "int32",
+                        "uint32",
+                        "udint",
+                        "float32",
+                    ],
+                    width=12,
+                    state="readonly",
+                )
+            else:
+                widget = ttk.Entry(
+                    diagnosis_frame,
+                    textvariable=var,
+                    justify="right",
+                    width=14,
+                )
+            widget.grid(
+                row=0,
+                column=index * 2 + 1,
+                padx=5,
+                pady=5,
+                sticky="ew",
+            )
+            diagnosis_frame.columnconfigure(index * 2 + 1, weight=1)
+
+        diagnosis_buttons = ttk.Frame(diagnosis_tab)
+        diagnosis_buttons.pack(fill="x", pady=(4, 8))
+        ttk.Button(
+            diagnosis_buttons,
+            text="Read",
+            command=self.diagnosis_read,
+        ).pack(side="left", padx=4)
+        ttk.Button(
+            diagnosis_buttons,
+            text="Write",
+            command=self.diagnosis_write,
+        ).pack(side="left", padx=4)
+
+        diagnosis_result = ttk.LabelFrame(diagnosis_tab, text="Result")
+        diagnosis_result.pack(fill="both", expand=True)
+        ttk.Label(
+            diagnosis_result,
+            textvariable=self.diagnosis_result_var,
+            anchor="nw",
+            justify="left",
+            wraplength=1080,
+        ).pack(fill="both", expand=True, padx=6, pady=6)
+
         traces = ttk.Frame(outer)
         traces.pack(fill="both", expand=True)
         self.position_trace = TraceCanvas(
@@ -783,14 +1150,35 @@ class AxisServerControlPanel:
     def mark_dirty(self, var):
         self.dirty_vars.add(id(var))
 
-    def apply_limits(self):
+    def apply_profile_settings(self):
+        profile_settings = self.read_selected_profile_values()
+        if profile_settings is None:
+            return
+        axis_index = self.selected_axis()
+        if self.try_send(
+            lambda: self.client.send_profile_settings(axis_index, profile_settings)
+        ):
+            self.queue_panel_sdo_reads([
+                (axis_index, "0x6081", "0x00", "uint32"),
+                (axis_index, "0x6083", "0x00", "uint32"),
+                (axis_index, "0x6084", "0x00", "uint32"),
+                (axis_index, "0x60A4", "0x01", "uint32"),
+            ])
+        for var in self.profile_vars:
+            self.dirty_vars.discard(id(var))
+
+    def apply_motion_limits(self):
         axis_limits = self.read_selected_limit_values()
         if axis_limits is None:
             return
         axis_index = self.selected_axis()
-        limits = [list(values) for values in self.latest_motion_limits]
-        limits[axis_index] = axis_limits
-        self.try_send(lambda: self.client.send_motion_limits(limits))
+        if self.try_send(lambda: self.client.send_axis_motion_limits(axis_index, axis_limits)):
+            self.queue_panel_sdo_reads([
+                (axis_index, "0x607F", "0x00", "uint32"),
+                (axis_index, "0x2183", "0x0C", "float32"),
+                (axis_index, "0x60C5", "0x00", "uint32"),
+                (axis_index, "0x60C6", "0x00", "uint32"),
+            ])
         for var in self.limit_vars:
             self.dirty_vars.discard(id(var))
 
@@ -802,40 +1190,89 @@ class AxisServerControlPanel:
         negative_limit = self.position_unit_to_count(software_limits_mm[0])
         positive_limit = self.position_unit_to_count(software_limits_mm[1])
         axis_index = self.selected_axis()
-        limits = [list(values) for values in self.latest_software_position_limits]
-        limits[axis_index] = [negative_limit, positive_limit]
-        self.try_send(lambda: self.client.send_software_position_limits(limits))
+        if self.try_send(
+            lambda: self.client.send_axis_software_position_limits(
+                axis_index,
+                negative_limit,
+                positive_limit,
+            )
+        ):
+            self.queue_panel_sdo_reads([
+                (axis_index, "0x607D", "0x01", "int32"),
+                (axis_index, "0x607D", "0x02", "int32"),
+            ])
         for var in self.software_limit_vars:
             self.dirty_vars.discard(id(var))
 
     def send_command(self):
+        axis_index = self.selected_axis()
+        if self.latest_motion_modes[axis_index] == "csv":
+            target_velocity = self.read_selected_target_velocity_value()
+            if target_velocity is None:
+                return
+            self.try_send(
+                lambda: self.client.send_target_velocity(axis_index, target_velocity)
+            )
+            return
+
         target_position_mm = self.read_selected_command_value()
         if target_position_mm is None:
             return
-        axis_index = self.selected_axis()
-        targets = list(self.latest_target_positions)
-        targets[axis_index] = self.position_unit_to_count(target_position_mm)
-        self.try_send(lambda: self.client.send_manual_move_absolute(targets))
-
-    def apply_limits_and_send(self):
-        axis_limits = self.read_selected_limit_values()
-        target_position_mm = self.read_selected_command_value()
-        if axis_limits is None or target_position_mm is None:
+        profile_velocity = self.read_selected_motion_profile_velocity()
+        if profile_velocity is None:
             return
+        target_position = self.position_unit_to_count(target_position_mm)
+        self.try_send(
+            lambda: self.client.send_axis_move_absolute(
+                axis_index,
+                target_position,
+                profile_velocity,
+            )
+        )
+        self.dirty_vars.discard(id(self.profile_vars[0]))
+
+    def axis_reset(self):
         axis_index = self.selected_axis()
-        limits = [list(values) for values in self.latest_motion_limits]
-        targets = list(self.latest_target_positions)
-        limits[axis_index] = axis_limits
-        targets[axis_index] = self.position_unit_to_count(target_position_mm)
-        self.try_send(lambda: self.client.send_motion_limits(limits))
-        self.try_send(lambda: self.client.send_manual_move_absolute(targets))
+        self.try_send(lambda: self.client.send_axis_reset(axis_index))
 
-    def alarm_ack(self):
-        self.try_send(self.client.send_alarm_ack)
+    def diagnosis_read(self):
+        request = self.read_diagnosis_request(include_value=False)
+        if request is None:
+            return
+        axis_index, index, subindex, data_type, _value = request
+        self.diagnosis_result_var.set("Waiting for SDO read response...")
+        self.try_send(
+            lambda: self.client.send_param_read(
+                axis_index,
+                index,
+                subindex,
+                data_type,
+            )
+        )
 
-    def manual_stop(self):
+    def diagnosis_write(self):
+        request = self.read_diagnosis_request(include_value=True)
+        if request is None:
+            return
+        axis_index, index, subindex, data_type, value = request
+        self.diagnosis_result_var.set("Waiting for SDO write response...")
+        if self.try_send(
+            lambda: self.client.send_param_write(
+                axis_index,
+                index,
+                subindex,
+                data_type,
+                value,
+            )
+        ):
+            self.queue_panel_sdo_reads([
+                (axis_index, index, subindex, data_type),
+            ])
+
+    def axis_stop(self):
         self.stop_repeat()
-        self.try_send(self.client.send_manual_stop)
+        axis_index = self.selected_axis()
+        self.try_send(lambda: self.client.send_axis_stop(axis_index))
 
     def homing_start(self):
         self.stop_repeat()
@@ -843,7 +1280,7 @@ class AxisServerControlPanel:
         self.try_send(lambda: self.client.send_homing_start(axis_index))
 
     def toggle_command_authority(self):
-        _, _, feedback, _ = self.client.get_snapshot()
+        _, _, feedback, _, _ = self.client.get_snapshot()
         authority = feedback.get("command_authority", {})
         if authority.get("owned_by_this_client", False):
             self.try_send(self.client.release_command_authority)
@@ -899,32 +1336,27 @@ class AxisServerControlPanel:
         axis_index = self.selected_axis()
         self.try_send(lambda: self.client.send_controlword(controlword, axis_index))
 
-    def send_jog(self, direction):
+    def jog_start(self, direction):
         axis_index = self.selected_axis()
-        try:
-            step = float(self.jog_step_var.get())
-        except ValueError:
-            messagebox.showerror(
-                "Invalid Input",
-                "Jog step must be numeric.",
-            )
-            return
-        if step <= 0:
-            messagebox.showerror(
-                "Invalid Input",
-                "Jog step must be greater than 0.",
-            )
-            return
+        self.jog_active_axis = axis_index
+        self.try_send(lambda: self.client.send_jog_start(axis_index, direction))
 
-        self.try_send(
-            lambda: self.client.send_manual_move_relative(
-                axis_index,
-                self.position_unit_to_count(direction * step),
-            )
-        )
+    def jog_stop(self):
+        if self.jog_active_axis is None:
+            return
+        axis_index = self.jog_active_axis
+        self.jog_active_axis = None
+        self.try_send(lambda: self.client.send_jog_stop(axis_index))
 
     def apply_motion_mode(self):
         mode = self.motion_mode_var.get()
+        if mode == "csp" and self.server_mode != "advanced":
+            messagebox.showinfo(
+                "Advanced Mode Required",
+                "CSP mode is available only when Axis Server mode is advanced.",
+            )
+            self.motion_mode_var.set(self.latest_motion_modes[self.selected_axis()])
+            return
         if mode == "csv":
             self.motion_mode_var.set(self.latest_motion_modes[self.selected_axis()])
             return
@@ -951,13 +1383,33 @@ class AxisServerControlPanel:
         self.last_sent_repeat_target = None
         self.repeat_waiting_to_send = False
 
+    def read_selected_profile_values(self):
+        try:
+            return [float(var.get()) for var in self.profile_vars]
+        except ValueError:
+            messagebox.showerror(
+                "Invalid Input",
+                "Profile Velocity, Accel, Decel, Jerk must be numeric values.",
+            )
+            return None
+
+    def read_selected_motion_profile_velocity(self):
+        try:
+            return float(self.profile_vars[0].get())
+        except ValueError:
+            messagebox.showerror(
+                "Invalid Input",
+                "Profile Velocity must be numeric.",
+            )
+            return None
+
     def read_selected_limit_values(self):
         try:
             return [float(var.get()) for var in self.limit_vars]
         except ValueError:
             messagebox.showerror(
                 "Invalid Input",
-                "Max Velocity, Accel, Decel, Jerk must be numeric values.",
+                "Max Profile Velocity +/-, Max Accel, Max Decel must be numeric values.",
             )
             return None
 
@@ -986,7 +1438,17 @@ class AxisServerControlPanel:
         except ValueError:
             messagebox.showerror(
                 "Invalid Input",
-                "Command Position must be numeric.",
+                "Target Position must be numeric.",
+            )
+            return None
+
+    def read_selected_target_velocity_value(self):
+        try:
+            return float(self.target_velocity_command_var.get())
+        except ValueError:
+            messagebox.showerror(
+                "Invalid Input",
+                "Target Velocity must be numeric.",
             )
             return None
 
@@ -1009,14 +1471,129 @@ class AxisServerControlPanel:
             return None
         return point_a, point_b, period
 
+    def read_diagnosis_request(self, include_value):
+        data_type = self.diagnosis_type_var.get().strip().lower()
+        if data_type not in {
+            "uint8",
+            "int8",
+            "uint16",
+            "int32",
+            "uint32",
+            "udint",
+            "float32",
+        }:
+            messagebox.showerror("Invalid Input", "Unsupported SDO data type.")
+            return None
+
+        index = self.diagnosis_index_var.get().strip()
+        subindex = self.diagnosis_subindex_var.get().strip()
+        try:
+            int(index, 0)
+            int(subindex, 0)
+        except ValueError:
+            messagebox.showerror(
+                "Invalid Input",
+                "Index and subindex must be decimal or hex values.",
+            )
+            return None
+
+        value = None
+        if include_value:
+            raw_value = self.diagnosis_value_var.get().strip()
+            try:
+                if data_type == "float32":
+                    value = float(raw_value)
+                else:
+                    int(raw_value, 0)
+                    value = raw_value
+            except ValueError:
+                messagebox.showerror(
+                    "Invalid Input",
+                    "Value must match the selected SDO data type.",
+                )
+                return None
+
+        return self.selected_axis(), index, subindex, data_type, value
+
+    def queue_panel_sdo_reads(self, tasks):
+        with self.client.lock:
+            self._queue_panel_sdo_reads_locked(tasks)
+
+    def _queue_panel_sdo_reads_locked(self, tasks):
+        self.panel_sdo_read_queue = list(tasks) + list(self.panel_sdo_read_queue)
+        self.panel_sdo_read_next_time = time.monotonic() + PANEL_SDO_READ_PERIOD
+
+    @staticmethod
+    def _format_sdo_index(value):
+        return f"0x{int(value):04X}"
+
+    @staticmethod
+    def _format_sdo_subindex(value):
+        return f"0x{int(value):02X}"
+
+    def reset_panel_sdo_read_queue(self):
+        self.panel_sdo_read_queue = []
+        self.panel_sdo_read_next_time = 0.0
+        self.panel_sdo_read_connected = False
+
+    def start_panel_sdo_read_queue(self):
+        self.panel_sdo_read_queue = []
+        for axis_index in range(self.axis_count):
+            self.panel_sdo_read_queue.extend([
+                (axis_index, "0x6041", "0x00", "uint16"),
+                (axis_index, "0x2145", "0x0C", "uint32"),
+                (axis_index, "0x6061", "0x00", "int8"),
+                (axis_index, "0x607D", "0x01", "int32"),
+                (axis_index, "0x607D", "0x02", "int32"),
+                (axis_index, "0x6081", "0x00", "uint32"),
+                (axis_index, "0x6083", "0x00", "uint32"),
+                (axis_index, "0x6084", "0x00", "uint32"),
+                (axis_index, "0x60A4", "0x01", "uint32"),
+                (axis_index, "0x607F", "0x00", "uint32"),
+                (axis_index, "0x2183", "0x0C", "float32"),
+                (axis_index, "0x60C5", "0x00", "uint32"),
+                (axis_index, "0x60C6", "0x00", "uint32"),
+            ])
+        self.panel_sdo_read_next_time = time.monotonic() + PANEL_SDO_READ_DELAY
+        self.panel_sdo_read_connected = True
+
+    def process_panel_sdo_read_queue(self, connected):
+        if not connected:
+            if self.panel_sdo_read_connected:
+                self.reset_panel_sdo_read_queue()
+            return
+
+        if not self.panel_sdo_read_connected:
+            self.start_panel_sdo_read_queue()
+
+        if not self.panel_sdo_read_queue:
+            return
+
+        now = time.monotonic()
+        if now < self.panel_sdo_read_next_time:
+            return
+
+        axis_index, index, subindex, data_type = self.panel_sdo_read_queue.pop(0)
+        try:
+            self.client.send_param_read(axis_index, index, subindex, data_type)
+        except Exception as exc:
+            self.diagnosis_result_var.set(
+                "Panel SDO auto-read failed: "
+                f"axis={axis_index} index={index}:{subindex} ({exc})"
+            )
+        finally:
+            self.panel_sdo_read_next_time = now + PANEL_SDO_READ_PERIOD
+
     def try_send(self, send_func):
         try:
             send_func()
+            return True
         except Exception as exc:
             messagebox.showerror("Send Failed", str(exc))
+            return False
 
     def update_gui(self):
-        connected, error, feedback, notice = self.client.get_snapshot()
+        connected, error, feedback, notice, diagnosis_result = self.client.get_snapshot()
         self.connection_var.set(
             f"Connected {self.client.host}:{self.client.port}"
             if connected
@@ -1024,8 +1601,12 @@ class AxisServerControlPanel:
         )
         if notice:
             messagebox.showinfo("Axis Server", notice)
+        if diagnosis_result:
+            self.diagnosis_result_var.set(diagnosis_result)
+        self.process_panel_sdo_read_queue(connected)
 
         target_positions = self._values(feedback, "target_positions", 0.0)
+        target_velocities = self._values(feedback, "target_velocities", 0.0)
         actual_positions = self._values(feedback, "actual_positions", 0.0)
         actual_velocities = self._values(feedback, "actual_velocities", 0.0)
         setpoint_positions = self._values(feedback, "setpoint_positions", 0.0)
@@ -1033,6 +1614,7 @@ class AxisServerControlPanel:
         command_velocities = self._values(feedback, "command_velocities", 0.0)
         statuswords = self._values(feedback, "statuswords", 0)
         diagnostics = feedback.get("diagnostics", [])
+        self.server_mode = str(feedback.get("server_mode", self.server_mode)).lower()
         motion_mode = str(feedback.get("motion_mode", self.server_motion_mode)).lower()
         motion_modes = [
             str(value).lower()
@@ -1046,10 +1628,13 @@ class AxisServerControlPanel:
                 feedback.get("csp_counts_per_unit", 1.0),
             )
         )
+        profile_settings = self._profile_settings(feedback)
         motion_limits = self._motion_limits(feedback)
         software_position_limits = self._software_position_limits(feedback)
         self.latest_target_positions = target_positions
+        self.latest_target_velocities = target_velocities
         self.latest_actual_positions = actual_positions
+        self.latest_profile_settings = profile_settings
         self.latest_motion_limits = motion_limits
         self.latest_software_position_limits = software_position_limits
         self.latest_motion_modes = motion_modes[:self.axis_count]
@@ -1072,6 +1657,7 @@ class AxisServerControlPanel:
         self.target_var.set(
             f"{self.position_count_to_unit(target_positions[selected_axis]):.3f}"
         )
+        self.target_velocity_var.set(f"{float(target_velocities[selected_axis]):.3f}")
         self.actual_position_var.set(
             f"{self.position_count_to_unit(actual_positions[selected_axis]):.3f}"
         )
@@ -1088,6 +1674,11 @@ class AxisServerControlPanel:
 
         diag = diagnostics[selected_axis] if selected_axis < len(diagnostics) else {}
         self.error_code_var.set(self._format_error_code(diag))
+
+        for limit_index in range(4):
+            var = self.profile_vars[limit_index]
+            if id(var) not in self.dirty_vars:
+                var.set(f"{profile_settings[selected_axis][limit_index]:.3f}")
 
         for limit_index in range(4):
             var = self.limit_vars[limit_index]
@@ -1159,8 +1750,25 @@ class AxisServerControlPanel:
             self.command_authority_button_var.set("Request Authority")
 
     def update_mode_dependent_controls(self):
-        for entry in self.jerk_entries:
-            entry.configure(state="normal")
+        if self.csp_mode_button is not None:
+            self.csp_mode_button.configure(
+                state="normal" if self.server_mode == "advanced" else "disabled"
+            )
+            if (
+                self.server_mode != "advanced"
+                and self.motion_mode_var.get() == "csp"
+            ):
+                self.motion_mode_var.set(self.latest_motion_modes[self.selected_axis()])
+        manual_cw_state = "normal" if self.server_mode == "advanced" else "disabled"
+        for button in self.manual_controlword_buttons:
+            button.configure(state=manual_cw_state)
+        if self.manual_controlword_frame is not None:
+            if self.server_mode == "advanced":
+                if not self.manual_controlword_frame.winfo_ismapped():
+                    self.manual_controlword_frame.pack(side="left", padx=(12, 0))
+            else:
+                if self.manual_controlword_frame.winfo_ismapped():
+                    self.manual_controlword_frame.pack_forget()
 
     def update_repeat(self, actual_positions):
         if not self.repeat_enabled or self.repeat_points is None:
@@ -1173,8 +1781,16 @@ class AxisServerControlPanel:
             self.repeat_points[self.repeat_index],
         )
         if self.last_sent_repeat_target is None:
-            self.try_send(lambda: self.client.send_manual_move_absolute(target))
-            self.last_sent_repeat_target = target[axis_index]
+            target_position = target[axis_index]
+            profile_velocity = self.latest_profile_settings[axis_index][0]
+            self.try_send(
+                lambda: self.client.send_axis_move_absolute(
+                    axis_index,
+                    target_position,
+                    profile_velocity,
+                )
+            )
+            self.last_sent_repeat_target = target_position
             return
 
         if self.repeat_waiting_to_send or now < self.repeat_wait_until:
@@ -1200,8 +1816,16 @@ class AxisServerControlPanel:
         if not self.repeat_enabled:
             return
         target = self._target_vector_for_axis(axis_index, target_position)
-        self.try_send(lambda: self.client.send_manual_move_absolute(target))
-        self.last_sent_repeat_target = target[axis_index]
+        target_count = target[axis_index]
+        profile_velocity = self.latest_profile_settings[axis_index][0]
+        self.try_send(
+            lambda: self.client.send_axis_move_absolute(
+                axis_index,
+                target_count,
+                profile_velocity,
+            )
+        )
+        self.last_sent_repeat_target = target_count
         self.repeat_waiting_to_send = False
 
     def _target_vector_for_axis(self, axis_index, target_position):
@@ -1226,6 +1850,21 @@ class AxisServerControlPanel:
 
     def _motion_limits(self, feedback):
         flat = list(feedback.get("motion_limits", []))
+        required = self.axis_count * 4
+        while len(flat) < required:
+            flat.append(0.0)
+        return [
+            [
+                float(flat[index * 4]),
+                float(flat[index * 4 + 1]),
+                float(flat[index * 4 + 2]),
+                float(flat[index * 4 + 3]),
+            ]
+            for index in range(self.axis_count)
+        ]
+
+    def _profile_settings(self, feedback):
+        flat = list(feedback.get("profile_settings", []))
         required = self.axis_count * 4
         while len(flat) < required:
             flat.append(0.0)

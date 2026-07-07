@@ -61,14 +61,17 @@ class VirtualCiA402Servo(ServoInterface):
 
     def set_motion_limits(self, max_velocity, acceleration, deceleration):
         self.od.write(0x607F, max_velocity)
+        self.od.write(0x2183, -abs(float(max_velocity)) / 1000.0, 0x0C)
+        self.od.write(0x60C5, acceleration)
+        self.od.write(0x60C6, deceleration)
         self.od.write(0x6083, acceleration)
         self.od.write(0x6084, deceleration)
 
     def get_motion_limits(self):
         return {
             "max_velocity": self.od.read(0x607F),
-            "acceleration": self.od.read(0x6083),
-            "deceleration": self.od.read(0x6084),
+            "acceleration": self.od.read(0x60C5),
+            "deceleration": self.od.read(0x60C6),
         }
 
     def set_software_position_limits(self, negative_limit, positive_limit):
@@ -231,7 +234,13 @@ class VirtualCiA402Servo(ServoInterface):
             return
 
         target = self.pp_target_position
-        max_vel = abs(float(self.od.read(0x607F)))
+        profile_vel = abs(float(self.od.read(0x6081)))
+        positive_limit = abs(float(self.od.read(0x607F)))
+        negative_limit = abs(float(self.od.read(0x2183, 0x0C)) * 1000.0)
+        max_profile_vel = positive_limit
+        if target < self.actual_position and negative_limit > 0:
+            max_profile_vel = negative_limit
+        max_vel = min(profile_vel, max_profile_vel) if max_profile_vel > 0 else profile_vel
         accel = abs(float(self.od.read(0x6083)))
         decel = abs(float(self.od.read(0x6084)))
         window = abs(float(self.od.read(0x6067)))
@@ -317,7 +326,13 @@ class VirtualCiA402Servo(ServoInterface):
             return
 
         target = self.od.read(0x607A)
-        max_vel = self.od.read(0x607F)
+        profile_vel = abs(float(self.od.read(0x6081)))
+        positive_limit = abs(float(self.od.read(0x607F)))
+        negative_limit = abs(float(self.od.read(0x2183, 0x0C)) * 1000.0)
+        max_profile_vel = positive_limit
+        if target < self.actual_position and negative_limit > 0:
+            max_profile_vel = negative_limit
+        max_vel = min(profile_vel, max_profile_vel) if max_profile_vel > 0 else profile_vel
         accel = self.od.read(0x6083)
         decel = self.od.read(0x6084)
         

@@ -1,6 +1,7 @@
 from pathlib import Path
 import json
 import sys
+import time
 import tkinter as tk
 from tkinter import messagebox
 from tkinter import ttk
@@ -26,6 +27,7 @@ AXES = get_axis_names()
 GUI_PERIOD_MS = 50
 HISTORY_SIZE = 500
 REPEAT_TOLERANCE = 10.0
+AUTHORITY_STATUS_TIMEOUT = 2.0
 
 
 class TraceCanvas:
@@ -126,6 +128,7 @@ class AxisControlPanelNode(Node):
         self.error_codes = [0 for _ in AXES]
         self.error_registers = [0 for _ in AXES]
         self.command_authority_text = "Authority: unknown"
+        self.command_authority_last_time = 0.0
         self.action_status_text = "Action server: unknown"
         self.action_result_text = "Result: none"
         self.action_feedback_text = "Feedback: none"
@@ -220,7 +223,36 @@ class AxisControlPanelNode(Node):
 
         self.joint_trajectory_pub.publish(msg)
 
+    def publish_joint_trajectory_points(self, points):
+        msg = JointTrajectory()
+        msg.header.stamp = self.get_clock().now().to_msg()
+        msg.joint_names = list(AXES)
+
+        for point_data in points:
+            point = JointTrajectoryPoint()
+            point.positions = [
+                float(value)
+                for value in point_data["positions"]
+            ]
+            point.time_from_start = self.seconds_to_duration(
+                point_data["time_from_start"]
+            )
+            msg.points.append(point)
+
+        self.joint_trajectory_pub.publish(msg)
+
     def send_follow_joint_trajectory(self, targets, done_callback=None):
+        return self.send_follow_joint_trajectory_points(
+            [
+                {
+                    "positions": targets,
+                    "time_from_start": 0.0,
+                }
+            ],
+            done_callback,
+        )
+
+    def send_follow_joint_trajectory_points(self, points, done_callback=None):
         if not self.trajectory_action_client.wait_for_server(timeout_sec=0.1):
             self.action_status_text = "Action server: unavailable"
             self.action_result_text = "Result: no action server"
@@ -232,9 +264,16 @@ class AxisControlPanelNode(Node):
         goal.trajectory.header.stamp = self.get_clock().now().to_msg()
         goal.trajectory.joint_names = list(AXES)
 
-        point = JointTrajectoryPoint()
-        point.positions = [float(value) for value in targets]
-        goal.trajectory.points.append(point)
+        for point_data in points:
+            point = JointTrajectoryPoint()
+            point.positions = [
+                float(value)
+                for value in point_data["positions"]
+            ]
+            point.time_from_start = self.seconds_to_duration(
+                point_data["time_from_start"]
+            )
+            goal.trajectory.points.append(point)
 
         self.action_status_text = "Action goal: sending"
         self.action_result_text = "Result: pending"
@@ -249,6 +288,19 @@ class AxisControlPanelNode(Node):
             )
         )
         return True
+
+    @staticmethod
+    def seconds_to_duration(seconds):
+        seconds = max(0.0, float(seconds))
+        whole_seconds = int(seconds)
+        nanoseconds = int(round((seconds - whole_seconds) * 1_000_000_000.0))
+        if nanoseconds >= 1_000_000_000:
+            whole_seconds += 1
+            nanoseconds -= 1_000_000_000
+        duration = JointTrajectoryPoint().time_from_start
+        duration.sec = whole_seconds
+        duration.nanosec = nanoseconds
+        return duration
 
     def follow_joint_goal_response_callback(self, future, done_callback):
         goal_handle = future.result()
@@ -378,13 +430,19 @@ class AxisControlPanelNode(Node):
         ]
 
     def command_authority_callback(self, msg):
+        self.command_authority_last_time = time.monotonic()
         try:
             payload = json.loads(msg.data)
         except json.JSONDecodeError:
             self.command_authority_text = msg.data
             return
 
-        if payload.get("owned_by_this_client", False):
+        if payload.get("connected") is False:
+            self.command_authority_text = payload.get(
+                "message",
+                "Authority: ROS Bridge disconnected from Axis Server",
+            )
+        elif payload.get("owned_by_this_client", False):
             self.command_authority_text = "Authority: ROS Bridge owns Axis Server"
         elif payload.get("available", False):
             self.command_authority_text = "Authority: available"
@@ -401,6 +459,7 @@ class AxisControlPanelNode(Node):
             text = payload.get("message", msg.data)
         except json.JSONDecodeError:
             text = msg.data
+        self.action_result_text = f"Result: rejected {text}"
         self.get_logger().warn(text)
 
 
@@ -421,6 +480,8 @@ class AxisControlPanelGui:
         self.error_register_vars = []
         self.repeat_point_count_var = tk.StringVar(value="2")
         self.repeat_point_vars = []
+        self.repeat_point_time_vars = []
+        self.repeat_motion_var = tk.BooleanVar(value=False)
         self.repeat_period_var = tk.StringVar(value="2.0")
         self.repeat_points_frame = None
         self.limit_vars = []
@@ -434,9 +495,9 @@ class AxisControlPanelGui:
         self.repeat_enabled = False
         self.repeat_points = None
         self.repeat_period = 2.0
-        self.repeat_index = 0
         self.repeat_target = None
         self.repeat_wait_until = 0.0
+        self.repeat_phase = "idle"
 
         self._build_ui()
         self.root.after(GUI_PERIOD_MS, self.update_gui)
@@ -652,7 +713,7 @@ class AxisControlPanelGui:
             command=self.send_command,
         ).grid(row=0, column=0, padx=5)
 
-        repeat_frame = ttk.LabelFrame(frame, text="Repeat Motion")
+        repeat_frame = ttk.LabelFrame(frame, text="Multi Point Trajectory Motion")
         repeat_frame.grid(
             row=len(AXES) + 3,
             column=0,
@@ -691,9 +752,14 @@ class AxisControlPanelGui:
             padx=5,
             pady=5,
         )
+        ttk.Checkbutton(
+            repeat_frame,
+            text="Repeat",
+            variable=self.repeat_motion_var,
+        ).grid(row=0, column=3, padx=5, pady=5)
         ttk.Label(repeat_frame, text="Period (s)").grid(
             row=0,
-            column=3,
+            column=4,
             padx=5,
             pady=5,
         )
@@ -702,23 +768,23 @@ class AxisControlPanelGui:
             textvariable=self.repeat_period_var,
             justify="right",
             width=10,
-        ).grid(row=0, column=4, padx=5, pady=5)
-        ttk.Button(
-            repeat_frame,
-            text="Start Repeat",
-            command=self.start_repeat,
         ).grid(row=0, column=5, padx=5, pady=5)
         ttk.Button(
             repeat_frame,
-            text="Stop Repeat",
-            command=self.stop_repeat,
+            text="Start Motion",
+            command=self.start_repeat,
         ).grid(row=0, column=6, padx=5, pady=5)
+        ttk.Button(
+            repeat_frame,
+            text="Stop",
+            command=self.stop_repeat,
+        ).grid(row=0, column=7, padx=5, pady=5)
 
         self.repeat_points_frame = ttk.Frame(repeat_frame)
         self.repeat_points_frame.grid(
             row=1,
             column=0,
-            columnspan=7,
+            columnspan=8,
             padx=5,
             pady=(6, 5),
             sticky="ew",
@@ -793,11 +859,16 @@ class AxisControlPanelGui:
             ]
             for point_vars in self.repeat_point_vars
         ]
+        existing_times = [
+            var.get()
+            for var in self.repeat_point_time_vars
+        ]
 
         for child in self.repeat_points_frame.winfo_children():
             child.destroy()
 
         self.repeat_point_vars = []
+        self.repeat_point_time_vars = []
 
         ttk.Label(self.repeat_points_frame, text="Joint").grid(
             row=0,
@@ -842,6 +913,30 @@ class AxisControlPanelGui:
                 )
                 point_vars.append(var)
             self.repeat_point_vars.append(point_vars)
+
+        ttk.Label(self.repeat_points_frame, text="Time from start (s)").grid(
+            row=len(AXES) + 1,
+            column=0,
+            padx=5,
+            pady=5,
+        )
+        for point_index in range(point_count):
+            value = f"{float(point_index):.3f}"
+            if point_index < len(existing_times):
+                value = existing_times[point_index]
+            var = tk.StringVar(value=value)
+            ttk.Entry(
+                self.repeat_points_frame,
+                textvariable=var,
+                justify="right",
+                width=14,
+            ).grid(
+                row=len(AXES) + 1,
+                column=point_index + 1,
+                padx=5,
+                pady=5,
+            )
+            self.repeat_point_time_vars.append(var)
 
     @staticmethod
     def repeat_point_name(index):
@@ -895,84 +990,142 @@ class AxisControlPanelGui:
             return
 
         points, period = repeat_config
-        self.repeat_enabled = True
+        repeat_selected = bool(self.repeat_motion_var.get())
+        self.repeat_enabled = repeat_selected
         self.repeat_points = points
         self.repeat_period = period
-        self.repeat_index = 0
         self.repeat_wait_until = 0.0
-        self.send_repeat_target()
+        self.repeat_phase = "trajectory" if repeat_selected else "idle"
+        self.send_trajectory_points(points)
+        self.repeat_target = (
+            list(points[-1]["positions"])
+            if repeat_selected
+            else None
+        )
 
     def stop_repeat(self):
         self.repeat_enabled = False
         self.repeat_points = None
         self.repeat_target = None
         self.repeat_wait_until = 0.0
-
-    def send_repeat_target(self):
-        if not self.repeat_enabled or self.repeat_points is None:
-            return
-
-        self.repeat_target = list(self.repeat_points[self.repeat_index])
-        self.send_targets(self.repeat_target)
-        self.repeat_wait_until = 0.0
+        self.repeat_phase = "idle"
 
     def update_repeat_motion(self):
         if not self.repeat_enabled or self.repeat_target is None:
             return
 
         now = self.node.get_clock().now().nanoseconds / 1_000_000_000.0
-        if self.repeat_wait_until > 0.0:
+        if self.repeat_phase == "wait_return":
             if now >= self.repeat_wait_until:
-                self.repeat_index = (self.repeat_index + 1) % len(self.repeat_points)
-                self.send_repeat_target()
+                self.repeat_target = list(self.repeat_points[0]["positions"])
+                self.send_targets(self.repeat_target)
+                self.repeat_wait_until = 0.0
+                self.repeat_phase = "return"
             return
 
-        reached = all(
-            abs(actual - target) <= REPEAT_TOLERANCE
-            for actual, target in zip(self.node.actual_positions, self.repeat_target)
-        )
-        if reached:
+        if not self.target_reached(self.repeat_target):
+            return
+
+        if self.repeat_phase == "trajectory":
             self.repeat_wait_until = now + self.repeat_period
+            self.repeat_phase = "wait_return"
+        elif self.repeat_phase == "return":
+            self.send_trajectory_points(self.repeat_points)
+            self.repeat_target = list(self.repeat_points[-1]["positions"])
+            self.repeat_phase = "trajectory"
+
+    def target_reached(self, target):
+        if len(target) < len(AXES) or len(self.node.actual_positions) < len(AXES):
+            return False
+        return all(
+            abs(actual - target_value) <= REPEAT_TOLERANCE
+            for actual, target_value in zip(self.node.actual_positions, target)
+        )
 
     def read_repeat_values(self):
         try:
-            points = [
+            repeat_selected = bool(self.repeat_motion_var.get())
+            positions = [
                 [
                     float(var.get())
                     for var in point_vars
                 ]
                 for point_vars in self.repeat_point_vars
             ]
-            period = float(self.repeat_period_var.get())
+            times = [
+                float(var.get())
+                for var in self.repeat_point_time_vars
+            ]
+            period = (
+                float(self.repeat_period_var.get())
+                if repeat_selected
+                else 0.0
+            )
         except ValueError:
             messagebox.showerror(
                 "Invalid Input",
-                "Repeat point values and period must be numeric values.",
+                "Point values, time from start, and period must be numeric values.",
             )
             return None
 
-        if len(points) < 2:
+        if len(positions) < 2:
             messagebox.showerror(
                 "Invalid Input",
-                "Repeat motion needs at least 2 points.",
+                "Multi Point Trajectory Motion needs at least 2 points.",
             )
             return None
 
-        if any(len(point) != len(AXES) for point in points):
+        if len(times) != len(positions):
             messagebox.showerror(
                 "Invalid Input",
-                "Each repeat point must define all joint positions.",
+                "Each point must define a time from start.",
             )
             return None
 
-        if period <= 0:
+        if any(len(point) != len(AXES) for point in positions):
             messagebox.showerror(
                 "Invalid Input",
-                "Repeat period must be greater than 0.",
+                "Each trajectory point must define all joint positions.",
             )
             return None
 
+        if any(time_value < 0.0 for time_value in times):
+            messagebox.showerror(
+                "Invalid Input",
+                "Time from start must be greater than or equal to 0.",
+            )
+            return None
+
+        if any(current <= previous for previous, current in zip(times, times[1:])):
+            messagebox.showerror(
+                "Invalid Input",
+                "Time from start values must be strictly increasing.",
+            )
+            return None
+
+        if self.repeat_motion_var.get() and period <= 0:
+            messagebox.showerror(
+                "Invalid Input",
+                "Period must be greater than 0 when Repeat is enabled.",
+            )
+            return None
+
+        points = [
+            {
+                "positions": point,
+                "time_from_start": time_value,
+            }
+            for point, time_value in zip(positions, times)
+        ]
         return points, period
+
+    def send_trajectory_points(self, points, done_callback=None):
+        if self.command_transport_var.get() == "Action Controller":
+            self.node.send_follow_joint_trajectory_points(points, done_callback)
+        else:
+            self.node.publish_joint_trajectory_points(points)
+            if done_callback is not None:
+                done_callback(True)
 
     def read_command_position_values(self):
         try:
@@ -989,6 +1142,14 @@ class AxisControlPanelGui:
 
     def update_gui(self):
         rclpy.spin_once(self.node, timeout_sec=0.0)
+        if (
+            self.node.command_authority_last_time > 0.0
+            and time.monotonic() - self.node.command_authority_last_time
+            > AUTHORITY_STATUS_TIMEOUT
+        ):
+            self.node.command_authority_text = (
+                "Authority: ROS Bridge status stale/disconnected"
+            )
         self.command_authority_var.set(self.node.command_authority_text)
         action_ready = self.node.follow_joint_action_ready()
         if self.command_transport_var.get() == "Action Controller":

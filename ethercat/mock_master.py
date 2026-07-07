@@ -1,5 +1,5 @@
 from ethercat.distributed_clock import DistributedClock
-from axis_server.csp_trajectory_generator import CspTrajectoryGenerator
+from motion.csp_trajectory_generator import CspTrajectoryGenerator
 from ethercat.working_counter import WorkingCounter
 
 
@@ -12,6 +12,7 @@ class MockMaster:
         csp_velocity_offset_enabled=False,
         csp_command_step_threshold=0.0,
         csp_command_step_error_threshold=0.0,
+        csp_profile="quintic",
     ):
         self.slaves = slaves
         self.cycle_time = cycle_time
@@ -21,6 +22,7 @@ class MockMaster:
         self.csp_command_step_error_threshold = float(
             csp_command_step_error_threshold
         )
+        self.csp_profile = str(csp_profile).strip().lower()
         self.last_csp_command_steps = []
         self.dc = DistributedClock()
         self.working_counter = WorkingCounter()
@@ -30,7 +32,10 @@ class MockMaster:
         self._connected = False
         self.last_diagnostics = []
         self.trajectory_generators = [
-            CspTrajectoryGenerator(slave.txpdo.actual_position)
+            CspTrajectoryGenerator(
+                slave.txpdo.actual_position,
+                csp_profile=self.csp_profile,
+            )
             for slave in self.slaves
         ]
 
@@ -101,6 +106,9 @@ class MockMaster:
     def sdo_write_uint32(self, slave_index, index, subindex, value):
         self._write_object(slave_index, index, value, subindex)
 
+    def sdo_write_float32(self, slave_index, index, subindex, value):
+        self._write_object(slave_index, index, float(value), subindex)
+
     def sdo_read_int8(self, slave_index, index, subindex):
         return int(self._read_object(slave_index, index, subindex))
 
@@ -115,6 +123,9 @@ class MockMaster:
 
     def sdo_read_uint32(self, slave_index, index, subindex):
         return int(self._read_object(slave_index, index, subindex)) & 0xFFFFFFFF
+
+    def sdo_read_float32(self, slave_index, index, subindex):
+        return float(self._read_object(slave_index, index, subindex))
 
     def send_processdata(self):
         self.dc_time_ns = self.dc.get_time_ns()
@@ -239,8 +250,16 @@ class MockMaster:
                 return slave.rxpdo.profile_velocity
             return int(slave.motion_limits.max_velocity)
         if index == 0x6083:
-            return slave.motion_limits.acceleration
+            return slave.axis.servo.od.read(0x6083)
         if index == 0x6084:
+            return slave.axis.servo.od.read(0x6084)
+        if index == 0x607F:
+            return slave.motion_limits.max_velocity
+        if index == 0x2183 and subindex == 0x0C:
+            return slave.axis.servo.od.read(0x2183, 0x0C)
+        if index == 0x60C5:
+            return slave.motion_limits.acceleration
+        if index == 0x60C6:
             return slave.motion_limits.deceleration
         raise KeyError(f"Unsupported mock SDO read 0x{index:04X}")
 
@@ -291,25 +310,21 @@ class MockMaster:
         elif index == 0x6081:
             if slave.rxpdo.has_field("profile_velocity"):
                 slave.rxpdo.profile_velocity = int(value)
-            slave.motion_limits.max_velocity = float(value)
-            slave.axis.set_motion_limits(
-                slave.motion_limits.max_velocity,
-                slave.motion_limits.acceleration,
-                slave.motion_limits.deceleration,
-            )
+            slave.axis.servo.od.write(0x6081, int(value))
         elif index == 0x6083:
-            slave.motion_limits.acceleration = float(value)
-            slave.axis.set_motion_limits(
-                slave.motion_limits.max_velocity,
-                slave.motion_limits.acceleration,
-                slave.motion_limits.deceleration,
-            )
+            slave.axis.servo.od.write(0x6083, int(value))
         elif index == 0x6084:
+            slave.axis.servo.od.write(0x6084, int(value))
+        elif index == 0x607F:
+            slave.motion_limits.max_velocity = float(value)
+            slave.axis.servo.od.write(0x607F, value)
+        elif index == 0x2183 and subindex == 0x0C:
+            slave.axis.servo.od.write(0x2183, float(value), 0x0C)
+        elif index == 0x60C5:
+            slave.motion_limits.acceleration = float(value)
+            slave.axis.servo.od.write(0x60C5, value)
+        elif index == 0x60C6:
             slave.motion_limits.deceleration = float(value)
-            slave.axis.set_motion_limits(
-                slave.motion_limits.max_velocity,
-                slave.motion_limits.acceleration,
-                slave.motion_limits.deceleration,
-            )
+            slave.axis.servo.od.write(0x60C6, value)
         else:
             raise KeyError(f"Unsupported mock SDO write 0x{index:04X}")

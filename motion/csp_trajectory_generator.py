@@ -2,7 +2,9 @@ import math
 
 
 class CspTrajectoryGenerator:
-    def __init__(self, initial_position=0.0):
+    CSP_PROFILE_TYPES = ("trapezoid", "quintic")
+
+    def __init__(self, initial_position=0.0, csp_profile="quintic"):
         self.command_position = float(initial_position)
         self.target_position = float(initial_position)
         self.command_velocity = 0.0
@@ -11,13 +13,37 @@ class CspTrajectoryGenerator:
         self.timed_elapsed = 0.0
         self.timed_segment = 0
         self.timed_active = False
-        self.manual_profile = None
+        self.trajectory_move_profile = "point_move"
+        self.point_move_profile_state = None
+        self.csp_profile = self._normalize_csp_profile(
+            csp_profile
+        )
+
+    @classmethod
+    def _normalize_csp_profile(cls, value):
+        profile_type = str(value).strip().lower()
+        if profile_type not in cls.CSP_PROFILE_TYPES:
+            raise ValueError(
+                "Unsupported CSP profile "
+                f"{value!r}; expected one of "
+                f"{', '.join(cls.CSP_PROFILE_TYPES)}."
+            )
+        return profile_type
+
+    def set_csp_profile(self, csp_profile):
+        self.csp_profile = self._normalize_csp_profile(
+            csp_profile
+        )
+        self.point_move_profile_state = None
+
+    def set_point_move_target(self, target_position):
+        self.set_target_position(target_position)
 
     def set_target_position(self, target_position):
         self.target_position = float(target_position)
         self.timed_active = False
         self.timed_points = []
-        self.manual_profile = None
+        self.point_move_profile_state = None
 
     def reset(self, position):
         self.command_position = float(position)
@@ -28,9 +54,10 @@ class CspTrajectoryGenerator:
         self.timed_elapsed = 0.0
         self.timed_segment = 0
         self.timed_active = False
-        self.manual_profile = None
+        self.trajectory_move_profile = "point_move"
+        self.point_move_profile_state = None
 
-    def set_timed_trajectory(self, points):
+    def set_trajectory_move(self, points):
         self.timed_points = [
             {
                 "position": float(point["position"]),
@@ -48,11 +75,13 @@ class CspTrajectoryGenerator:
             }
             for point in points
         ]
-        self._fill_missing_timed_velocities()
+        self.trajectory_move_profile = self._classify_trajectory_move_profile(
+            self.timed_points
+        )
         self.timed_elapsed = 0.0
         self.timed_segment = 0
         self.timed_active = len(self.timed_points) >= 2
-        self.manual_profile = None
+        self.point_move_profile_state = None
         if self.timed_points:
             first = self.timed_points[0]
             self.command_position = first["position"]
@@ -60,12 +89,19 @@ class CspTrajectoryGenerator:
             self.command_velocity = first["velocity"] or 0.0
             self.command_acceleration = first["acceleration"] or 0.0
 
-    def clear_timed_trajectory(self):
+    def set_timed_trajectory(self, points):
+        self.set_trajectory_move(points)
+
+    def clear_trajectory_move(self):
         self.timed_points = []
         self.timed_elapsed = 0.0
         self.timed_segment = 0
         self.timed_active = False
-        self.manual_profile = None
+        self.trajectory_move_profile = "point_move"
+        self.point_move_profile_state = None
+
+    def clear_timed_trajectory(self):
+        self.clear_trajectory_move()
 
     def update(
         self,
@@ -84,8 +120,8 @@ class CspTrajectoryGenerator:
         if self.timed_active:
             return self._update_timed_trajectory(cycle_time)
 
-        if jerk <= 0.0:
-            self.manual_profile = None
+        if self.csp_profile == "trapezoid":
+            self.point_move_profile_state = None
             return self._update_trapezoid(
                 cycle_time,
                 max_velocity,
@@ -93,7 +129,12 @@ class CspTrajectoryGenerator:
                 deceleration,
             )
 
-        return self._update_smooth_manual_profile(
+        if jerk <= 0.0:
+            raise ValueError(
+                "CSP quintic point move profile requires jerk > 0."
+            )
+
+        return self._update_quintic_point_move(
             cycle_time,
             max_velocity,
             acceleration,
@@ -101,7 +142,7 @@ class CspTrajectoryGenerator:
             jerk,
         )
 
-    def _update_smooth_manual_profile(
+    def _update_quintic_point_move(
         self,
         cycle_time,
         max_velocity,
@@ -110,10 +151,10 @@ class CspTrajectoryGenerator:
         jerk,
     ):
         if (
-            self.manual_profile is None
-            or self.manual_profile["target"] != self.target_position
+            self.point_move_profile_state is None
+            or self.point_move_profile_state["target"] != self.target_position
         ):
-            self.manual_profile = self._create_smooth_manual_profile(
+            self.point_move_profile_state = self._create_quintic_point_move(
                 self.command_position,
                 self.target_position,
                 max_velocity,
@@ -122,7 +163,7 @@ class CspTrajectoryGenerator:
                 jerk,
             )
 
-        profile = self.manual_profile
+        profile = self.point_move_profile_state
         duration = profile["duration"]
         elapsed = min(profile["elapsed"] + cycle_time, duration)
         if duration - elapsed <= cycle_time * 0.5:
@@ -133,7 +174,7 @@ class CspTrajectoryGenerator:
             self.command_position = self.target_position
             self.command_velocity = 0.0
             self.command_acceleration = 0.0
-            self.manual_profile = None
+            self.point_move_profile_state = None
             return self.command_position
 
         s = max(0.0, min(1.0, elapsed / duration))
@@ -154,11 +195,11 @@ class CspTrajectoryGenerator:
             self.command_position = self.target_position
             self.command_velocity = 0.0
             self.command_acceleration = 0.0
-            self.manual_profile = None
+            self.point_move_profile_state = None
 
         return self.command_position
 
-    def _create_smooth_manual_profile(
+    def _create_quintic_point_move(
         self,
         start,
         target,
@@ -246,8 +287,34 @@ class CspTrajectoryGenerator:
             final = points[-1]
             self.command_position = final["position"]
             self.target_position = final["position"]
-            self.command_velocity = final["velocity"] or 0.0
-            self.command_acceleration = final["acceleration"] or 0.0
+            self.command_velocity = (
+                final["velocity"]
+                if self.trajectory_move_profile != "point_move"
+                else 0.0
+            ) or 0.0
+            self.command_acceleration = (
+                final["acceleration"]
+                if self.trajectory_move_profile == "quintic"
+                else 0.0
+            ) or 0.0
+            self.timed_segment = max(0, len(points) - 2)
+            self.timed_active = False
+            return self.command_position
+
+        if points[-1]["time_from_start"] - self.timed_elapsed <= cycle_time * 0.5:
+            final = points[-1]
+            self.command_position = final["position"]
+            self.target_position = final["position"]
+            self.command_velocity = (
+                final["velocity"]
+                if self.trajectory_move_profile != "point_move"
+                else 0.0
+            ) or 0.0
+            self.command_acceleration = (
+                final["acceleration"]
+                if self.trajectory_move_profile == "quintic"
+                else 0.0
+            ) or 0.0
             self.timed_segment = max(0, len(points) - 2)
             self.timed_active = False
             return self.command_position
@@ -263,7 +330,12 @@ class CspTrajectoryGenerator:
             self.command_position,
             self.command_velocity,
             self.command_acceleration,
-        ) = self._interpolate_timed_axis(start, end, local_time, duration)
+        ) = self._interpolate_trajectory_move_segment(
+            start,
+            end,
+            local_time,
+            duration,
+        )
         self.target_position = self.command_position
         self.timed_elapsed += cycle_time
         return self.command_position
@@ -274,56 +346,129 @@ class CspTrajectoryGenerator:
                 return index
         return len(self.timed_points) - 2
 
-    def _fill_missing_timed_velocities(self):
-        points = self.timed_points
-        if len(points) < 2:
-            return
+    def _classify_trajectory_move_profile(self, points):
+        if (
+            any(point["velocity"] is None for point in points)
+            or all(self._is_zero(point["velocity"]) for point in points)
+        ):
+            return "point_move"
+        if (
+            any(point["acceleration"] is None for point in points)
+            or all(self._is_zero(point["acceleration"]) for point in points)
+        ):
+            return "cubic"
+        return "quintic"
 
-        slopes = []
-        for start, end in zip(points, points[1:]):
-            duration = max(
-                end["time_from_start"] - start["time_from_start"],
-                1e-9,
+    def _is_zero(self, value):
+        return value is not None and abs(float(value)) <= 1e-12
+
+    def _interpolate_trajectory_move_segment(
+        self,
+        start,
+        end,
+        local_time,
+        duration,
+    ):
+        if self.trajectory_move_profile == "point_move":
+            return self._interpolate_point_move_segment(
+                start,
+                end,
+                local_time,
+                duration,
             )
-            slopes.append((end["position"] - start["position"]) / duration)
+        if self.trajectory_move_profile == "cubic":
+            return self._interpolate_cubic_segment(
+                start,
+                end,
+                local_time,
+                duration,
+            )
+        return self._interpolate_quintic_segment(
+            start,
+            end,
+            local_time,
+            duration,
+        )
 
-        for index, point in enumerate(points):
-            if point["velocity"] is not None:
-                continue
+    def _interpolate_point_move_segment(self, start, end, local_time, duration):
+        duration = max(float(duration), 1e-9)
+        t = max(0.0, min(duration, float(local_time)))
+        s = t / duration
+        p0 = start["position"]
+        p1 = end["position"]
+        distance = p1 - p0
 
-            if index == 0 or index == len(points) - 1:
-                point["velocity"] = 0.0
-                continue
+        if self.csp_profile == "trapezoid":
+            position, velocity, acceleration = self._trapezoid_shape(s)
+        else:
+            position, velocity, acceleration = self._quintic_shape(s)
 
-            previous_slope = slopes[index - 1]
-            next_slope = slopes[index]
-            if previous_slope == 0.0 or next_slope == 0.0:
-                point["velocity"] = 0.0
-            elif previous_slope * next_slope < 0.0:
-                point["velocity"] = 0.0
-            else:
-                point["velocity"] = 0.5 * (previous_slope + next_slope)
+        return (
+            p0 + distance * position,
+            distance * velocity / duration,
+            distance * acceleration / (duration * duration),
+        )
 
-    def _interpolate_timed_axis(self, start, end, local_time, duration):
+    def _trapezoid_shape(self, s):
+        s = max(0.0, min(1.0, float(s)))
+        peak_velocity = 4.0 / 3.0
+        acceleration = 16.0 / 3.0
+        if s < 0.25:
+            position = 0.5 * acceleration * s * s
+            velocity = acceleration * s
+            normalized_acceleration = acceleration
+        elif s <= 0.75:
+            position = (peak_velocity * s) - (1.0 / 6.0)
+            velocity = peak_velocity
+            normalized_acceleration = 0.0
+        else:
+            remaining = 1.0 - s
+            position = 1.0 - 0.5 * acceleration * remaining * remaining
+            velocity = acceleration * remaining
+            normalized_acceleration = -acceleration
+        return position, velocity, normalized_acceleration
+
+    def _quintic_shape(self, s):
+        s = max(0.0, min(1.0, float(s)))
+        position = 10.0 * s**3 - 15.0 * s**4 + 6.0 * s**5
+        velocity = 30.0 * s**2 - 60.0 * s**3 + 30.0 * s**4
+        acceleration = 60.0 * s - 180.0 * s**2 + 120.0 * s**3
+        return position, velocity, acceleration
+
+    def _interpolate_cubic_segment(self, start, end, local_time, duration):
         duration = max(float(duration), 1e-9)
         t = max(0.0, min(duration, float(local_time)))
         p0 = start["position"]
         p1 = end["position"]
-        v0 = start["velocity"]
-        v1 = end["velocity"]
-        a0 = start["acceleration"]
-        a1 = end["acceleration"]
+        v0 = start["velocity"] or 0.0
+        v1 = end["velocity"] or 0.0
 
-        if v0 is None and v1 is None:
-            ratio = t / duration
-            position = p0 + (p1 - p0) * ratio
-            velocity = (p1 - p0) / duration
-            return position, velocity, 0.0
+        c0 = p0
+        c1 = v0
+        duration2 = duration * duration
+        duration3 = duration2 * duration
+        c2 = (
+            3.0 * (p1 - p0)
+            - (2.0 * v0 + v1) * duration
+        ) / duration2
+        c3 = (
+            2.0 * (p0 - p1)
+            + (v0 + v1) * duration
+        ) / duration3
+        position = c0 + c1 * t + c2 * t * t + c3 * t * t * t
+        velocity = c1 + 2.0 * c2 * t + 3.0 * c3 * t * t
+        acceleration = 2.0 * c2 + 6.0 * c3 * t
+        return position, velocity, acceleration
 
-        v0 = v0 or 0.0
-        v1 = v1 or 0.0
-        a0 = a0 if a0 is not None else 0.0
-        a1 = a1 if a1 is not None else 0.0
+    def _interpolate_quintic_segment(self, start, end, local_time, duration):
+        duration = max(float(duration), 1e-9)
+        t = max(0.0, min(duration, float(local_time)))
+        p0 = start["position"]
+        p1 = end["position"]
+        v0 = start["velocity"] or 0.0
+        v1 = end["velocity"] or 0.0
+        a0 = start["acceleration"] or 0.0
+        a1 = end["acceleration"] or 0.0
 
         c0 = p0
         c1 = v0

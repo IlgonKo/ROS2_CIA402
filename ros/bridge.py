@@ -75,6 +75,9 @@ class Cia402CommandBridgeNode(Node):
         self.feedback_lock = threading.Lock()
         self.latest_actual_positions = [0.0 for _ in range(self.axis_count)]
         self.latest_actual_velocities = [0.0 for _ in range(self.axis_count)]
+        self.latest_trajectory_state = "idle"
+        self.latest_trajectory_message = ""
+        self.last_published_trajectory_fault = ""
         self.position_counts_per_unit = float(
             os.environ.get(
                 "ROS_BRIDGE_POSITION_COUNTS_PER_UNIT",
@@ -470,9 +473,20 @@ class Cia402CommandBridgeNode(Node):
             return result
 
         final_target = command_points[-1]["positions"]
-        if not self.wait_for_action_target(goal_handle, final_target, time.monotonic()):
-            result.error_code = FollowJointTrajectory.Result.GOAL_TOLERANCE_VIOLATED
-            result.error_string = "Final target was not reached before timeout."
+        reached, fault_message = self.wait_for_action_target(
+            goal_handle,
+            final_target,
+            time.monotonic(),
+        )
+        if not reached:
+            if fault_message:
+                result.error_code = FollowJointTrajectory.Result.INVALID_GOAL
+                result.error_string = fault_message
+            else:
+                result.error_code = (
+                    FollowJointTrajectory.Result.GOAL_TOLERANCE_VIOLATED
+                )
+                result.error_string = "Final target was not reached before timeout."
             goal_handle.abort()
             return result
 
@@ -494,6 +508,9 @@ class Cia402CommandBridgeNode(Node):
                 "Ignoring trajectory command until Axis Server authority is granted."
             )
             return False
+        with self.feedback_lock:
+            self.latest_trajectory_state = ""
+            self.latest_trajectory_message = ""
         return self.send_json(
             {
                 "type": "trajectory_command",
@@ -624,10 +641,16 @@ class Cia402CommandBridgeNode(Node):
             if goal_handle.is_cancel_requested:
                 self.send_trajectory_stop()
                 goal_handle.canceled()
-                return False
+                return False, ""
 
             with self.feedback_lock:
                 actual_positions = list(self.latest_actual_positions)
+                trajectory_state = self.latest_trajectory_state
+                trajectory_message = self.latest_trajectory_message
+
+            if trajectory_state == "fault":
+                self.publish_follow_joint_feedback(goal_handle, target_positions)
+                return False, trajectory_message or "Axis Server trajectory fault."
 
             if self.positions_within_tolerance(
                 actual_positions,
@@ -635,12 +658,12 @@ class Cia402CommandBridgeNode(Node):
                 goal_handle.request.goal_tolerance,
             ):
                 self.publish_follow_joint_feedback(goal_handle, target_positions)
-                return True
+                return True, ""
 
             self.publish_follow_joint_feedback(goal_handle, target_positions)
             time.sleep(0.05)
 
-        return False
+        return False, ""
 
     def positions_within_tolerance(self, actual_positions, target_positions, tolerances):
         if len(actual_positions) < self.axis_count:
@@ -786,6 +809,7 @@ class Cia402CommandBridgeNode(Node):
                 self.get_logger().error(f"Bridge error: {exc}")
             finally:
                 self.close_socket()
+                self.publish_axis_server_disconnected()
 
             time.sleep(RECONNECT_PERIOD)
 
@@ -850,6 +874,11 @@ class Cia402CommandBridgeNode(Node):
                 float(value)
                 for value in list(actual_velocities)[:self.axis_count]
             ]
+            trajectory = message.get("trajectory", {})
+            self.latest_trajectory_state = str(trajectory.get("state", ""))
+            self.latest_trajectory_message = str(trajectory.get("message", ""))
+
+        self.publish_trajectory_fault_if_needed(message.get("trajectory", {}))
 
         self.publish_float_array(
             self.target_position_pub,
@@ -887,6 +916,26 @@ class Cia402CommandBridgeNode(Node):
         )
         self.update_axis_server_authority_state(message.get("command_authority", {}))
         self.update_repeat_motion(actual_positions)
+
+    def publish_trajectory_fault_if_needed(self, trajectory):
+        if not isinstance(trajectory, dict):
+            return
+        if trajectory.get("state") != "fault":
+            self.last_published_trajectory_fault = ""
+            return
+
+        message = str(trajectory.get("message", "Axis Server trajectory fault."))
+        if message == self.last_published_trajectory_fault:
+            return
+
+        self.last_published_trajectory_fault = message
+        payload = {
+            "type": "trajectory_fault",
+            "command": "trajectory_command",
+            "message": message,
+        }
+        self.publish_string(self.command_rejected_pub, payload)
+        self.get_logger().error(message)
 
     def update_repeat_motion(self, actual_positions):
         if not self.repeat_enabled or self.repeat_points is None:
@@ -948,6 +997,20 @@ class Cia402CommandBridgeNode(Node):
             if self.sock is not None:
                 self.sock.close()
                 self.sock = None
+
+        self.has_axis_server_authority = False
+
+    def publish_axis_server_disconnected(self):
+        self.publish_string(
+            self.command_authority_pub,
+            {
+                "connected": False,
+                "owned_by_this_client": False,
+                "available": False,
+                "owner": None,
+                "message": "Authority: ROS Bridge disconnected from Axis Server",
+            },
+        )
 
     def publish_float_array(self, publisher, values):
         msg = Float64MultiArray()

@@ -3,6 +3,7 @@ set -euo pipefail
 
 INTERFACE="${PYSOEM_INTERFACE:-enp1s0}"
 BACKEND="${AXIS_SERVER_BACKEND:-pysoem}"
+SERVER_MODE="${AXIS_SERVER_MODE:-basic}"
 DEVICE="${PYSOEM_DEVICE:-cmmt}"
 AXIS_COUNT="${PYSOEM_AXIS_COUNT:-1}"
 PORT="${AXIS_SERVER_PORT:-15000}"
@@ -24,13 +25,16 @@ DECELERATION="${PYSOEM_DECELERATION:-100.0}"
 JERK="${PYSOEM_JERK:-1000.0}"
 PP_JERK="${PYSOEM_PP_JERK:-100000}"
 CSP_COUNTS_PER_UNIT="${PYSOEM_CSP_COUNTS_PER_UNIT:-1.0}"
+CSP_PROFILE="${PYSOEM_CSP_PROFILE:-quintic}"
 CSP_INTERPOLATION_MODE="${PYSOEM_CSP_INTERPOLATION_MODE:-1}"
 CSP_VELOCITY_OFFSET="${PYSOEM_CSP_VELOCITY_OFFSET:-0}"
 DERIVED_VELOCITY_ALPHA="${PYSOEM_DERIVED_VELOCITY_ALPHA:-0.2}"
 MOTION_MODE="${PYSOEM_MOTION_MODE:-pp}"
+COMMAND_LOGS="${AXIS_SERVER_COMMAND_LOGS:-0}"
 
 echo "Starting Axis Server"
 echo "Backend=${BACKEND}"
+echo "ServerMode=${SERVER_MODE}"
 echo "Device=${DEVICE}"
 echo "Interface=${INTERFACE}"
 echo "AxisCount=${AXIS_COUNT}"
@@ -47,21 +51,19 @@ echo "DcPhaseOffsetNs=${DC_PHASE_OFFSET_NS}"
 echo "DcPhaseKp=${DC_PHASE_KP}"
 echo "DcPhaseKi=${DC_PHASE_KI}"
 echo "DcPhaseMaxCorrection=${DC_PHASE_MAX_CORRECTION}"
-echo "MaxVelocity=${MAX_VELOCITY}"
-echo "Acceleration=${ACCELERATION}"
-echo "Deceleration=${DECELERATION}"
-echo "Jerk=${JERK}"
-echo "PpJerk=${PP_JERK}"
 echo "CspCountsPerUnit=${CSP_COUNTS_PER_UNIT}"
+echo "CspProfile=${CSP_PROFILE}"
 echo "CspInterpolationMode=${CSP_INTERPOLATION_MODE}"
 echo "CspVelocityOffset=${CSP_VELOCITY_OFFSET}"
 echo "DerivedVelocityAlpha=${DERIVED_VELOCITY_ALPHA}"
 echo "MotionMode=${MOTION_MODE}"
+echo "CommandLogs=${COMMAND_LOGS}"
 
 SERVER_CMD=(
   python3 -B /workspace/axis_server/server.py
   "${INTERFACE}" \
   --backend "${BACKEND}" \
+  --server-mode "${SERVER_MODE}" \
   --device "${DEVICE}" \
   --host 0.0.0.0 \
   --port "${PORT}" \
@@ -79,6 +81,7 @@ SERVER_CMD=(
   --jerk "${JERK}" \
   --pp-jerk "${PP_JERK}" \
   --csp-counts-per-unit "${CSP_COUNTS_PER_UNIT}" \
+  --csp-profile "${CSP_PROFILE}" \
   --csp-interpolation-mode "${CSP_INTERPOLATION_MODE}" \
   --derived-velocity-alpha "${DERIVED_VELOCITY_ALPHA}" \
   --axis-count "${AXIS_COUNT}" \

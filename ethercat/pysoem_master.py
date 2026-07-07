@@ -5,7 +5,7 @@ import struct
 import sys
 import time
 
-from axis_server.csp_trajectory_generator import CspTrajectoryGenerator
+from motion.csp_trajectory_generator import CspTrajectoryGenerator
 from device import get_device_profile
 from device.cmmt.pdo_codec import CiA402PdoCodec
 from device.cmmt.rxpdo import RxPDO
@@ -46,6 +46,7 @@ class PySOEMMaster:
         csp_velocity_offset_enabled=False,
         csp_command_step_threshold=0.0,
         csp_command_step_error_threshold=0.0,
+        csp_profile="quintic",
     ):
         self.interface_name = interface_name
         self.slave_count = slave_count
@@ -62,6 +63,7 @@ class PySOEMMaster:
         self.csp_command_step_error_threshold = float(
             csp_command_step_error_threshold
         )
+        self.csp_profile = str(csp_profile).strip().lower()
         self.last_csp_command_steps = []
         self.last_csp_output_steps = []
 
@@ -88,7 +90,9 @@ class PySOEMMaster:
         ]
 
         self.trajectory_generators = [
-            CspTrajectoryGenerator()
+            CspTrajectoryGenerator(
+                csp_profile=self.csp_profile,
+            )
             for _ in self.slaves
         ]
 
@@ -290,6 +294,15 @@ class PySOEMMaster:
             size=4,
         )
         return struct.unpack("<I", payload[:4])[0]
+
+    def sdo_read_float32(self, slave_index, index, subindex):
+        self._require_connected()
+        payload = self._master.slaves[slave_index].sdo_read(
+            index,
+            subindex,
+            size=4,
+        )
+        return struct.unpack("<f", payload[:4])[0]
 
     def set_axis_motion_limits(
         self,

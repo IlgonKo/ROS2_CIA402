@@ -6,6 +6,7 @@ class CMMTDeviceProfile:
     name = "cmmt"
 
     PROFILE_POSITION_MODE = 1
+    JOG_MODE = -3
     HOMING_MODE = 6
     CSP_MODE = 8
     CSV_MODE = 9
@@ -30,13 +31,24 @@ class CMMTDeviceProfile:
     PP_JERK_INDEX = 0x60A4
     PP_JERK_SUBINDEX = 0x01
     SOFTWARE_POSITION_LIMIT_INDEX = 0x607D
+    MAX_PROFILE_VELOCITY_INDEX = 0x607F
+    NEGATIVE_VELOCITY_LIMIT_INDEX = 0x2183
+    NEGATIVE_VELOCITY_LIMIT_SUBINDEX = 0x0C
     PROFILE_VELOCITY_INDEX = 0x6081
     PROFILE_ACCELERATION_INDEX = 0x6083
     PROFILE_DECELERATION_INDEX = 0x6084
+    MAX_ACCELERATION_INDEX = 0x60C5
+    MAX_DECELERATION_INDEX = 0x60C6
     SYNC_PARAMETER_INDEX = 0x212E
+    PARAMETER_SAVE_INDEX = 0x2005
+    PARAMETER_SAVE_COMMAND_SUBINDEX = 0x01
+    PARAMETER_SAVE_STATUS_SUBINDEX = 0x02
+    PARAMETER_SAVE_SELECTION_SUBINDEX = 0x03
+    PARAMETER_SAVE_RETURN_CODE_SUBINDEX = 0x04
 
     MOTION_MODES = {
         "pp": PROFILE_POSITION_MODE,
+        "jog": JOG_MODE,
         "csp": CSP_MODE,
         "csv": CSV_MODE,
     }
@@ -200,8 +212,8 @@ class CMMTDeviceProfile:
         return " | ".join(parts)
 
     def configure_mode_code(self, master, axis_index, code):
-        master.slaves[axis_index].rxpdo.mode_of_operation = code
         master.sdo_write_int8(axis_index, self.MODE_OF_OPERATION_INDEX, 0, code)
+        master.slaves[axis_index].rxpdo.mode_of_operation = code
 
     def write_csp_interpolation_mode(self, master, axis_index, value):
         master.sdo_write_uint32(
@@ -216,25 +228,125 @@ class CMMTDeviceProfile:
             self.CSP_INTERPOLATION_MODE_SUBINDEX,
         )
 
-    def write_profile_motion_limits(self, master, axis_index, limits):
+    def write_profile_settings(
+        self,
+        master,
+        axis_index,
+        profile_velocity,
+        profile_acceleration,
+        profile_deceleration,
+    ):
         master.sdo_write_uint32(
             axis_index,
             self.PROFILE_VELOCITY_INDEX,
             0,
-            max(0, int(limits.max_velocity)),
+            max(0, int(profile_velocity)),
         )
         master.sdo_write_uint32(
             axis_index,
             self.PROFILE_ACCELERATION_INDEX,
             0,
-            max(0, int(limits.acceleration)),
+            max(0, int(profile_acceleration)),
         )
         master.sdo_write_uint32(
             axis_index,
             self.PROFILE_DECELERATION_INDEX,
             0,
-            max(0, int(limits.deceleration)),
+            max(0, int(profile_deceleration)),
         )
+
+    def write_profile_motion_limits(self, master, axis_index, limits):
+        self.write_profile_settings(
+            master,
+            axis_index,
+            limits.max_velocity,
+            limits.acceleration,
+            limits.deceleration,
+        )
+
+    def write_motion_limits(
+        self,
+        master,
+        axis_index,
+        positive_velocity_limit,
+        negative_velocity_limit,
+        max_acceleration,
+        max_deceleration,
+    ):
+        master.sdo_write_uint32(
+            axis_index,
+            self.MAX_PROFILE_VELOCITY_INDEX,
+            0,
+            max(0, int(positive_velocity_limit)),
+        )
+        master.sdo_write_float32(
+            axis_index,
+            self.NEGATIVE_VELOCITY_LIMIT_INDEX,
+            self.NEGATIVE_VELOCITY_LIMIT_SUBINDEX,
+            float(negative_velocity_limit) / 1000.0,
+        )
+        master.sdo_write_uint32(
+            axis_index,
+            self.MAX_ACCELERATION_INDEX,
+            0,
+            max(0, int(max_acceleration)),
+        )
+        master.sdo_write_uint32(
+            axis_index,
+            self.MAX_DECELERATION_INDEX,
+            0,
+            max(0, int(max_deceleration)),
+        )
+
+    def read_profile_settings(self, master, axis_index):
+        return [
+            float(master.sdo_read_uint32(
+                axis_index,
+                self.PROFILE_VELOCITY_INDEX,
+                0,
+            )),
+            float(master.sdo_read_uint32(
+                axis_index,
+                self.PROFILE_ACCELERATION_INDEX,
+                0,
+            )),
+            float(master.sdo_read_uint32(
+                axis_index,
+                self.PROFILE_DECELERATION_INDEX,
+                0,
+            )),
+            float(master.sdo_read_uint32(
+                axis_index,
+                self.PP_JERK_INDEX,
+                self.PP_JERK_SUBINDEX,
+            )),
+        ]
+
+    def read_motion_limits(self, master, axis_index):
+        positive_velocity_limit = float(master.sdo_read_uint32(
+            axis_index,
+            self.MAX_PROFILE_VELOCITY_INDEX,
+            0,
+        ))
+        negative_velocity_limit = float(master.sdo_read_float32(
+            axis_index,
+            self.NEGATIVE_VELOCITY_LIMIT_INDEX,
+            self.NEGATIVE_VELOCITY_LIMIT_SUBINDEX,
+        )) * 1000.0
+        return [
+            positive_velocity_limit,
+            negative_velocity_limit,
+            float(master.sdo_read_uint32(
+                axis_index,
+                self.MAX_ACCELERATION_INDEX,
+                0,
+            )),
+            float(master.sdo_read_uint32(
+                axis_index,
+                self.MAX_DECELERATION_INDEX,
+                0,
+            )),
+        ]
 
     def write_profile_jerk(self, master, axis_index, pp_jerk):
         master.sdo_write_uint32(
@@ -315,3 +427,37 @@ class CMMTDeviceProfile:
                 cycle_time,
             )
         return True
+
+    def save_parameters(self, master, axis_index):
+        master.sdo_write_uint32(
+            axis_index,
+            self.PARAMETER_SAVE_INDEX,
+            self.PARAMETER_SAVE_SELECTION_SUBINDEX,
+            1,
+        )
+        master.sdo_write_uint32(
+            axis_index,
+            self.PARAMETER_SAVE_INDEX,
+            self.PARAMETER_SAVE_COMMAND_SUBINDEX,
+            1,
+        )
+        status = master.sdo_read_uint32(
+            axis_index,
+            self.PARAMETER_SAVE_INDEX,
+            self.PARAMETER_SAVE_STATUS_SUBINDEX,
+        )
+        return_code = master.sdo_read_uint32(
+            axis_index,
+            self.PARAMETER_SAVE_INDEX,
+            self.PARAMETER_SAVE_RETURN_CODE_SUBINDEX,
+        )
+        master.sdo_write_uint32(
+            axis_index,
+            self.PARAMETER_SAVE_INDEX,
+            self.PARAMETER_SAVE_COMMAND_SUBINDEX,
+            0,
+        )
+        return {
+            "status": int(status),
+            "return_code": int(return_code),
+        }

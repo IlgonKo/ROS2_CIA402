@@ -172,9 +172,16 @@ CMMT_OBJECTS = {
     od_key(0x607F): CiA402Object(
         0x607F,
         0,
-        "Max profile velocity",
+        "Limit value velocity limit positive direction of movement",
         "uint32",
         default=100,
+    ),
+    od_key(0x2183, 0x0C): CiA402Object(
+        0x2183,
+        0x0C,
+        "Limit value velocity limit negative direction of movement",
+        "float32",
+        default=-0.1,
     ),
     od_key(0x607A): CiA402Object(
         0x607A,
@@ -202,6 +209,20 @@ CMMT_OBJECTS = {
         0x6084,
         0,
         "Profile deceleration",
+        "uint32",
+        default=50,
+    ),
+    od_key(0x60C5): CiA402Object(
+        0x60C5,
+        0,
+        "Max acceleration",
+        "uint32",
+        default=50,
+    ),
+    od_key(0x60C6): CiA402Object(
+        0x60C6,
+        0,
+        "Max deceleration",
         "uint32",
         default=50,
     ),
