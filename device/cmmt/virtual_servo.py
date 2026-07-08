@@ -158,8 +158,6 @@ class VirtualCiA402Servo(ServoInterface):
             self.process_pp()
         elif mode == 8:
             self.process_csp()
-        elif mode == 9:
-            self.process_csv()
         elif mode == 6:
             self.process_homing()
 
@@ -364,35 +362,3 @@ class VirtualCiA402Servo(ServoInterface):
         self.od.write(0x606C, self.actual_velocity)
 
         self.update_target_reached()
-
-    def process_csv(self):
-
-        if self.sm.get_statusword() != 0x0027:
-
-            return
-
-        target_velocity = self.od.read(
-            0x60FF
-        )
-
-        self.actual_velocity = \
-            target_velocity
-
-        self.actual_position += (
-            self.actual_velocity *
-            self.cycle_time
-        )
-
-        self.od.write(
-            0x6064,
-            int(
-                self.actual_position
-            )
-        )
-
-        self.od.write(
-            0x606C,
-            int(
-                self.actual_velocity
-            )
-        )

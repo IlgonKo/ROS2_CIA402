@@ -9,7 +9,6 @@ class CMMTDeviceProfile:
     JOG_MODE = -3
     HOMING_MODE = 6
     CSP_MODE = 8
-    CSV_MODE = 9
 
     PP_BASE_CONTROLWORD = 0x000F
     PP_NEW_SETPOINT_CONTROLWORD = 0x003F
@@ -50,7 +49,6 @@ class CMMTDeviceProfile:
         "pp": PROFILE_POSITION_MODE,
         "jog": JOG_MODE,
         "csp": CSP_MODE,
-        "csv": CSV_MODE,
     }
 
     MAIN_GROUPS = {
@@ -393,14 +391,14 @@ class CMMTDeviceProfile:
     def default_txpdo1_mapping(self):
         return (
             TxPDO.MAPPING_ENTRIES,
-            "Restored TxPDO1 mapping: default CMMT feedback layout",
+            "Configured TxPDO1 mapping from Axis Server TxPDO layout",
         )
 
     def txpdo_setpoint_mapping(self):
         return (
             TxPDO.SETPOINT_REPLACE_ENTRIES,
-            "Configured TxPDO1 mapping: replaced 0x6064:00 actual position "
-            "with 0x6062:00 setpoint position",
+            "Configured TxPDO1 mapping from Axis Server TxPDO layout: "
+            "replaced 0x6064:00 actual position with 0x6062:00 setpoint position",
         )
 
     def configure_sync_parameters(self, master, axis_count, sync_mode, cycle_time):

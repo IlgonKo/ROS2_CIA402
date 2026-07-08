@@ -15,7 +15,6 @@ from axis_server.config import (
     CSP_MODE,
     CYCLE_STATS_LOGS,
     CYCLE_STATS_PERIOD,
-    CSV_MODE,
     DEVICE_PROFILE,
     FEEDBACK_PERIOD,
     HOMING_ERROR_MASK,
@@ -56,6 +55,8 @@ from ethercat.mock_slave import MockSlave
 from ethercat.pysoem_master import PySOEMMaster
 from motion.axis import Axis
 
+# Public command sets
+
 
 COMMAND_MESSAGE_TYPES = {
     "system/stop",
@@ -67,7 +68,6 @@ COMMAND_MESSAGE_TYPES = {
     "axis/stop",
     "axis/move_abs",
     "axis/move_rel",
-    "axis/target_velocity",
     "axis/jog_start",
     "axis/jog_stop",
     "axis/profile",
@@ -96,6 +96,8 @@ STATUS_MESSAGE_TYPES = {
     "axis/status",
     "trajectory/status",
 }
+
+# Master Startup
 
 
 def create_master(args, motion_limits):
@@ -165,6 +167,8 @@ def parse_optional_sync_mode(raw_value):
             f"Unsupported sync mode {sync_mode}; expected 0, 1, 2, or empty."
         )
     return sync_mode
+
+# Cycle I/O
 
 
 class CycleStats:
@@ -277,6 +281,7 @@ def wait_status_all(master, expected_status, max_cycles=None, timeout_s=2.0):
         if max_cycles is None and deadline is None:
             return False
 
+# Drive State And Mode
 
 def read_drive_diagnostics(master, axis_index):
     return DEVICE_PROFILE.read_diagnostics(master, axis_index)
@@ -373,6 +378,7 @@ def write_csp_interpolation_modes(master, csp_interpolation_mode):
                 flush=True,
             )
 
+# Feedback Snapshots
 
 def feedback_message(master, state, client_id=None):
     owner = state.get("command_authority_owner")
@@ -394,7 +400,6 @@ def feedback_message(master, state, client_id=None):
             for slave in master.slaves
         ],
         "derived_velocities": state["derived_velocities"],
-        "target_velocities": state["target_velocities"],
         "command_positions": [
             float(generator.command_position)
             for generator in master.trajectory_generators
@@ -480,6 +485,39 @@ def hold_faulted_axes(master, state):
         master.set_target_positions(state["target_positions"])
 
 
+def operation_enabled_axes(master, axes):
+    return [
+        axis_index
+        for axis_index in axes
+        if int(master.slaves[axis_index].txpdo.statusword) & 0x0004
+    ]
+
+
+def disabled_operation_axes(master, axes):
+    enabled = set(operation_enabled_axes(master, axes))
+    return [
+        axis_index
+        for axis_index in axes
+        if axis_index not in enabled
+    ]
+
+
+def reject_if_any_axis_disabled(master, axes, client, command):
+    disabled_axes = disabled_operation_axes(master, axes)
+    if not disabled_axes:
+        return False
+
+    reject_command_message(
+        client,
+        command,
+        "Axis operation is disabled. "
+        f"disabled_axes={disabled_axes} "
+        f"statuswords={[f'0x{master.slaves[index].txpdo.statusword:04X}' for index in disabled_axes]}",
+    )
+    return True
+
+# Trajectory Runtime
+
 def inactive_trajectory_state(result="idle"):
     return {
         "active": False,
@@ -512,7 +550,8 @@ def ensure_csp_mode(master, state, axis_indices):
         master.set_target_positions(state["target_positions"])
 
 
-def handle_trajectory_stop(message, master, state):
+def handle_trajectory_stop(message, master, state, client):
+    command = public_command_name(message)
     mode = str(message.get("mode", "controlled")).strip().lower()
     if mode != "controlled":
         state["trajectory"] = inactive_trajectory_state("stop_rejected")
@@ -522,6 +561,11 @@ def handle_trajectory_stop(message, master, state):
 
     state["trajectory"] = inactive_trajectory_state("stopped")
     axes = list(range(axis_count(master)))
+    if reject_if_any_axis_disabled(master, axes, client, command):
+        state["trajectory"] = inactive_trajectory_state("stop_rejected")
+        state["trajectory"]["message"] = "Axis operation is disabled."
+        return
+
     ensure_csp_mode(master, state, axes)
     positions = actual_positions(master)
     state["target_positions"] = positions
@@ -540,6 +584,7 @@ def handle_trajectory_status(client, master, state):
     message["type"] = "trajectory/status"
     send_client_message(client, message)
 
+# Homing Runtime
 
 def inactive_homing_state(result="idle"):
     return {
@@ -669,6 +714,17 @@ def handle_homing_start(message, master, state, client):
         send_homing_status(client, master, state)
         print(f"Ignored axis/home: {exc}", flush=True)
         return
+    disabled_axes = disabled_operation_axes(master, axis_indices)
+    if disabled_axes:
+        message_text = (
+            "Axis operation is disabled. "
+            f"disabled_axes={disabled_axes}"
+        )
+        state["homing"] = inactive_homing_state("rejected")
+        state["homing"]["message"] = message_text
+        send_homing_status(client, master, state)
+        print(f"Ignored axis/home: {message_text}", flush=True)
+        return
 
     original_modes = {
         axis_index: state["motion_modes"][axis_index]
@@ -777,6 +833,7 @@ SDO_WRITERS = {
     "float32": "sdo_write_float32",
 }
 
+# Parameter Commands
 
 def sdo_response_type(message, default_type):
     return command_name(message) or default_type
@@ -920,6 +977,7 @@ def handle_param_save(message, master, client):
         },
     )
 
+# Motion Command Helpers
 
 def parse_int_field(value, base=0):
     if isinstance(value, int):
@@ -1010,7 +1068,7 @@ def update_active_trajectory(master, state):
         )
 
 
-def command_position_axes(master, state, axes, positions, command_name):
+def command_position_axes(master, state, axes, positions, command_name, client=None):
     faults = faulted_axes(master)
     if faults:
         hold_faulted_axes(master, state)
@@ -1021,6 +1079,18 @@ def command_position_axes(master, state, axes, positions, command_name):
             f"statuswords={[f'0x{slave.txpdo.statusword:04X}' for slave in master.slaves]}",
             flush=True,
         )
+        return
+
+    disabled_axes = disabled_operation_axes(master, axes)
+    if disabled_axes:
+        message_text = (
+            "Axis operation is disabled. "
+            f"disabled_axes={disabled_axes} "
+            f"statuswords={[f'0x{master.slaves[index].txpdo.statusword:04X}' for index in disabled_axes]}"
+        )
+        if client is not None:
+            reject_command_message(client, command_name, message_text)
+        print(f"Ignored {command_name}: {message_text}", flush=True)
         return
 
     target_positions = list(state["target_positions"])
@@ -1038,37 +1108,21 @@ def command_position_axes(master, state, axes, positions, command_name):
         for axis_index in axes
         if state["motion_modes"][axis_index] == "csp"
     ]
-    csv_axes = [
-        axis_index
-        for axis_index in axes
-        if state["motion_modes"][axis_index] == "csv"
-    ]
     jog_axes = [
         axis_index
         for axis_index in axes
         if state["motion_modes"][axis_index] == "jog"
     ]
-    if csv_axes or jog_axes:
+    if jog_axes:
         print(
             f"Ignored {command_name} for non-position axes. "
-            f"csv_axes={csv_axes} jog_axes={jog_axes}",
+            f"jog_axes={jog_axes}",
             flush=True,
         )
     if pp_axes:
         command_profile_positions(master, state["target_positions"], pp_axes)
     if csp_axes:
         command_csp_positions(master, state["target_positions"], csp_axes)
-
-    commanded_axes = pp_axes + csp_axes
-    print(
-        f"Received {command_name}: "
-        f"axes={commanded_axes} "
-        f"targets={[state['target_positions'][axis] for axis in commanded_axes]} "
-        f"modes={[state['motion_modes'][axis] for axis in commanded_axes]} "
-        f"current_actual={[actual_positions(master)[axis] for axis in commanded_axes]}",
-        flush=True,
-    )
-
 
 def axis_positions_from_message(message, master, state, command):
     axes = selected_axes(message, master, command)
@@ -1125,7 +1179,7 @@ def handle_axis_move_abs(message, master, state, client):
     except Exception as exc:
         reject_command_message(client, command, str(exc))
         return
-    command_position_axes(master, state, axes, positions, command)
+    command_position_axes(master, state, axes, positions, command, client)
 
 
 def handle_axis_move_rel(message, master, state, client):
@@ -1140,7 +1194,7 @@ def handle_axis_move_rel(message, master, state, client):
     positions = actual_positions(master)
     for axis_index, distance in zip(axes, distances):
         positions[axis_index] += distance
-    command_position_axes(master, state, axes, positions, command)
+    command_position_axes(master, state, axes, positions, command, client)
 
 
 def apply_move_profile_velocity(message, master, state, axes):
@@ -1166,6 +1220,7 @@ def apply_move_profile_velocity(message, master, state, axes):
         if slave.rxpdo.has_field("profile_velocity"):
             slave.rxpdo.profile_velocity = int(profile_velocity)
 
+# System And Axis Commands
 
 def handle_system_stop(message, master, state):
     mode = str(message.get("mode", "controlled")).strip().lower()
@@ -1181,7 +1236,10 @@ def handle_system_stop(message, master, state):
     state["target_positions"] = positions
     master.set_target_positions(positions)
     master.sync_trajectory_to_actual_positions()
+    enabled_axes = set(operation_enabled_axes(master, range(axis_count(master))))
     for axis_index, motion_mode in enumerate(state["motion_modes"]):
+        if axis_index not in enabled_axes:
+            continue
         if motion_mode == "pp":
             command_profile_positions(master, positions, [axis_index])
         elif motion_mode == "csp":
@@ -1201,6 +1259,8 @@ def handle_axis_stop(message, master, state, client):
     except Exception as exc:
         reject_command_message(client, command, str(exc))
         return
+    if reject_if_any_axis_disabled(master, axes, client, command):
+        return
 
     if state.get("homing", {}).get("active"):
         finish_homing(master, state, "stopped", "Homing stopped by axis/stop.")
@@ -1215,24 +1275,17 @@ def handle_axis_stop(message, master, state, client):
     state["target_positions"] = positions
     master.set_target_positions(positions)
     master.sync_trajectory_to_actual_positions()
+    enabled_axes = set(operation_enabled_axes(master, axes))
     for axis_index in axes:
+        if axis_index not in enabled_axes:
+            continue
         motion_mode = state["motion_modes"][axis_index]
         if motion_mode == "pp":
             command_profile_positions(master, positions, [axis_index])
         elif motion_mode == "csp":
             command_csp_positions(master, positions, [axis_index])
-        elif motion_mode == "csv":
-            master.slaves[axis_index].rxpdo.target_velocity = 0
-            state["target_velocities"][axis_index] = 0.0
         elif motion_mode == "jog":
             master.slaves[axis_index].rxpdo.controlword = 0x000F
-
-    print(
-        "Received axis/stop: "
-        f"axes={axes} hold_positions={positions}",
-        flush=True,
-    )
-
 
 def handle_axis_motion_limits(message, master, state, client):
     command = public_command_name(message)
@@ -1312,7 +1365,18 @@ def update_axis_motion_limits(
     master.slaves[axis_index].axis_server_motion_limits = list(
         state["motion_limits"][axis_index]
     )
-    write_motion_limits(master, axis_index)
+    write_axis_motion_limits(master, axis_index, state["motion_limits"][axis_index])
+
+
+def write_axis_motion_limits(master, axis_index, axis_limits):
+    DEVICE_PROFILE.write_motion_limits(
+        master,
+        axis_index,
+        axis_limits[0],
+        axis_limits[1],
+        axis_limits[2],
+        axis_limits[3],
+    )
 
 
 def handle_axis_profile_settings(message, master, state, client):
@@ -1501,11 +1565,6 @@ def handle_motion_mode(message, master, state, client=None):
         hold_axis_at_actual_position(master, state, axis_index)
     master.set_target_positions(state["target_positions"])
 
-    if requested_mode == "csv":
-        for axis_index in axis_indices:
-            state["target_velocities"][axis_index] = 0.0
-            master.slaves[axis_index].rxpdo.target_velocity = 0
-
     changed_axes = []
     failed = []
     for axis_index in axis_indices:
@@ -1545,49 +1604,6 @@ def handle_motion_mode(message, master, state, client=None):
             f"to {requested_mode.upper()} modes={state['motion_modes']}",
             flush=True,
         )
-
-
-def handle_axis_target_velocity(message, master, state, client):
-    command = public_command_name(message)
-    try:
-        axes = selected_axes(message, master, command)
-        if "velocities" in message:
-            velocities = [
-                float(value)
-                for value in message.get("velocities", [])
-            ]
-        elif "velocity" in message:
-            velocities = [float(message.get("velocity"))]
-        else:
-            raise ValueError(f"{command} requires velocities or velocity")
-        if len(velocities) != len(axes):
-            raise ValueError(
-                f"{command} value count must match selected axes. "
-                f"axes={len(axes)} values={len(velocities)}"
-            )
-        for axis_index in axes:
-            require_pdo_fields_for_mode(master, "csv", axis_index)
-            if state["motion_modes"][axis_index] != "csv":
-                hold_axis_at_actual_position(master, state, axis_index)
-                configure_motion_mode(master, "csv", axis_index)
-                state["motion_modes"][axis_index] = "csv"
-        update_motion_mode_summary(state)
-    except Exception as exc:
-        reject_command_message(client, command, str(exc))
-        return
-
-    for axis_index, velocity in zip(axes, velocities):
-        state["target_velocities"][axis_index] = velocity
-        slave = master.slaves[axis_index]
-        slave.rxpdo.mode_of_operation = CSV_MODE
-        slave.rxpdo.target_velocity = int(round(velocity))
-        slave.rxpdo.controlword = 0x000F
-
-    print(
-        "Received axis/target_velocity: "
-        f"axes={axes} target_velocities={state['target_velocities']}",
-        flush=True,
-    )
 
 
 def handle_fault_reset(master, state, axis_indices=None):
@@ -1644,7 +1660,14 @@ def handle_axis_enable(message, master, state, client):
         return
     for axis_index in axes:
         master.slaves[axis_index].rxpdo.controlword = 0x000F
-    print(f"Received axis/enable: axes={axes}", flush=True)
+    exchange(master, cycles=3)
+    print(
+        "Received axis/enable: "
+        f"axes={axes} "
+        f"statuswords={[f'0x{master.slaves[index].txpdo.statusword:04X}' for index in axes]}",
+        flush=True,
+    )
+    send_client_message(client, feedback_message(master, state, client["id"]))
 
 
 def handle_axis_disable(message, master, state, client):
@@ -1654,11 +1677,27 @@ def handle_axis_disable(message, master, state, client):
     except Exception as exc:
         reject_command_message(client, command, str(exc))
         return
+
+    trajectory = state.get("trajectory", {})
+    if trajectory.get("active") and set(axes) & set(trajectory.get("axes", [])):
+        state["trajectory"] = inactive_trajectory_state("axis_disable")
+
+    homing = state.get("homing", {})
+    if homing.get("active") and set(axes) & set(homing.get("axes", [])):
+        finish_homing(master, state, "stopped", "Homing stopped by axis/disable.")
+
     for axis_index in axes:
         hold_axis_at_actual_position(master, state, axis_index)
-        master.slaves[axis_index].rxpdo.controlword = 0x0006
+        master.slaves[axis_index].rxpdo.controlword = 0x0007
     master.set_target_positions(state["target_positions"])
-    print(f"Received axis/disable: axes={axes}", flush=True)
+    exchange(master, cycles=3)
+    print(
+        "Received axis/disable: "
+        f"axes={axes} "
+        f"statuswords={[f'0x{master.slaves[index].txpdo.statusword:04X}' for index in axes]}",
+        flush=True,
+    )
+    send_client_message(client, feedback_message(master, state, client["id"]))
 
 
 def handle_axis_jog_start(message, master, state, client):
@@ -1677,6 +1716,8 @@ def handle_axis_jog_start(message, master, state, client):
             )
     except Exception as exc:
         reject_command_message(client, command, str(exc))
+        return
+    if reject_if_any_axis_disabled(master, [axis_index], client, command):
         return
 
     try:
@@ -1722,7 +1763,10 @@ def handle_axis_jog_stop(message, master, state, client):
         return
 
     slave = master.slaves[axis_index]
-    slave.rxpdo.controlword = 0x000F
+    if disabled_operation_axes(master, [axis_index]):
+        slave.rxpdo.controlword = 0x0007
+    else:
+        slave.rxpdo.controlword = 0x000F
     exchange(master, cycles=5)
 
     previous_mode = state["jog_previous_modes"][axis_index] or "pp"
@@ -1790,6 +1834,7 @@ def handle_controlword(message, master, state):
         flush=True,
     )
 
+# Command Dispatch And TCP Clients
 
 def is_advanced_mode(state):
     return state.get("server_mode") == "advanced"
@@ -2015,12 +2060,13 @@ def handle_message(message, master, state, client):
             state,
             axis_count=axis_count,
             faulted_axes=faulted_axes,
+            disabled_operation_axes=disabled_operation_axes,
             hold_faulted_axes=hold_faulted_axes,
             ensure_csp_mode=ensure_csp_mode,
             inactive_trajectory_state=inactive_trajectory_state,
         )
     elif message_type == "trajectory/stop":
-        handle_trajectory_stop(message, master, state)
+        handle_trajectory_stop(message, master, state, client)
     elif message_type == "system/stop":
         handle_system_stop(message, master, state)
     elif message_type == "system/reset":
@@ -2039,8 +2085,6 @@ def handle_message(message, master, state, client):
         handle_axis_move_abs(message, master, state, client)
     elif message_type == "axis/move_rel":
         handle_axis_move_rel(message, master, state, client)
-    elif message_type == "axis/target_velocity":
-        handle_axis_target_velocity(message, master, state, client)
     elif message_type == "axis/jog_start":
         handle_axis_jog_start(message, master, state, client)
     elif message_type == "axis/jog_stop":
@@ -2116,6 +2160,7 @@ def close_client(client, state):
         pass
     print(f"Client disconnected: id={client_id}", flush=True)
 
+# Feedback Update Helpers
 
 def update_derived_velocities(master, state, now):
     positions = actual_positions(master)
@@ -2142,6 +2187,7 @@ def update_derived_velocities(master, state, now):
     state["derived_velocity_time"] = now
     state["derived_velocity_positions"] = positions
 
+# Position Output Helpers
 
 def command_profile_positions(master, target_positions, axis_indices):
     for axis_index in axis_indices:
@@ -2215,29 +2261,7 @@ def command_csp_positions(master, target_positions, axis_indices):
 
     master.set_target_positions(target_positions)
 
-
-def write_motion_limits(master, axis_index):
-    limits = master.slaves[axis_index].motion_limits
-    state_limits = getattr(master.slaves[axis_index], "axis_server_motion_limits", None)
-    if state_limits is not None:
-        DEVICE_PROFILE.write_motion_limits(
-            master,
-            axis_index,
-            state_limits[0],
-            state_limits[1],
-            state_limits[2],
-            state_limits[3],
-        )
-        return
-    DEVICE_PROFILE.write_motion_limits(
-        master,
-        axis_index,
-        limits.max_velocity,
-        -abs(limits.max_velocity),
-        limits.acceleration,
-        limits.deceleration,
-    )
-
+# Server Loops
 
 def allocate_client_id(clients):
     used_ids = {client["id"] for client in clients}
@@ -2444,6 +2468,7 @@ def run_degraded_server_loop(server, master, state):
             last_status_log_time,
         )
 
+# Main Entry
 
 def default_diagnostics(axis_count_value, error_message=""):
     text = error_message or "not initialized"
@@ -2492,7 +2517,6 @@ def initial_server_state(
         "initialization_error": initialization_error,
         "server_mode": args.server_mode,
         "target_positions": positions,
-        "target_velocities": [0.0 for _ in range(args.axis_count)],
         "derived_velocities": [0.0 for _ in range(args.axis_count)],
         "derived_velocity_positions": positions,
         "derived_velocity_time": None,

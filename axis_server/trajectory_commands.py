@@ -50,6 +50,7 @@ def handle_trajectory_command(
     *,
     axis_count,
     faulted_axes,
+    disabled_operation_axes,
     hold_faulted_axes,
     ensure_csp_mode,
     inactive_trajectory_state,
@@ -82,6 +83,15 @@ def handle_trajectory_command(
         hold_faulted_axes(master, state)
         master.sync_trajectory_to_actual_positions()
         reject_trajectory(state, f"faulted_axes={faults}", inactive_trajectory_state)
+        return
+
+    disabled_axes = disabled_operation_axes(master, axes)
+    if disabled_axes:
+        reject_trajectory(
+            state,
+            f"operation disabled axes={disabled_axes}",
+            inactive_trajectory_state,
+        )
         return
 
     ensure_csp_mode(master, state, axes)

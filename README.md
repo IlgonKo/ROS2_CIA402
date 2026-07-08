@@ -142,12 +142,7 @@ Motion modes:
 ```text
 pp   Profile Position, default and recommended for Windows/Linux non-RT hosts
 csp  Cyclic Synchronous Position, available for smoother target streaming
-csv  Cyclic Synchronous Velocity, TCP protocol only for now
 ```
-
-The local Control Panel allows PP/CSP selection. CSV is implemented in the Axis
-Server protocol but disabled in the Control Panel until a velocity command UI is
-added.
 
 PP profile velocity objects can be interpreted by the drive in configured user
 units such as mm/s, while CSP target positions are streamed in position counts.

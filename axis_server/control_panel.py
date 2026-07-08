@@ -109,7 +109,6 @@ class AxisServerClient:
         self.last_error = ""
         self.feedback = {
             "target_positions": [0.0 for _ in range(axis_count)],
-            "target_velocities": [0.0 for _ in range(axis_count)],
             "actual_positions": [0.0 for _ in range(axis_count)],
             "actual_velocities": [0.0 for _ in range(axis_count)],
             "command_positions": [0.0 for _ in range(axis_count)],
@@ -217,8 +216,6 @@ class AxisServerClient:
             return
 
         if index == 0x6041 and subindex == 0:
-            self.feedback.setdefault("statuswords", [0 for _ in range(self.axis_count)])
-            self.feedback["statuswords"][axis_index] = int(value)
             self._diagnostics_for_axis(axis_index)["statusword"] = int(value)
         elif index == 0x2145 and subindex == 0x0C:
             diagnostics = self._diagnostics_for_axis(axis_index)
@@ -306,12 +303,32 @@ class AxisServerClient:
             message["profile_velocity"] = float(profile_velocity)
         self.send_json(message)
 
-    def send_target_velocity(self, axis_index, velocity):
+    def send_axes_move_absolute(self, axes, positions, profile_velocities=None):
+        message = {
+            "cmd": "axis/move_abs",
+            "axes": [int(axis_index) for axis_index in axes],
+            "positions": [float(position) for position in positions],
+        }
+        if profile_velocities is not None:
+            message["profile_velocities"] = [
+                float(profile_velocity)
+                for profile_velocity in profile_velocities
+            ]
+        self.send_json(message)
+
+    def send_axis_enable(self, axis_index):
         self.send_json(
             {
-                "cmd": "axis/target_velocity",
+                "cmd": "axis/enable",
                 "axis": int(axis_index),
-                "velocity": float(velocity),
+            }
+        )
+
+    def send_axis_disable(self, axis_index):
+        self.send_json(
+            {
+                "cmd": "axis/disable",
+                "axis": int(axis_index),
             }
         )
 
@@ -408,6 +425,14 @@ class AxisServerClient:
             }
         )
 
+    def send_axes_stop(self, axes):
+        self.send_json(
+            {
+                "cmd": "axis/stop",
+                "axes": [int(axis_index) for axis_index in axes],
+            }
+        )
+
     def send_homing_start(self, axis_index):
         self.send_json(
             {
@@ -416,11 +441,27 @@ class AxisServerClient:
             }
         )
 
+    def send_axes_homing_start(self, axes):
+        self.send_json(
+            {
+                "cmd": "axis/home",
+                "axes": [int(axis_index) for axis_index in axes],
+            }
+        )
+
     def send_axis_reset(self, axis_index):
         self.send_json(
             {
                 "cmd": "axis/reset",
                 "axis": int(axis_index),
+            }
+        )
+
+    def send_axes_reset(self, axes):
+        self.send_json(
+            {
+                "cmd": "axis/reset",
+                "axes": [int(axis_index) for axis_index in axes],
             }
         )
 
@@ -621,9 +662,7 @@ class AxisServerControlPanel:
             tk.StringVar(value="0.0"),
         ]
         self.command_var = tk.StringVar(value="0.0")
-        self.target_velocity_command_var = tk.StringVar(value="0.0")
         self.target_var = tk.StringVar(value="0.0")
-        self.target_velocity_var = tk.StringVar(value="0.0")
         self.actual_position_var = tk.StringVar(value="0.0")
         self.actual_velocity_var = tk.StringVar(value="0.0")
         self.command_velocity_var = tk.StringVar(value="0.0")
@@ -632,12 +671,47 @@ class AxisServerControlPanel:
         self.repeat_point_a_var = tk.StringVar(value="0.0")
         self.repeat_point_b_var = tk.StringVar(value="0.0")
         self.repeat_period_var = tk.StringVar(value="2.0")
+        self.repeat_profile_velocity_var = tk.StringVar(value="0.0")
         self.selected_axis_var = tk.StringVar(value="0")
         self.selected_axis_label_var = tk.StringVar(value=self.axis_names[0])
+        self.multi_trace_axis_vars = [
+            tk.BooleanVar(value=True)
+            for _ in range(self.axis_count)
+        ]
+        self.multi_axis_vars = [
+            tk.BooleanVar(value=True)
+            for _ in range(self.axis_count)
+        ]
+        self.multi_target_position_vars = [
+            tk.StringVar(value="0.0")
+            for _ in range(self.axis_count)
+        ]
+        self.multi_profile_velocity_vars = [
+            tk.StringVar(value="0.0")
+            for _ in range(self.axis_count)
+        ]
+        self.multi_actual_position_vars = [
+            tk.StringVar(value="0.0")
+            for _ in range(self.axis_count)
+        ]
+        self.multi_repeat_point_a_vars = [
+            tk.StringVar(value="0.0")
+            for _ in range(self.axis_count)
+        ]
+        self.multi_repeat_point_b_vars = [
+            tk.StringVar(value="0.0")
+            for _ in range(self.axis_count)
+        ]
+        self.multi_repeat_profile_velocity_vars = [
+            tk.StringVar(value="0.0")
+            for _ in range(self.axis_count)
+        ]
+        self.multi_repeat_period_var = tk.StringVar(value="2.0")
         self.jog_step_var = tk.StringVar(value="100.0")
         self.connection_var = tk.StringVar(value="Disconnected")
         self.command_authority_var = tk.StringVar(value="Authority: available")
         self.command_authority_button_var = tk.StringVar(value="Request Authority")
+        self.axis_enable_button_var = tk.StringVar(value="Enable")
         self.scale_var = tk.StringVar(value="CSP scale: 1.0 count/unit")
         self.diagnosis_index_var = tk.StringVar(value="0x607F")
         self.diagnosis_subindex_var = tk.StringVar(value="0x00")
@@ -648,10 +722,10 @@ class AxisServerControlPanel:
         self.server_motion_mode = "pp"
         self.server_mode = "basic"
         self.server_capabilities = {}
+        self.selected_axis_operation_enabled = False
         self.dirty_vars = set()
         self.statusword_lamps = []
         self.latest_target_positions = [0.0 for _ in range(self.axis_count)]
-        self.latest_target_velocities = [0.0 for _ in range(self.axis_count)]
         self.latest_actual_positions = [0.0 for _ in range(self.axis_count)]
         self.latest_motion_limits = [
             [0.0, 0.0, 0.0, 0.0]
@@ -668,6 +742,12 @@ class AxisServerControlPanel:
         self.latest_motion_modes = ["pp" for _ in range(self.axis_count)]
         self.position_counts_per_unit = 1000.0
         self.csp_mode_button = None
+        self.axis_selector_notebook = None
+        self.single_control_notebook = None
+        self.single_axis_area = None
+        self.multi_axis_area = None
+        self.multi_position_trace = None
+        self.multi_velocity_trace = None
         self.manual_controlword_frame = None
         self.manual_controlword_buttons = []
 
@@ -675,10 +755,21 @@ class AxisServerControlPanel:
         self.jog_active_axis = None
         self.repeat_axis_index = 0
         self.repeat_points = None
+        self.repeat_profile_velocity = 0.0
         self.repeat_index = 0
         self.repeat_wait_until = 0.0
         self.last_sent_repeat_target = None
         self.repeat_waiting_to_send = False
+        self.repeat_generation = 0
+        self.multi_repeat_enabled = False
+        self.multi_repeat_axes = []
+        self.multi_repeat_points = None
+        self.multi_repeat_profile_velocities = []
+        self.multi_repeat_index = 0
+        self.multi_repeat_wait_until = 0.0
+        self.multi_repeat_last_targets = None
+        self.multi_repeat_waiting_to_send = False
+        self.multi_repeat_generation = 0
         self.panel_sdo_read_queue = []
         self.panel_sdo_read_next_time = 0.0
         self.panel_sdo_read_connected = False
@@ -690,6 +781,8 @@ class AxisServerControlPanel:
             "write",
             lambda *_args: self.update_selected_axis_label(),
         )
+        for var in self.multi_trace_axis_vars:
+            var.trace_add("write", lambda *_args: self.reset_multi_traces())
         self.root.after(GUI_PERIOD_MS, self.update_gui)
 
     def _build_ui(self):
@@ -698,19 +791,11 @@ class AxisServerControlPanel:
 
         header = ttk.Frame(outer)
         header.pack(fill="x", pady=(0, 10))
-        ttk.Label(header, text="Axis").pack(side="left", padx=(0, 4))
-        for index, axis_name in enumerate(self.axis_names):
-            ttk.Radiobutton(
-                header,
-                text=axis_name,
-                value=str(index),
-                variable=self.selected_axis_var,
-            ).pack(side="left", padx=2)
         ttk.Label(
             header,
             text="Axis Server Control Panel",
             font=("TkDefaultFont", 12, "bold"),
-        ).pack(side="left", padx=(14, 0))
+        ).pack(side="left")
         ttk.Button(
             header,
             textvariable=self.command_authority_button_var,
@@ -723,7 +808,23 @@ class AxisServerControlPanel:
         ttk.Label(header, textvariable=self.connection_var).pack(side="right")
         ttk.Label(header, textvariable=self.scale_var).pack(side="right", padx=12)
 
-        status_frame = ttk.LabelFrame(outer, text="Selected Axis Statusword")
+        self.axis_selector_notebook = ttk.Notebook(outer)
+        self.axis_selector_notebook.pack(fill="x", pady=(0, 10))
+        for axis_name in self.axis_names:
+            axis_tab = ttk.Frame(self.axis_selector_notebook)
+            self.axis_selector_notebook.add(axis_tab, text=axis_name)
+        multi_tab = ttk.Frame(self.axis_selector_notebook)
+        self.axis_selector_notebook.add(multi_tab, text="Multi Axis")
+        self.axis_selector_notebook.bind(
+            "<<NotebookTabChanged>>",
+            self.on_axis_selector_changed,
+        )
+
+        self.single_axis_area = ttk.Frame(outer)
+        self.single_axis_area.pack(fill="both", expand=True)
+        self.multi_axis_area = ttk.Frame(outer)
+
+        status_frame = ttk.LabelFrame(self.single_axis_area, text="Selected Axis Statusword")
         status_frame.pack(fill="x", pady=(0, 10))
         for index, (bit, label) in enumerate(STATUSWORD_BITS):
             lamp = tk.Label(
@@ -745,7 +846,7 @@ class AxisServerControlPanel:
             status_frame.columnconfigure(index % 8, weight=1)
             self.statusword_lamps.append(lamp)
 
-        mode_frame = ttk.LabelFrame(outer, text="Motion Mode")
+        mode_frame = ttk.LabelFrame(self.single_axis_area, text="Motion Mode")
         mode_frame.pack(fill="x", pady=(0, 10))
         ttk.Radiobutton(
             mode_frame,
@@ -762,29 +863,21 @@ class AxisServerControlPanel:
             command=self.apply_motion_mode,
         )
         self.csp_mode_button.pack(side="left", padx=8, pady=5)
-        ttk.Radiobutton(
-            mode_frame,
-            text="CSV",
-            value="csv",
-            variable=self.motion_mode_var,
-            state="disabled",
-        ).pack(side="left", padx=8, pady=5)
-        ttk.Label(
-            mode_frame,
-            text="CSV is available through the TCP protocol only.",
-        ).pack(side="left", padx=12, pady=5)
+        self.single_control_notebook = ttk.Notebook(self.single_axis_area)
+        self.single_control_notebook.pack(fill="x", pady=(0, 10))
 
-        notebook = ttk.Notebook(outer)
-        notebook.pack(fill="x", pady=(0, 10))
-
-        motion_tab = ttk.Frame(notebook, padding=6)
-        settings_tab = ttk.Frame(notebook, padding=6)
-        limits_tab = ttk.Frame(notebook, padding=6)
-        diagnosis_tab = ttk.Frame(notebook, padding=6)
-        notebook.add(motion_tab, text="Motion")
-        notebook.add(settings_tab, text="Settings")
-        notebook.add(limits_tab, text="Limits")
-        notebook.add(diagnosis_tab, text="Diagnosis")
+        motion_tab = ttk.Frame(self.single_control_notebook, padding=6)
+        settings_tab = ttk.Frame(self.single_control_notebook, padding=6)
+        limits_tab = ttk.Frame(self.single_control_notebook, padding=6)
+        diagnosis_tab = ttk.Frame(self.single_control_notebook, padding=6)
+        self.single_control_notebook.add(motion_tab, text="Motion")
+        self.single_control_notebook.add(settings_tab, text="Settings")
+        self.single_control_notebook.add(limits_tab, text="Limits")
+        self.single_control_notebook.add(diagnosis_tab, text="Diagnosis")
+        self.single_control_notebook.bind(
+            "<<NotebookTabChanged>>",
+            self.on_single_control_tab_changed,
+        )
 
         detail = ttk.LabelFrame(motion_tab, text="Selected Axis Command / Feedback")
         detail.pack(fill="x")
@@ -815,6 +908,7 @@ class AxisServerControlPanel:
                     "<KeyRelease>",
                     lambda _event, watched_var=var: self.mark_dirty(watched_var),
                 )
+                self.bind_entry_focus(entry, var)
                 entry.grid(row=row, column=column + 1, padx=5, pady=5, sticky="ew")
             else:
                 ttk.Label(detail, textvariable=var, anchor="e", width=16).grid(
@@ -851,6 +945,14 @@ class AxisServerControlPanel:
 
         buttons = ttk.Frame(motion_tab)
         buttons.pack(fill="x", pady=(12, 8))
+        ttk.Button(
+            buttons,
+            textvariable=self.axis_enable_button_var,
+            command=self.toggle_axis_enable,
+        ).pack(
+            side="left",
+            padx=4,
+        )
         ttk.Button(buttons, text="Run", command=self.send_command).pack(
             side="left",
             padx=4,
@@ -932,35 +1034,55 @@ class AxisServerControlPanel:
             sticky="w",
         )
         ttk.Label(repeat, text="Point A mm").grid(row=0, column=2, padx=5, pady=4)
-        ttk.Entry(
+        entry = ttk.Entry(
             repeat,
             textvariable=self.repeat_point_a_var,
             justify="right",
             width=14,
-        ).grid(row=0, column=3, padx=5, pady=4)
+        )
+        self.bind_entry_focus(entry, self.repeat_point_a_var)
+        entry.grid(row=0, column=3, padx=5, pady=4)
         ttk.Label(repeat, text="Point B mm").grid(row=0, column=4, padx=5, pady=4)
-        ttk.Entry(
+        entry = ttk.Entry(
             repeat,
             textvariable=self.repeat_point_b_var,
             justify="right",
             width=14,
-        ).grid(row=0, column=5, padx=5, pady=4)
-        ttk.Label(repeat, text="Period (s)").grid(row=0, column=6, padx=5, pady=4)
-        ttk.Entry(
+        )
+        self.bind_entry_focus(entry, self.repeat_point_b_var)
+        entry.grid(row=0, column=5, padx=5, pady=4)
+        ttk.Label(repeat, text="Profile Velocity mm/s").grid(
+            row=0,
+            column=6,
+            padx=5,
+            pady=4,
+        )
+        entry = ttk.Entry(
+            repeat,
+            textvariable=self.repeat_profile_velocity_var,
+            justify="right",
+            width=14,
+        )
+        self.bind_entry_focus(entry, self.repeat_profile_velocity_var)
+        entry.grid(row=0, column=7, padx=5, pady=4)
+        ttk.Label(repeat, text="Period (s)").grid(row=0, column=8, padx=5, pady=4)
+        entry = ttk.Entry(
             repeat,
             textvariable=self.repeat_period_var,
             justify="right",
             width=10,
-        ).grid(row=0, column=7, padx=5, pady=4)
+        )
+        self.bind_entry_focus(entry, self.repeat_period_var)
+        entry.grid(row=0, column=9, padx=5, pady=4)
         ttk.Button(repeat, text="Start Repeat", command=self.start_repeat).grid(
             row=0,
-            column=8,
+            column=10,
             padx=5,
             pady=4,
         )
         ttk.Button(repeat, text="Stop Repeat", command=self.stop_repeat).grid(
             row=0,
-            column=9,
+            column=11,
             padx=5,
             pady=4,
         )
@@ -986,6 +1108,7 @@ class AxisServerControlPanel:
                 "<KeyRelease>",
                 lambda _event, watched_var=var: self.mark_dirty(watched_var),
             )
+            self.bind_entry_focus(entry, var)
             entry.grid(row=0, column=index * 2 + 1, padx=5, pady=5, sticky="ew")
             profile_frame.columnconfigure(index * 2 + 1, weight=1)
 
@@ -1018,6 +1141,7 @@ class AxisServerControlPanel:
                 "<KeyRelease>",
                 lambda _event, watched_var=var: self.mark_dirty(watched_var),
             )
+            self.bind_entry_focus(entry, var)
             entry.grid(row=0, column=index * 2 + 1, padx=5, pady=5, sticky="ew")
             limit_frame.columnconfigure(index * 2 + 1, weight=1)
 
@@ -1040,6 +1164,7 @@ class AxisServerControlPanel:
                 "<KeyRelease>",
                 lambda _event, watched_var=var: self.mark_dirty(watched_var),
             )
+            self.bind_entry_focus(entry, var)
             entry.grid(row=0, column=index * 2 + 1, padx=5, pady=5, sticky="ew")
             sw_limit_frame.columnconfigure(index * 2 + 1, weight=1)
 
@@ -1101,6 +1226,7 @@ class AxisServerControlPanel:
                     justify="right",
                     width=14,
                 )
+                self.bind_entry_focus(widget, var)
             widget.grid(
                 row=0,
                 column=index * 2 + 1,
@@ -1133,7 +1259,7 @@ class AxisServerControlPanel:
             wraplength=1080,
         ).pack(fill="both", expand=True, padx=6, pady=6)
 
-        traces = ttk.Frame(outer)
+        traces = ttk.Frame(self.single_axis_area)
         traces.pack(fill="both", expand=True)
         self.position_trace = TraceCanvas(
             traces,
@@ -1146,9 +1272,250 @@ class AxisServerControlPanel:
             "Velocity",
             2,
         )
+        self._build_multi_axis_ui(self.multi_axis_area)
+
+    def _build_multi_axis_ui(self, parent):
+        command_frame = ttk.LabelFrame(parent, text="Multi Axis Position Command")
+        command_frame.pack(fill="x", pady=(0, 10))
+
+        headings = [
+            "Use",
+            "Axis",
+            "Target Position mm",
+            "Profile Velocity mm/s",
+            "Actual Position mm",
+        ]
+        for column, text in enumerate(headings):
+            ttk.Label(command_frame, text=text).grid(
+                row=0,
+                column=column,
+                padx=5,
+                pady=5,
+                sticky="ew",
+            )
+            command_frame.columnconfigure(column, weight=1 if column in (2, 3, 4) else 0)
+
+        for axis_index, axis_name in enumerate(self.axis_names):
+            row = axis_index + 1
+            ttk.Checkbutton(
+                command_frame,
+                variable=self.multi_axis_vars[axis_index],
+            ).grid(row=row, column=0, padx=5, pady=4)
+            ttk.Label(command_frame, text=axis_name).grid(
+                row=row,
+                column=1,
+                padx=5,
+                pady=4,
+                sticky="w",
+            )
+            target_entry = ttk.Entry(
+                command_frame,
+                textvariable=self.multi_target_position_vars[axis_index],
+                justify="right",
+                width=16,
+            )
+            target_entry.bind(
+                "<KeyRelease>",
+                lambda _event, watched_var=self.multi_target_position_vars[axis_index]: (
+                    self.mark_dirty(watched_var)
+                ),
+            )
+            self.bind_entry_focus(
+                target_entry,
+                self.multi_target_position_vars[axis_index],
+            )
+            target_entry.grid(row=row, column=2, padx=5, pady=4, sticky="ew")
+
+            velocity_entry = ttk.Entry(
+                command_frame,
+                textvariable=self.multi_profile_velocity_vars[axis_index],
+                justify="right",
+                width=16,
+            )
+            velocity_entry.bind(
+                "<KeyRelease>",
+                lambda _event, watched_var=self.multi_profile_velocity_vars[axis_index]: (
+                    self.mark_dirty(watched_var)
+                ),
+            )
+            self.bind_entry_focus(
+                velocity_entry,
+                self.multi_profile_velocity_vars[axis_index],
+            )
+            velocity_entry.grid(row=row, column=3, padx=5, pady=4, sticky="ew")
+
+            ttk.Label(
+                command_frame,
+                textvariable=self.multi_actual_position_vars[axis_index],
+                anchor="e",
+                width=16,
+            ).grid(row=row, column=4, padx=5, pady=4, sticky="ew")
+
+        buttons = ttk.Frame(parent)
+        buttons.pack(fill="x", pady=(0, 10))
+        ttk.Button(buttons, text="Run", command=self.multi_axis_run).pack(
+            side="left",
+            padx=4,
+        )
+        ttk.Button(buttons, text="Stop", command=self.multi_axis_stop).pack(
+            side="left",
+            padx=4,
+        )
+        ttk.Button(buttons, text="Homing", command=self.multi_axis_homing).pack(
+            side="left",
+            padx=4,
+        )
+        ttk.Button(buttons, text="Alarm Ack", command=self.multi_axis_reset).pack(
+            side="left",
+            padx=4,
+        )
+
+        repeat_frame = ttk.LabelFrame(parent, text="Multi Axis Repeat Motion")
+        repeat_frame.pack(fill="x", pady=(0, 10))
+        repeat_headings = [
+            "Use",
+            "Axis",
+            "Point A mm",
+            "Point B mm",
+            "Profile Velocity mm/s",
+        ]
+        for column, text in enumerate(repeat_headings):
+            ttk.Label(repeat_frame, text=text).grid(
+                row=0,
+                column=column,
+                padx=5,
+                pady=5,
+                sticky="ew",
+            )
+            repeat_frame.columnconfigure(column, weight=1 if column >= 2 else 0)
+
+        for axis_index, axis_name in enumerate(self.axis_names):
+            row = axis_index + 1
+            ttk.Checkbutton(
+                repeat_frame,
+                variable=self.multi_axis_vars[axis_index],
+            ).grid(row=row, column=0, padx=5, pady=4)
+            ttk.Label(repeat_frame, text=axis_name).grid(
+                row=row,
+                column=1,
+                padx=5,
+                pady=4,
+                sticky="w",
+            )
+            for column, var in [
+                (2, self.multi_repeat_point_a_vars[axis_index]),
+                (3, self.multi_repeat_point_b_vars[axis_index]),
+                (4, self.multi_repeat_profile_velocity_vars[axis_index]),
+            ]:
+                entry = ttk.Entry(
+                    repeat_frame,
+                    textvariable=var,
+                    justify="right",
+                    width=16,
+                )
+                entry.bind(
+                    "<KeyRelease>",
+                    lambda _event, watched_var=var: self.mark_dirty(watched_var),
+                )
+                self.bind_entry_focus(entry, var)
+                entry.grid(row=row, column=column, padx=5, pady=4, sticky="ew")
+
+        repeat_controls = ttk.Frame(parent)
+        repeat_controls.pack(fill="x", pady=(0, 10))
+        ttk.Label(repeat_controls, text="Period (s)").pack(
+            side="left",
+            padx=(4, 5),
+        )
+        entry = ttk.Entry(
+            repeat_controls,
+            textvariable=self.multi_repeat_period_var,
+            justify="right",
+            width=10,
+        )
+        self.bind_entry_focus(entry, self.multi_repeat_period_var)
+        entry.pack(side="left", padx=4)
+        ttk.Button(
+            repeat_controls,
+            text="Start Repeat",
+            command=self.start_multi_repeat,
+        ).pack(side="left", padx=(12, 4))
+        ttk.Button(
+            repeat_controls,
+            text="Stop Repeat",
+            command=self.stop_multi_repeat,
+        ).pack(side="left", padx=4)
+
+        trace_controls = ttk.Frame(parent)
+        trace_controls.pack(fill="x", pady=(0, 4))
+        ttk.Label(trace_controls, text="Trace Axes").pack(
+            side="left",
+            padx=(4, 5),
+        )
+        for axis_index, axis_name in enumerate(self.axis_names):
+            ttk.Checkbutton(
+                trace_controls,
+                text=axis_name,
+                variable=self.multi_trace_axis_vars[axis_index],
+            ).pack(side="left", padx=4)
+
+        traces = ttk.Frame(parent)
+        traces.pack(fill="both", expand=True)
+        self.multi_position_trace = TraceCanvas(
+            traces,
+            ["Actual Position mm"],
+            "Position",
+        )
+        self.multi_velocity_trace = TraceCanvas(
+            traces,
+            ["Actual Velocity mm/s"],
+            "Velocity",
+            2,
+        )
+
+    def on_axis_selector_changed(self, _event=None):
+        if self.axis_selector_notebook is None:
+            return
+
+        self.stop_tab_motion()
+        selected_tab = self.axis_selector_notebook.index("current")
+        if selected_tab < self.axis_count:
+            self.selected_axis_var.set(str(selected_tab))
+            self.show_single_axis_area()
+        else:
+            self.show_multi_axis_area()
+
+    def on_single_control_tab_changed(self, _event=None):
+        if self.single_control_notebook is None:
+            return
+        if self.single_control_notebook.index("current") != 0:
+            self.stop_repeat()
+            self.stop_jog()
+
+    def stop_tab_motion(self):
+        self.stop_repeat()
+        self.stop_multi_repeat()
+        self.stop_jog()
+
+    def show_single_axis_area(self):
+        if self.multi_axis_area is not None and self.multi_axis_area.winfo_ismapped():
+            self.multi_axis_area.pack_forget()
+        if self.single_axis_area is not None and not self.single_axis_area.winfo_ismapped():
+            self.single_axis_area.pack(fill="both", expand=True)
+
+    def show_multi_axis_area(self):
+        if self.single_axis_area is not None and self.single_axis_area.winfo_ismapped():
+            self.single_axis_area.pack_forget()
+        if self.multi_axis_area is not None and not self.multi_axis_area.winfo_ismapped():
+            self.multi_axis_area.pack(fill="both", expand=True)
 
     def mark_dirty(self, var):
         self.dirty_vars.add(id(var))
+
+    def bind_entry_focus(self, entry, var):
+        entry.bind("<Button-1>", lambda _event: entry.focus_set(), add="+")
+        entry.bind("<FocusIn>", lambda _event: self.mark_dirty(var), add="+")
+        entry.bind("<KeyPress>", lambda _event: self.mark_dirty(var), add="+")
+        entry.bind("<KeyRelease>", lambda _event: self.mark_dirty(var), add="+")
 
     def apply_profile_settings(self):
         profile_settings = self.read_selected_profile_values()
@@ -1206,15 +1573,6 @@ class AxisServerControlPanel:
 
     def send_command(self):
         axis_index = self.selected_axis()
-        if self.latest_motion_modes[axis_index] == "csv":
-            target_velocity = self.read_selected_target_velocity_value()
-            if target_velocity is None:
-                return
-            self.try_send(
-                lambda: self.client.send_target_velocity(axis_index, target_velocity)
-            )
-            return
-
         target_position_mm = self.read_selected_command_value()
         if target_position_mm is None:
             return
@@ -1230,6 +1588,43 @@ class AxisServerControlPanel:
             )
         )
         self.dirty_vars.discard(id(self.profile_vars[0]))
+
+    def multi_axis_run(self):
+        self.stop_multi_repeat()
+        command = self.read_multi_axis_command()
+        if command is None:
+            return
+        axes, positions, profile_velocities = command
+        if self.try_send(
+            lambda: self.client.send_axes_move_absolute(
+                axes,
+                positions,
+                profile_velocities,
+            )
+        ):
+            for axis_index in axes:
+                self.dirty_vars.discard(id(self.multi_target_position_vars[axis_index]))
+                self.dirty_vars.discard(id(self.multi_profile_velocity_vars[axis_index]))
+
+    def multi_axis_stop(self):
+        self.stop_repeat()
+        self.stop_multi_repeat()
+        axes = self.selected_multi_axes()
+        if axes is not None:
+            self.try_send(lambda: self.client.send_axes_stop(axes))
+
+    def multi_axis_homing(self):
+        self.stop_repeat()
+        self.stop_multi_repeat()
+        axes = self.selected_multi_axes()
+        if axes is not None:
+            self.try_send(lambda: self.client.send_axes_homing_start(axes))
+
+    def multi_axis_reset(self):
+        self.stop_multi_repeat()
+        axes = self.selected_multi_axes()
+        if axes is not None:
+            self.try_send(lambda: self.client.send_axes_reset(axes))
 
     def axis_reset(self):
         axis_index = self.selected_axis()
@@ -1301,6 +1696,18 @@ class AxisServerControlPanel:
         self.selected_axis_label_var.set(self.axis_names[axis_index])
         self.dirty_vars.clear()
 
+    def reset_multi_traces(self):
+        if self.multi_position_trace is not None:
+            self.multi_position_trace.history = [
+                []
+                for _ in self.multi_position_trace.series_names
+            ]
+        if self.multi_velocity_trace is not None:
+            self.multi_velocity_trace.history = [
+                []
+                for _ in self.multi_velocity_trace.series_names
+            ]
+
     def update_statusword_lamps(self, statusword):
         for lamp, (bit, _label) in zip(self.statusword_lamps, STATUSWORD_BITS):
             is_on = bool(statusword & (1 << bit))
@@ -1329,12 +1736,39 @@ class AxisServerControlPanel:
             return "Not Ready"
         return "State Changed"
 
+    def update_axis_enable_button(self, statusword):
+        self.selected_axis_operation_enabled = bool(int(statusword) & 0x0004)
+        self.axis_enable_button_var.set(
+            "Disable" if self.selected_axis_operation_enabled else "Enable"
+        )
+
     def selected_axis(self):
         return int(self.selected_axis_var.get())
+
+    def selected_multi_trace_axes(self):
+        axes = [
+            axis_index
+            for axis_index, var in enumerate(self.multi_trace_axis_vars)
+            if var.get()
+        ]
+        return axes or [0]
+
+    def multi_trace_series_names(self, axes, value_name):
+        return [
+            f"{self.axis_names[axis_index]} {value_name}"
+            for axis_index in axes
+        ]
 
     def send_manual_controlword(self, controlword):
         axis_index = self.selected_axis()
         self.try_send(lambda: self.client.send_controlword(controlword, axis_index))
+
+    def toggle_axis_enable(self):
+        axis_index = self.selected_axis()
+        if self.selected_axis_operation_enabled:
+            self.try_send(lambda: self.client.send_axis_disable(axis_index))
+        else:
+            self.try_send(lambda: self.client.send_axis_enable(axis_index))
 
     def jog_start(self, direction):
         axis_index = self.selected_axis()
@@ -1348,6 +1782,9 @@ class AxisServerControlPanel:
         self.jog_active_axis = None
         self.try_send(lambda: self.client.send_jog_stop(axis_index))
 
+    def stop_jog(self):
+        self.jog_stop()
+
     def apply_motion_mode(self):
         mode = self.motion_mode_var.get()
         if mode == "csp" and self.server_mode != "advanced":
@@ -1357,21 +1794,20 @@ class AxisServerControlPanel:
             )
             self.motion_mode_var.set(self.latest_motion_modes[self.selected_axis()])
             return
-        if mode == "csv":
-            self.motion_mode_var.set(self.latest_motion_modes[self.selected_axis()])
-            return
-
         axis_index = self.selected_axis()
         self.try_send(lambda: self.client.send_motion_mode(mode, axis_index))
 
     def start_repeat(self):
+        self.stop_multi_repeat()
         repeat_config = self.read_repeat_values()
         if repeat_config is None:
             return
-        point_a, point_b, period = repeat_config
+        self.repeat_generation += 1
+        point_a, point_b, profile_velocity, period = repeat_config
         self.repeat_enabled = True
         self.repeat_axis_index = self.selected_axis()
         self.repeat_points = [point_a, point_b]
+        self.repeat_profile_velocity = profile_velocity
         self.repeat_period = period
         self.repeat_index = 0
         self.repeat_wait_until = 0.0
@@ -1379,9 +1815,35 @@ class AxisServerControlPanel:
         self.repeat_waiting_to_send = False
 
     def stop_repeat(self):
+        self.repeat_generation += 1
         self.repeat_enabled = False
         self.last_sent_repeat_target = None
         self.repeat_waiting_to_send = False
+
+    def start_multi_repeat(self):
+        self.stop_repeat()
+        repeat_config = self.read_multi_repeat_values()
+        if repeat_config is None:
+            return
+        self.multi_repeat_generation += 1
+        axes, point_a, point_b, profile_velocities, period = repeat_config
+        self.multi_repeat_enabled = True
+        self.multi_repeat_axes = axes
+        self.multi_repeat_points = [point_a, point_b]
+        self.multi_repeat_profile_velocities = profile_velocities
+        self.multi_repeat_period = period
+        self.multi_repeat_index = 0
+        self.multi_repeat_wait_until = 0.0
+        self.multi_repeat_last_targets = None
+        self.multi_repeat_waiting_to_send = False
+
+    def stop_multi_repeat(self):
+        self.multi_repeat_generation += 1
+        self.multi_repeat_enabled = False
+        self.multi_repeat_axes = []
+        self.multi_repeat_points = None
+        self.multi_repeat_last_targets = None
+        self.multi_repeat_waiting_to_send = False
 
     def read_selected_profile_values(self):
         try:
@@ -1442,25 +1904,106 @@ class AxisServerControlPanel:
             )
             return None
 
-    def read_selected_target_velocity_value(self):
+    def selected_multi_axes(self):
+        axes = [
+            axis_index
+            for axis_index, var in enumerate(self.multi_axis_vars)
+            if var.get()
+        ]
+        if not axes:
+            messagebox.showerror(
+                "Invalid Input",
+                "Select at least one axis.",
+            )
+            return None
+        return axes
+
+    def read_multi_axis_command(self):
+        axes = self.selected_multi_axes()
+        if axes is None:
+            return None
+
+        positions = []
+        profile_velocities = []
         try:
-            return float(self.target_velocity_command_var.get())
+            for axis_index in axes:
+                positions.append(
+                    self.position_unit_to_count(
+                        float(self.multi_target_position_vars[axis_index].get())
+                    )
+                )
+                profile_velocities.append(
+                    float(self.multi_profile_velocity_vars[axis_index].get())
+                )
         except ValueError:
             messagebox.showerror(
                 "Invalid Input",
-                "Target Velocity must be numeric.",
+                "Multi-axis target positions and profile velocities must be numeric.",
             )
             return None
+
+        return axes, positions, profile_velocities
+
+    def read_multi_repeat_values(self):
+        axes = self.selected_multi_axes()
+        if axes is None:
+            return None
+
+        point_a = []
+        point_b = []
+        profile_velocities = []
+        try:
+            for axis_index in axes:
+                point_a.append(
+                    self.position_unit_to_count(
+                        float(self.multi_repeat_point_a_vars[axis_index].get())
+                    )
+                )
+                point_b.append(
+                    self.position_unit_to_count(
+                        float(self.multi_repeat_point_b_vars[axis_index].get())
+                    )
+                )
+                profile_velocity = float(
+                    self.multi_repeat_profile_velocity_vars[axis_index].get()
+                )
+                if profile_velocity <= 0:
+                    raise ValueError
+                profile_velocities.append(profile_velocity)
+            period = float(self.multi_repeat_period_var.get())
+        except ValueError:
+            messagebox.showerror(
+                "Invalid Input",
+                "Multi-axis repeat points, profile velocities, and period must be numeric. "
+                "Profile velocities and period must be greater than 0.",
+            )
+            return None
+
+        if period <= 0:
+            messagebox.showerror(
+                "Invalid Input",
+                "Multi-axis repeat period must be greater than 0.",
+            )
+            return None
+
+        return axes, point_a, point_b, profile_velocities, period
 
     def read_repeat_values(self):
         try:
             point_a = float(self.repeat_point_a_var.get())
             point_b = float(self.repeat_point_b_var.get())
+            profile_velocity = float(self.repeat_profile_velocity_var.get())
             period = float(self.repeat_period_var.get())
         except ValueError:
             messagebox.showerror(
                 "Invalid Input",
-                "Repeat points and period must be numeric.",
+                "Repeat points, profile velocity, and period must be numeric.",
+            )
+            return None
+        if profile_velocity <= 0:
+            messagebox.showerror(
+                "Invalid Input",
+                "Repeat profile velocity must be greater than 0.",
             )
             return None
         if period <= 0:
@@ -1469,7 +2012,7 @@ class AxisServerControlPanel:
                 "Repeat period must be greater than 0.",
             )
             return None
-        return point_a, point_b, period
+        return point_a, point_b, profile_velocity, period
 
     def read_diagnosis_request(self, include_value):
         data_type = self.diagnosis_type_var.get().strip().lower()
@@ -1540,7 +2083,6 @@ class AxisServerControlPanel:
         self.panel_sdo_read_queue = []
         for axis_index in range(self.axis_count):
             self.panel_sdo_read_queue.extend([
-                (axis_index, "0x6041", "0x00", "uint16"),
                 (axis_index, "0x2145", "0x0C", "uint32"),
                 (axis_index, "0x6061", "0x00", "int8"),
                 (axis_index, "0x607D", "0x01", "int32"),
@@ -1606,7 +2148,6 @@ class AxisServerControlPanel:
         self.process_panel_sdo_read_queue(connected)
 
         target_positions = self._values(feedback, "target_positions", 0.0)
-        target_velocities = self._values(feedback, "target_velocities", 0.0)
         actual_positions = self._values(feedback, "actual_positions", 0.0)
         actual_velocities = self._values(feedback, "actual_velocities", 0.0)
         setpoint_positions = self._values(feedback, "setpoint_positions", 0.0)
@@ -1632,7 +2173,6 @@ class AxisServerControlPanel:
         motion_limits = self._motion_limits(feedback)
         software_position_limits = self._software_position_limits(feedback)
         self.latest_target_positions = target_positions
-        self.latest_target_velocities = target_velocities
         self.latest_actual_positions = actual_positions
         self.latest_profile_settings = profile_settings
         self.latest_motion_limits = motion_limits
@@ -1645,10 +2185,12 @@ class AxisServerControlPanel:
             f"Position scale: {self.position_counts_per_unit:g} count/mm"
         )
         selected_axis = self.selected_axis()
-        self.update_statusword_lamps(int(statuswords[selected_axis]))
+        selected_statusword = int(statuswords[selected_axis])
+        self.update_statusword_lamps(selected_statusword)
+        self.update_axis_enable_button(selected_statusword)
 
         selected_motion_mode = self.latest_motion_modes[selected_axis]
-        if selected_motion_mode in {"pp", "csp", "csv"}:
+        if selected_motion_mode in {"pp", "csp"}:
             self.server_motion_mode = selected_motion_mode
             if self.motion_mode_var.get() != selected_motion_mode:
                 self.motion_mode_var.set(selected_motion_mode)
@@ -1657,7 +2199,6 @@ class AxisServerControlPanel:
         self.target_var.set(
             f"{self.position_count_to_unit(target_positions[selected_axis]):.3f}"
         )
-        self.target_velocity_var.set(f"{float(target_velocities[selected_axis]):.3f}")
         self.actual_position_var.set(
             f"{self.position_count_to_unit(actual_positions[selected_axis]):.3f}"
         )
@@ -1669,7 +2210,7 @@ class AxisServerControlPanel:
             else "n/a"
         )
         self.statusword_var.set(
-            self.statusword_state_text(int(statuswords[selected_axis]))
+            self.statusword_state_text(selected_statusword)
         )
 
         diag = diagnostics[selected_axis] if selected_axis < len(diagnostics) else {}
@@ -1691,6 +2232,8 @@ class AxisServerControlPanel:
                 var.set(
                     f"{self.position_count_to_unit(software_position_limits[selected_axis][limit_index]):.3f}"
                 )
+
+        self.update_multi_axis_fields(actual_positions, profile_settings)
 
         if selected_motion_mode == "csp":
             self.position_trace.set_series_names(
@@ -1732,9 +2275,52 @@ class AxisServerControlPanel:
             self.velocity_trace.add_sample([actual_velocity])
         self.position_trace.draw()
         self.velocity_trace.draw()
+        multi_trace_axes = self.selected_multi_trace_axes()
+        if self.multi_position_trace is not None:
+            self.multi_position_trace.set_series_names(
+                self.multi_trace_series_names(multi_trace_axes, "Actual Position mm")
+            )
+            self.multi_position_trace.add_sample([
+                self.position_count_to_unit(actual_positions[axis_index])
+                for axis_index in multi_trace_axes
+            ])
+            self.multi_position_trace.draw()
+        if self.multi_velocity_trace is not None:
+            self.multi_velocity_trace.set_series_names(
+                self.multi_trace_series_names(multi_trace_axes, "Actual Velocity mm/s")
+            )
+            self.multi_velocity_trace.add_sample([
+                float(actual_velocities[axis_index])
+                for axis_index in multi_trace_axes
+            ])
+            self.multi_velocity_trace.draw()
 
         self.update_repeat(actual_positions)
+        self.update_multi_repeat(actual_positions)
         self.root.after(GUI_PERIOD_MS, self.update_gui)
+
+    def update_multi_axis_fields(self, actual_positions, profile_settings):
+        for axis_index in range(self.axis_count):
+            self.multi_actual_position_vars[axis_index].set(
+                f"{self.position_count_to_unit(actual_positions[axis_index]):.3f}"
+            )
+            velocity_var = self.multi_profile_velocity_vars[axis_index]
+            if id(velocity_var) not in self.dirty_vars:
+                velocity_var.set(f"{profile_settings[axis_index][0]:.3f}")
+
+            actual_position_text = (
+                f"{self.position_count_to_unit(actual_positions[axis_index]):.3f}"
+            )
+            for repeat_var in (
+                self.multi_repeat_point_a_vars[axis_index],
+                self.multi_repeat_point_b_vars[axis_index],
+            ):
+                if not repeat_var.get().strip():
+                    repeat_var.set(actual_position_text)
+
+            repeat_velocity_var = self.multi_repeat_profile_velocity_vars[axis_index]
+            if id(repeat_velocity_var) not in self.dirty_vars:
+                repeat_velocity_var.set(f"{profile_settings[axis_index][0]:.3f}")
 
     def update_command_authority(self, authority):
         owner = authority.get("owner", None)
@@ -1782,12 +2368,11 @@ class AxisServerControlPanel:
         )
         if self.last_sent_repeat_target is None:
             target_position = target[axis_index]
-            profile_velocity = self.latest_profile_settings[axis_index][0]
             self.try_send(
                 lambda: self.client.send_axis_move_absolute(
                     axis_index,
                     target_position,
-                    profile_velocity,
+                    self.repeat_profile_velocity,
                 )
             )
             self.last_sent_repeat_target = target_position
@@ -1807,26 +2392,80 @@ class AxisServerControlPanel:
         self.repeat_index = 1 - self.repeat_index
         next_target = self.repeat_points[self.repeat_index]
         self.repeat_waiting_to_send = True
+        generation = self.repeat_generation
         self.root.after(
             int(self.repeat_period * 1000),
-            lambda: self._send_repeat_target(axis_index, next_target),
+            lambda: self._send_repeat_target(axis_index, next_target, generation),
         )
 
-    def _send_repeat_target(self, axis_index, target_position):
-        if not self.repeat_enabled:
+    def _send_repeat_target(self, axis_index, target_position, generation):
+        if not self.repeat_enabled or generation != self.repeat_generation:
             return
         target = self._target_vector_for_axis(axis_index, target_position)
         target_count = target[axis_index]
-        profile_velocity = self.latest_profile_settings[axis_index][0]
         self.try_send(
             lambda: self.client.send_axis_move_absolute(
                 axis_index,
                 target_count,
-                profile_velocity,
+                self.repeat_profile_velocity,
             )
         )
         self.last_sent_repeat_target = target_count
         self.repeat_waiting_to_send = False
+
+    def update_multi_repeat(self, actual_positions):
+        if not self.multi_repeat_enabled or self.multi_repeat_points is None:
+            return
+
+        now = time.monotonic()
+        axes = list(self.multi_repeat_axes)
+        targets = list(self.multi_repeat_points[self.multi_repeat_index])
+        if self.multi_repeat_last_targets is None:
+            self.try_send(
+                lambda: self.client.send_axes_move_absolute(
+                    axes,
+                    targets,
+                    self.multi_repeat_profile_velocities,
+                )
+            )
+            self.multi_repeat_last_targets = targets
+            return
+
+        if self.multi_repeat_waiting_to_send or now < self.multi_repeat_wait_until:
+            return
+
+        reached = all(
+            abs(actual_positions[axis_index] - target) <= REPEAT_TOLERANCE
+            for axis_index, target in zip(axes, self.multi_repeat_last_targets)
+        )
+        if not reached:
+            return
+
+        self.multi_repeat_wait_until = now + self.multi_repeat_period
+        self.multi_repeat_index = 1 - self.multi_repeat_index
+        next_targets = list(self.multi_repeat_points[self.multi_repeat_index])
+        self.multi_repeat_waiting_to_send = True
+        generation = self.multi_repeat_generation
+        self.root.after(
+            int(self.multi_repeat_period * 1000),
+            lambda: self._send_multi_repeat_targets(axes, next_targets, generation),
+        )
+
+    def _send_multi_repeat_targets(self, axes, targets, generation):
+        if (
+            not self.multi_repeat_enabled
+            or generation != self.multi_repeat_generation
+        ):
+            return
+        self.try_send(
+            lambda: self.client.send_axes_move_absolute(
+                axes,
+                targets,
+                self.multi_repeat_profile_velocities,
+            )
+        )
+        self.multi_repeat_last_targets = list(targets)
+        self.multi_repeat_waiting_to_send = False
 
     def _target_vector_for_axis(self, axis_index, target_position):
         targets = list(self.latest_target_positions)

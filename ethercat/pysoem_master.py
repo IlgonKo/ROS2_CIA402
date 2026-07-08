@@ -14,6 +14,13 @@ from ethercat.distributed_clock import DistributedClock
 from ethercat.working_counter import WorkingCounter
 
 
+AL_STATUS_DESCRIPTIONS = {
+    0x001D: "Invalid output configuration",
+    0x001E: "Invalid input configuration",
+    0x001F: "Invalid watchdog configuration",
+}
+
+
 @dataclass
 class AxisMotionLimits:
     max_velocity: float
@@ -55,6 +62,8 @@ class PySOEMMaster:
         self.csp_counts_per_unit = float(csp_counts_per_unit)
         self.sync_mode = sync_mode
         self.dc_enabled = bool(dc_enabled)
+        if not self.dc_enabled and self.sync_mode is not None:
+            self.sync_mode = 0
         self.dc_sync0_shift_time = int(dc_sync0_shift_time)
         self.pdo_codec = pdo_codec
         self.txpdo_setpoint_entry = bool(txpdo_setpoint_entry)
@@ -113,6 +122,7 @@ class PySOEMMaster:
             )
 
         self._request_pre_operational(pysoem, timeout_us)
+        self._configure_rxpdo_mapping()
         self._configure_txpdo_mapping()
         self._master.config_map()
         self._configure_distributed_clocks()
@@ -120,10 +130,12 @@ class PySOEMMaster:
         if target_state is None:
             target_state = pysoem.OP_STATE
 
-        if target_state == pysoem.OP_STATE:
-            self._request_safe_operational(pysoem, timeout_us)
+        if target_state in (pysoem.SAFEOP_STATE, pysoem.OP_STATE):
             self._configure_sync_parameters()
             self._configure_dc_sync0()
+
+        if target_state == pysoem.OP_STATE:
+            self._request_safe_operational(pysoem, timeout_us)
             self._prime_outputs()
             self._request_operational(pysoem, timeout_us)
             return
@@ -145,19 +157,49 @@ class PySOEMMaster:
         if self._master is None:
             return []
 
+        try:
+            self._master.read_state()
+        except Exception:
+            pass
+
         descriptions = []
         for index, slave in enumerate(self._master.slaves):
+            al_status = getattr(slave, "al_status", None)
             descriptions.append(
                 {
                     "index": index,
                     "name": getattr(slave, "name", ""),
                     "state": getattr(slave, "state", None),
-                    "al_status": getattr(slave, "al_status", None),
+                    "state_description": self._state_description(
+                        getattr(slave, "state", None)
+                    ),
+                    "al_status": al_status,
+                    "al_status_description": (
+                        AL_STATUS_DESCRIPTIONS.get(al_status)
+                    ),
                     "al_status_code": getattr(slave, "al_status_code", None),
                 }
             )
 
         return descriptions
+
+    def _state_description(self, state):
+        if state is None:
+            return None
+
+        state = int(state)
+        base_state = state & 0x0F
+        labels = {
+            0x01: "INIT",
+            0x02: "PRE_OP",
+            0x03: "BOOT",
+            0x04: "SAFE_OP",
+            0x08: "OP",
+        }
+        label = labels.get(base_state, f"UNKNOWN_{base_state}")
+        if state & 0x10:
+            return f"{label} + ERROR"
+        return label
 
     def get_slave_input_bytes(self, slave_index=0):
         self._require_connected()
@@ -203,52 +245,69 @@ class PySOEMMaster:
             slave.rxpdo.mode_of_operation = mode_of_operation
 
     def sdo_write_int8(self, slave_index, index, subindex, value):
-        self._require_connected()
-        self._master.slaves[slave_index].sdo_write(
+        self._sdo_write(
+            slave_index,
             index,
             subindex,
             struct.pack("<b", int(value)),
+            value,
         )
 
     def sdo_write_int32(self, slave_index, index, subindex, value):
-        self._require_connected()
-        self._master.slaves[slave_index].sdo_write(
+        self._sdo_write(
+            slave_index,
             index,
             subindex,
             struct.pack("<i", int(value)),
+            value,
         )
 
     def sdo_write_uint16(self, slave_index, index, subindex, value):
-        self._require_connected()
-        self._master.slaves[slave_index].sdo_write(
+        self._sdo_write(
+            slave_index,
             index,
             subindex,
             struct.pack("<H", int(value)),
+            value,
         )
 
     def sdo_write_uint8(self, slave_index, index, subindex, value):
-        self._require_connected()
-        self._master.slaves[slave_index].sdo_write(
+        self._sdo_write(
+            slave_index,
             index,
             subindex,
             struct.pack("<B", int(value)),
+            value,
         )
 
     def sdo_write_uint32(self, slave_index, index, subindex, value):
-        self._require_connected()
-        self._master.slaves[slave_index].sdo_write(
+        self._sdo_write(
+            slave_index,
             index,
             subindex,
             struct.pack("<I", int(value)),
+            value,
         )
 
     def sdo_write_float32(self, slave_index, index, subindex, value):
-        self._require_connected()
-        self._master.slaves[slave_index].sdo_write(
+        self._sdo_write(
+            slave_index,
             index,
             subindex,
             struct.pack("<f", float(value)),
+            value,
         )
+
+    def _sdo_write(self, slave_index, index, subindex, payload, value):
+        self._require_connected()
+        try:
+            self._master.slaves[slave_index].sdo_write(index, subindex, payload)
+        except Exception as exc:
+            raise RuntimeError(
+                "SDO write failed: "
+                f"slave={slave_index} object=0x{index:04X}:{subindex:02X} "
+                f"value={value!r} payload={payload.hex()} error={exc}"
+            ) from exc
 
     def sdo_read_uint8(self, slave_index, index, subindex):
         self._require_connected()
@@ -481,6 +540,32 @@ class PySOEMMaster:
             flush=True,
         )
 
+    def _configure_rxpdo_mapping(self):
+        self._write_rxpdo1_mapping(
+            RxPDO.MAPPING_ENTRIES,
+            "Configured RxPDO1 mapping from Axis Server RxPDO layout",
+        )
+
+    def _write_rxpdo1_mapping(self, rxpdo1_mapping, log_message):
+        for axis_index in range(self.slave_count):
+            self.sdo_write_uint8(axis_index, 0x1600, 0x00, 0)
+            for subindex, mapping_entry in enumerate(rxpdo1_mapping, start=1):
+                self.sdo_write_uint32(
+                    axis_index,
+                    0x1600,
+                    subindex,
+                    mapping_entry,
+                )
+            self.sdo_write_uint8(
+                axis_index,
+                0x1600,
+                0x00,
+                len(rxpdo1_mapping),
+            )
+            self.slaves[axis_index].rxpdo.select_mapping(rxpdo1_mapping)
+
+        print(log_message, flush=True)
+
     def _configure_txpdo_mapping(self):
         txpdo1_mapping, log_message = (
             self.device_profile.txpdo_setpoint_mapping()
@@ -510,6 +595,14 @@ class PySOEMMaster:
         print(log_message, flush=True)
 
     def _configure_sync_parameters(self):
+        if not self.dc_enabled and self.sync_mode == 0:
+            print(
+                "Using EtherCAT FreeRun sync mode: "
+                "DC disabled; skipped drive sync parameter writes",
+                flush=True,
+            )
+            return
+
         configured = self.device_profile.configure_sync_parameters(
             self,
             self.slave_count,
