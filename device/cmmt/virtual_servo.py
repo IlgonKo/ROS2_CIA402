@@ -156,6 +156,8 @@ class VirtualCiA402Servo(ServoInterface):
 
         if mode == 1:
             self.process_pp()
+        elif mode == 3:
+            self.process_pv()
         elif mode == 8:
             self.process_csp()
         elif mode == 6:
@@ -313,6 +315,41 @@ class VirtualCiA402Servo(ServoInterface):
     def _write_actual_feedback(self):
         self.od.write(0x6064, self.actual_position)
         self.od.write(0x606C, self.actual_velocity)
+
+    # ---------------------------------
+    # PV
+    # ---------------------------------
+
+    def process_pv(self):
+        if self.sm.get_statusword() != 0x0027:
+            return
+
+        target_velocity = float(self.od.read(0x60FF))
+        positive_limit = abs(float(self.od.read(0x607F)))
+        negative_limit = abs(float(self.od.read(0x2183, 0x0C)) * 1000.0)
+        if target_velocity >= 0.0 and positive_limit > 0.0:
+            target_velocity = min(target_velocity, positive_limit)
+        elif target_velocity < 0.0 and negative_limit > 0.0:
+            target_velocity = max(target_velocity, -negative_limit)
+
+        accel = float(self.od.read(0x6083))
+        decel = float(self.od.read(0x6084))
+        if abs(target_velocity) > abs(self.actual_velocity):
+            limit = accel
+        else:
+            limit = decel
+
+        self.actual_velocity = self._move_towards(
+            self.actual_velocity,
+            target_velocity,
+            limit * self.cycle_time,
+        )
+        self.actual_position += self.actual_velocity * self.cycle_time
+        self._write_actual_feedback()
+        self.target_reached = abs(self.actual_velocity - target_velocity) <= max(
+            limit * self.cycle_time,
+            1e-9,
+        )
 
     # ---------------------------------
     # CSP

@@ -64,6 +64,7 @@ CSP_COMMAND_STEP_ERROR_THRESHOLD = float(
 )
 DEVICE_PROFILE = get_device_profile(os.environ.get("PYSOEM_DEVICE", "cmmt"))
 PROFILE_POSITION_MODE = DEVICE_PROFILE.PROFILE_POSITION_MODE
+PROFILE_VELOCITY_MODE = DEVICE_PROFILE.PROFILE_VELOCITY_MODE
 JOG_MODE = DEVICE_PROFILE.JOG_MODE
 HOMING_MODE = DEVICE_PROFILE.HOMING_MODE
 CSP_MODE = DEVICE_PROFILE.CSP_MODE
@@ -91,6 +92,9 @@ MODE_RXPDO_FIELDS = {
     "pp": (
         "target_position",
         "profile_velocity",
+    ),
+    "pv": (
+        "target_velocity",
     ),
     "csp": (
         "target_position",

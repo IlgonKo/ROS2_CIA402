@@ -29,6 +29,7 @@ from axis_server.config import (
     PP_NEW_SETPOINT_CONTROLWORD,
     PP_SETPOINT_ACK_MASK,
     PROFILE_POSITION_MODE,
+    PROFILE_VELOCITY_MODE,
     TX_HISTORY_LENGTH,
     parse_args,
     require_pdo_fields_for_mode,
@@ -55,6 +56,10 @@ from ethercat.mock_slave import MockSlave
 from ethercat.pysoem_master import PySOEMMaster
 from motion.axis import Axis
 
+INT32_MIN = -(2 ** 31)
+INT32_MAX = 2 ** 31 - 1
+UINT32_MAX = 2 ** 32 - 1
+
 # Public command sets
 
 
@@ -68,6 +73,7 @@ COMMAND_MESSAGE_TYPES = {
     "axis/stop",
     "axis/move_abs",
     "axis/move_rel",
+    "axis/move_vel",
     "axis/jog_start",
     "axis/jog_stop",
     "axis/profile",
@@ -294,6 +300,321 @@ def read_all_diagnostics(master):
     ]
 
 
+def diagnostics_summary(master, axis_indices):
+    summaries = []
+    for axis_index in axis_indices:
+        try:
+            diagnostics = read_drive_diagnostics(master, axis_index)
+        except Exception as exc:
+            summaries.append(f"axis {axis_index}: diagnostics read failed: {exc}")
+            continue
+        statusword = diagnostics.get("statusword")
+        error_code = diagnostics.get("error_code")
+        status_text = (
+            f"0x{statusword:04X}" if isinstance(statusword, int) else str(statusword)
+        )
+        error_text = (
+            f"0x{error_code:08X}" if isinstance(error_code, int) else str(error_code)
+        )
+        summaries.append(
+            f"axis {axis_index}: statusword={status_text} "
+            f"error_code={error_text} "
+            f"mode_display={diagnostics.get('mode_display')} "
+            f"error={diagnostics.get('error_code_text')}"
+        )
+    return summaries
+
+
+PV_USER_POSITION_UNITS = {
+    0x1000: "rad",
+    0x4100: "deg",
+    0xB400: "rev",
+}
+
+
+LINEAR_USER_POSITION_UNITS = {
+    0x0100: "mm",
+}
+
+
+def user_position_unit_name(user_position_unit):
+    if user_position_unit is None:
+        return "unknown"
+    unit = int(user_position_unit)
+    return (
+        PV_USER_POSITION_UNITS.get(unit)
+        or LINEAR_USER_POSITION_UNITS.get(unit)
+        or f"0x{unit:04X}"
+    )
+
+
+def axis_motion_kind(user_position_unit):
+    if user_position_unit is None:
+        return "unknown"
+    unit = int(user_position_unit)
+    if unit in PV_USER_POSITION_UNITS:
+        return "rotary"
+    if unit in LINEAR_USER_POSITION_UNITS:
+        return "linear"
+    return "unknown"
+
+
+def scale_from_exponent(exponent, default=1.0):
+    if exponent is None:
+        return default
+    return 10.0 ** int(exponent)
+
+
+def build_axis_metadata(user_position_units, converting_unit_exponents):
+    metadata = []
+    axis_total = max(len(user_position_units), len(converting_unit_exponents))
+    for axis_index in range(axis_total):
+        user_position_unit = (
+            user_position_units[axis_index]
+            if axis_index < len(user_position_units)
+            else None
+        )
+        exponents = (
+            converting_unit_exponents[axis_index]
+            if axis_index < len(converting_unit_exponents)
+            else None
+        )
+        if exponents is None:
+            exponents = [None, None, None, None]
+        motion_kind = axis_motion_kind(user_position_unit)
+        position_unit = user_position_unit_name(user_position_unit)
+        acceleration_scale = scale_from_exponent(exponents[2], 1.0)
+        metadata.append({
+            "axis": axis_index,
+            "user_position_unit": user_position_unit,
+            "user_position_unit_name": position_unit,
+            "motion_kind": motion_kind,
+            "pv_allowed": (
+                pv_allowed_user_position_unit(user_position_unit)
+                if user_position_unit is not None
+                else False
+            ),
+            "converting_unit_exponents": exponents,
+            "position_unit": position_unit,
+            "velocity_unit": f"{position_unit}/s",
+            "acceleration_unit": f"{position_unit}/s^2",
+            "deceleration_unit": f"{position_unit}/s^2",
+            "jerk_unit": f"{position_unit}/s^3",
+            "position_scale": scale_from_exponent(exponents[0], 1.0),
+            "velocity_scale": scale_from_exponent(exponents[1], 1.0),
+            "acceleration_scale": acceleration_scale,
+            "deceleration_scale": acceleration_scale,
+            "jerk_scale": scale_from_exponent(exponents[3], 1.0),
+        })
+    return metadata
+
+
+def default_axis_metadata(axis_count):
+    return build_axis_metadata(
+        [None for _ in range(axis_count)],
+        [None for _ in range(axis_count)],
+    )
+
+
+def axis_metadata(state, axis_index):
+    metadata = state.get("axis_metadata", [])
+    if axis_index < len(metadata) and isinstance(metadata[axis_index], dict):
+        return metadata[axis_index]
+    return {}
+
+
+def axis_position_counts_per_api_unit(state, axis_index):
+    metadata = axis_metadata(state, axis_index)
+    if metadata.get("motion_kind") == "rotary":
+        return 1_000_000.0
+    return max(float(state.get("position_counts_per_unit", 1.0)), 1e-9)
+
+
+def axis_position_drive_to_api(state, axis_index, value):
+    return float(value) / axis_position_counts_per_api_unit(state, axis_index)
+
+
+def axis_position_api_to_drive(state, axis_index, value):
+    return float(value) * axis_position_counts_per_api_unit(state, axis_index)
+
+
+def axis_motion_scale(state, axis_index, kind="velocity"):
+    metadata = axis_metadata(state, axis_index)
+    key = {
+        "velocity": "velocity_scale",
+        "acceleration": "acceleration_scale",
+        "deceleration": "deceleration_scale",
+        "jerk": "jerk_scale",
+    }.get(kind, "velocity_scale")
+    try:
+        return max(float(metadata.get(key, 1.0)), 1e-12)
+    except (TypeError, ValueError):
+        return 1.0
+
+
+def axis_motion_drive_to_api(state, axis_index, value, kind="velocity"):
+    return float(value) * axis_motion_scale(state, axis_index, kind)
+
+
+def axis_motion_api_to_drive(state, axis_index, value, kind="velocity"):
+    return float(value) / axis_motion_scale(state, axis_index, kind)
+
+
+def require_int32_value(value, field_name):
+    int_value = int(round(float(value)))
+    if int_value < INT32_MIN or int_value > INT32_MAX:
+        raise ValueError(
+            f"{field_name}={int_value} is outside int32 PDO range "
+            f"[{INT32_MIN}, {INT32_MAX}]"
+        )
+    return int_value
+
+
+def require_uint32_value(value, field_name):
+    int_value = int(round(float(value)))
+    if int_value < 0 or int_value > UINT32_MAX:
+        raise ValueError(
+            f"{field_name}={int_value} is outside uint32 PDO range "
+            f"[0, {UINT32_MAX}]"
+        )
+    return int_value
+
+
+def profile_settings_drive_to_api(state, axis_index, values):
+    kinds = ["velocity", "acceleration", "deceleration", "jerk"]
+    return [
+        axis_motion_drive_to_api(state, axis_index, value, kinds[index])
+        for index, value in enumerate(values)
+    ]
+
+
+def motion_limits_drive_to_api(state, axis_index, values):
+    kinds = ["velocity", "velocity", "acceleration", "deceleration"]
+    return [
+        axis_motion_drive_to_api(state, axis_index, value, kinds[index])
+        for index, value in enumerate(values)
+    ]
+
+
+def trajectory_message_api_to_drive(message, state):
+    axes = [
+        int(axis)
+        for axis in message.get("axes", [])
+    ]
+    if not axes:
+        axes = list(range(len(state.get("target_positions", []))))
+
+    converted = dict(message)
+    points = []
+    for point in message.get("points", []):
+        converted_point = dict(point)
+        converted_point["positions"] = [
+            require_int32_value(
+                axis_position_api_to_drive(state, axis_index, position),
+                f"axis {axis_index} target_position",
+            )
+            for axis_index, position in zip(axes, point.get("positions", []))
+        ]
+        points.append(converted_point)
+    converted["points"] = points
+    return converted
+
+
+def read_axis_user_position_units(master):
+    units = []
+    for axis_index in range(axis_count(master)):
+        try:
+            value = int(DEVICE_PROFILE.read_user_unit_position(master, axis_index))
+        except Exception as exc:
+            print(
+                "Axis user position unit read failed: "
+                f"axis={axis_index} object=0x216E:01 error={exc}",
+                flush=True,
+            )
+            units.append(None)
+            continue
+        units.append(value)
+        print(
+            "Axis user position unit: "
+            f"axis={axis_index} 0x216E:01=0x{value:04X} "
+            f"unit={user_position_unit_name(value)}",
+            flush=True,
+        )
+    return units
+
+
+def read_axis_converting_unit_exponents(master):
+    exponents = []
+    for axis_index in range(axis_count(master)):
+        try:
+            values = DEVICE_PROFILE.read_converting_unit_exponents(master, axis_index)
+        except Exception as exc:
+            print(
+                "Axis converting unit read failed: "
+                f"axis={axis_index} object=0x2194:01-04 error={exc}",
+                flush=True,
+            )
+            exponents.append(None)
+            continue
+        exponents.append(values)
+        print(
+            "Axis converting unit exponents: "
+            f"axis={axis_index} "
+            f"position={values[0]} velocity={values[1]} "
+            f"acceleration={values[2]} jerk={values[3]}",
+            flush=True,
+        )
+    return exponents
+
+
+def pv_allowed_axis(state, axis_index):
+    units = state.get("user_position_units", [])
+    if axis_index >= len(units):
+        return False
+    user_position_unit = units[axis_index]
+    if user_position_unit is None:
+        return False
+    return pv_allowed_user_position_unit(user_position_unit)
+
+
+def pv_allowed_user_position_unit(user_position_unit):
+    return int(user_position_unit) in PV_USER_POSITION_UNITS
+
+
+def pv_reject_message(state, axis_indices):
+    details = []
+    for axis_index in axis_indices:
+        units = state.get("user_position_units", [])
+        user_position_unit = units[axis_index] if axis_index < len(units) else None
+        if user_position_unit is None:
+            details.append(f"axis {axis_index}: 0x216E:01 unread")
+        else:
+            details.append(
+                f"axis {axis_index}: 0x216E:01=0x{int(user_position_unit):04X} "
+                f"unit={user_position_unit_name(user_position_unit)}"
+            )
+    return (
+        "PV mode is allowed only for rotary user position units "
+        "(rad, degree, or revolution). "
+        + "; ".join(details)
+    )
+
+
+def reject_if_pv_not_allowed(state, axis_indices, client, command):
+    blocked_axes = [
+        axis_index
+        for axis_index in axis_indices
+        if not pv_allowed_axis(state, axis_index)
+    ]
+    if not blocked_axes:
+        return False
+
+    message = pv_reject_message(state, blocked_axes)
+    reject_command_message(client, command, message)
+    print(f"Ignored {command}: {message}", flush=True)
+    return True
+
+
 def mode_code(mode_name):
     return DEVICE_PROFILE.mode_code(mode_name)
 
@@ -323,6 +644,21 @@ def initialize_drive(master, motion_mode, csp_interpolation_mode):
     master.connect()
     require_txpdo_fields(master)
     write_csp_interpolation_modes(master, csp_interpolation_mode)
+    if motion_mode == "pv":
+        user_position_units = read_axis_user_position_units(master)
+        blocked_axes = [
+            axis_index
+            for axis_index, user_position_unit in enumerate(user_position_units)
+            if user_position_unit is None
+            or not pv_allowed_user_position_unit(user_position_unit)
+        ]
+        if blocked_axes:
+            raise ValueError(
+                pv_reject_message(
+                    {"user_position_units": user_position_units},
+                    blocked_axes,
+                )
+            )
     configure_motion_mode(master, motion_mode)
 
     exchange(master, cycles=10)
@@ -386,44 +722,54 @@ def feedback_message(master, state, client_id=None):
         "type": "feedback",
         "drive_initialized": bool(state.get("drive_initialized", True)),
         "initialization_error": state.get("initialization_error", ""),
-        "target_positions": state["target_positions"],
+        "target_positions": [
+            axis_position_drive_to_api(state, axis_index, value)
+            for axis_index, value in enumerate(state["target_positions"])
+        ],
         "actual_positions": [
-            float(slave.txpdo.actual_position)
-            for slave in master.slaves
+            axis_position_drive_to_api(state, axis_index, slave.txpdo.actual_position)
+            for axis_index, slave in enumerate(master.slaves)
         ],
         "actual_velocities": [
-            float(slave.txpdo.actual_velocity)
-            for slave in master.slaves
+            axis_motion_drive_to_api(state, axis_index, slave.txpdo.actual_velocity)
+            for axis_index, slave in enumerate(master.slaves)
         ],
         "setpoint_positions": [
-            float(slave.txpdo.setpoint_position)
-            for slave in master.slaves
+            axis_position_drive_to_api(state, axis_index, slave.txpdo.setpoint_position)
+            for axis_index, slave in enumerate(master.slaves)
         ],
-        "derived_velocities": state["derived_velocities"],
+        "derived_velocities": [
+            axis_motion_drive_to_api(state, axis_index, value)
+            for axis_index, value in enumerate(state["derived_velocities"])
+        ],
         "command_positions": [
-            float(generator.command_position)
-            for generator in master.trajectory_generators
+            axis_position_drive_to_api(state, axis_index, generator.command_position)
+            for axis_index, generator in enumerate(master.trajectory_generators)
         ],
         "command_velocities": [
-            float(generator.command_velocity)
-            for generator in master.trajectory_generators
+            axis_motion_drive_to_api(state, axis_index, generator.command_velocity)
+            for axis_index, generator in enumerate(master.trajectory_generators)
         ],
         "statuswords": [
             int(slave.txpdo.statusword)
             for slave in master.slaves
         ],
-        "motion_limits": flatten_motion_limits(state["motion_limits"]),
-        "profile_settings": flatten_profile_settings(state["profile_settings"]),
+        "motion_limits": flatten_motion_limits(state["motion_limits"], state),
+        "profile_settings": flatten_profile_settings(state["profile_settings"], state),
         "software_position_limits": flatten_software_position_limits(
-            state["software_position_limits"]
+            state["software_position_limits"],
+            state,
         ),
+        "axis_metadata": state.get("axis_metadata", []),
+        "user_position_units": state.get("user_position_units", []),
+        "converting_unit_exponents": state.get("converting_unit_exponents", []),
         "motion_mode": state["motion_mode"],
         "motion_modes": state["motion_modes"],
         "server_mode": state.get("server_mode", "basic"),
         "csp_counts_per_unit": master.csp_counts_per_unit,
         "position_counts_per_unit": state["position_counts_per_unit"],
         "capabilities": state["capabilities"],
-        "trajectory": state["trajectory"],
+        "trajectory": public_trajectory_state(state),
         "homing": public_homing_state(state),
         "diagnostics": master.last_diagnostics,
         "command_authority": {
@@ -434,28 +780,55 @@ def feedback_message(master, state, client_id=None):
     }
 
 
-def flatten_motion_limits(motion_limits):
+def flatten_motion_limits(motion_limits, state=None):
     return [
-        float(value)
-        for axis_limits in motion_limits
+        float(
+            motion_limits_drive_to_api(state, axis_index, axis_limits)[field_index]
+            if state is not None
+            else value
+        )
+        for axis_index, axis_limits in enumerate(motion_limits)
+        for field_index, value in enumerate(axis_limits)
+    ]
+
+
+def flatten_profile_settings(profile_settings, state=None):
+    return [
+        float(
+            profile_settings_drive_to_api(state, axis_index, axis_settings)[field_index]
+            if state is not None
+            else value
+        )
+        for axis_index, axis_settings in enumerate(profile_settings)
+        for field_index, value in enumerate(axis_settings)
+    ]
+
+
+def flatten_software_position_limits(software_position_limits, state=None):
+    return [
+        float(
+            axis_position_drive_to_api(state, axis_index, value)
+            if state is not None
+            else value
+        )
+        for axis_index, axis_limits in enumerate(software_position_limits)
         for value in axis_limits
     ]
 
 
-def flatten_profile_settings(profile_settings):
-    return [
-        float(value)
-        for axis_settings in profile_settings
-        for value in axis_settings
-    ]
-
-
-def flatten_software_position_limits(software_position_limits):
-    return [
-        float(value)
-        for axis_limits in software_position_limits
-        for value in axis_limits
-    ]
+def public_trajectory_state(state):
+    trajectory = dict(state.get("trajectory", {}))
+    axes = trajectory.get("axes", [])
+    points = []
+    for point in trajectory.get("points", []) or []:
+        converted_point = dict(point)
+        converted_point["positions"] = [
+            axis_position_drive_to_api(state, axis_index, position)
+            for axis_index, position in zip(axes, point.get("positions", []))
+        ]
+        points.append(converted_point)
+    trajectory["points"] = points
+    return trajectory
 
 
 def actual_positions(master):
@@ -1108,21 +1481,64 @@ def command_position_axes(master, state, axes, positions, command_name, client=N
         for axis_index in axes
         if state["motion_modes"][axis_index] == "csp"
     ]
-    jog_axes = [
+    non_position_axes = [
         axis_index
         for axis_index in axes
-        if state["motion_modes"][axis_index] == "jog"
+        if state["motion_modes"][axis_index] not in {"pp", "csp"}
     ]
-    if jog_axes:
+    if non_position_axes:
         print(
             f"Ignored {command_name} for non-position axes. "
-            f"jog_axes={jog_axes}",
+            f"axes={non_position_axes} "
+            f"modes={[state['motion_modes'][axis] for axis in non_position_axes]}",
             flush=True,
         )
-    if pp_axes:
-        command_profile_positions(master, state["target_positions"], pp_axes)
-    if csp_axes:
-        command_csp_positions(master, state["target_positions"], csp_axes)
+    try:
+        if pp_axes:
+            command_profile_positions(master, state["target_positions"], pp_axes)
+        if csp_axes:
+            command_csp_positions(master, state["target_positions"], csp_axes)
+    except Exception as exc:
+        actual = actual_positions(master)
+        for axis_index in axes:
+            state["target_positions"][axis_index] = actual[axis_index]
+            hold_axis_at_actual_position(master, state, axis_index)
+        master.set_target_positions(state["target_positions"])
+        message_text = (
+            f"{command_name} failed while sending position command: {exc}"
+        )
+        if client is not None:
+            reject_command_message(client, command_name, message_text)
+        print(
+            f"Ignored {command_name}: {message_text} "
+            f"axes={axes} statuswords="
+            f"{[f'0x{master.slaves[index].txpdo.statusword:04X}' for index in axes]}",
+            flush=True,
+        )
+
+
+def axis_velocities_from_message(message, master, state, command):
+    axes = selected_axes(message, master, command)
+    if "velocities" in message:
+        values = [
+            float(value)
+            for value in message.get("velocities", [])
+        ]
+    elif "velocity" in message:
+        values = [float(message.get("velocity"))]
+    else:
+        raise ValueError(f"{command} requires velocities or velocity")
+
+    if len(values) != len(axes):
+        raise ValueError(
+            f"{command} value count must match selected axes. "
+            f"axes={len(axes)} values={len(values)}"
+        )
+    return axes, [
+        axis_motion_api_to_drive(state, axis_index, value)
+        for axis_index, value in zip(axes, values)
+    ]
+
 
 def axis_positions_from_message(message, master, state, command):
     axes = selected_axes(message, master, command)
@@ -1137,7 +1553,13 @@ def axis_positions_from_message(message, master, state, command):
         raise ValueError(f"{command} requires positions or position")
 
     if len(values) == axis_count(master) and len(axes) == axis_count(master):
-        return values
+        return [
+            require_int32_value(
+                axis_position_api_to_drive(state, axis_index, value),
+                f"axis {axis_index} target_position",
+            )
+            for axis_index, value in enumerate(values)
+        ]
     if len(values) != len(axes):
         raise ValueError(
             f"{command} value count must match selected axes. "
@@ -1146,11 +1568,14 @@ def axis_positions_from_message(message, master, state, command):
 
     positions = list(state["target_positions"])
     for axis_index, value in zip(axes, values):
-        positions[axis_index] = value
+        positions[axis_index] = require_int32_value(
+            axis_position_api_to_drive(state, axis_index, value),
+            f"axis {axis_index} target_position",
+        )
     return positions
 
 
-def axis_distances_from_message(message, master, command):
+def axis_distances_from_message(message, master, state, command):
     axes = selected_axes(message, master, command)
     if "distances" in message:
         values = [
@@ -1167,7 +1592,13 @@ def axis_distances_from_message(message, master, command):
             f"{command} value count must match selected axes. "
             f"axes={len(axes)} values={len(values)}"
         )
-    return axes, values
+    return axes, [
+        require_int32_value(
+            axis_position_api_to_drive(state, axis_index, value),
+            f"axis {axis_index} target_distance",
+        )
+        for axis_index, value in zip(axes, values)
+    ]
 
 
 def handle_axis_move_abs(message, master, state, client):
@@ -1185,7 +1616,7 @@ def handle_axis_move_abs(message, master, state, client):
 def handle_axis_move_rel(message, master, state, client):
     command = public_command_name(message)
     try:
-        axes, distances = axis_distances_from_message(message, master, command)
+        axes, distances = axis_distances_from_message(message, master, state, command)
         apply_move_profile_velocity(message, master, state, axes)
     except Exception as exc:
         reject_command_message(client, command, str(exc))
@@ -1193,8 +1624,22 @@ def handle_axis_move_rel(message, master, state, client):
 
     positions = actual_positions(master)
     for axis_index, distance in zip(axes, distances):
-        positions[axis_index] += distance
+        positions[axis_index] = require_int32_value(
+            positions[axis_index] + distance,
+            f"axis {axis_index} target_position",
+        )
     command_position_axes(master, state, axes, positions, command, client)
+
+
+def handle_axis_move_vel(message, master, state, client):
+    command = public_command_name(message)
+    try:
+        axes, velocities = axis_velocities_from_message(message, master, state, command)
+    except Exception as exc:
+        reject_command_message(client, command, str(exc))
+        return
+
+    command_profile_velocities(master, state, axes, velocities, command, client)
 
 
 def apply_move_profile_velocity(message, master, state, axes):
@@ -1215,10 +1660,18 @@ def apply_move_profile_velocity(message, master, state, axes):
         values = [float(message.get("profile_velocity")) for _axis in axes]
 
     for axis_index, profile_velocity in zip(axes, values):
-        state["profile_settings"][axis_index][0] = profile_velocity
+        drive_profile_velocity = axis_motion_api_to_drive(
+            state,
+            axis_index,
+            profile_velocity,
+        )
+        state["profile_settings"][axis_index][0] = drive_profile_velocity
         slave = master.slaves[axis_index]
         if slave.rxpdo.has_field("profile_velocity"):
-            slave.rxpdo.profile_velocity = int(profile_velocity)
+            slave.rxpdo.profile_velocity = require_uint32_value(
+                drive_profile_velocity,
+                f"axis {axis_index} profile_velocity",
+            )
 
 # System And Axis Commands
 
@@ -1242,6 +1695,15 @@ def handle_system_stop(message, master, state):
             continue
         if motion_mode == "pp":
             command_profile_positions(master, positions, [axis_index])
+        elif motion_mode == "pv":
+            command_profile_velocities(
+                master,
+                state,
+                [axis_index],
+                [0.0],
+                "system/stop",
+                None,
+            )
         elif motion_mode == "csp":
             command_csp_positions(master, positions, [axis_index])
 
@@ -1282,6 +1744,15 @@ def handle_axis_stop(message, master, state, client):
         motion_mode = state["motion_modes"][axis_index]
         if motion_mode == "pp":
             command_profile_positions(master, positions, [axis_index])
+        elif motion_mode == "pv":
+            command_profile_velocities(
+                master,
+                state,
+                [axis_index],
+                [0.0],
+                "axis/stop",
+                client,
+            )
         elif motion_mode == "csp":
             command_csp_positions(master, positions, [axis_index])
         elif motion_mode == "jog":
@@ -1293,31 +1764,71 @@ def handle_axis_motion_limits(message, master, state, client):
         axes = selected_axes(message, master, command)
         for axis_index in axes:
             current_limits = list(state["motion_limits"][axis_index])
-            positive_velocity_limit = float(
+            positive_velocity_limit = axis_motion_api_to_drive(
+                state,
+                axis_index,
                 message.get(
                     "positive_velocity_limit",
                     message.get(
                         "max_profile_velocity_positive",
-                        message.get("max_profile_velocity", current_limits[0]),
+                        message.get(
+                            "max_profile_velocity",
+                            axis_motion_drive_to_api(
+                                state,
+                                axis_index,
+                                current_limits[0],
+                                "velocity",
+                            ),
+                        ),
                     ),
                 )
             )
-            negative_velocity_limit = float(
+            negative_velocity_limit = axis_motion_api_to_drive(
+                state,
+                axis_index,
                 message.get(
                     "negative_velocity_limit",
-                    message.get("max_profile_velocity_negative", current_limits[1]),
+                    message.get(
+                        "max_profile_velocity_negative",
+                        axis_motion_drive_to_api(
+                            state,
+                            axis_index,
+                            current_limits[1],
+                            "velocity",
+                        ),
+                    ),
                 )
             )
-            max_acceleration = float(
+            max_acceleration = axis_motion_api_to_drive(
+                state,
+                axis_index,
                 message.get(
                     "max_acceleration",
-                    message.get("acceleration", current_limits[2]),
+                    message.get(
+                        "acceleration",
+                        axis_motion_drive_to_api(
+                            state,
+                            axis_index,
+                            current_limits[2],
+                            "acceleration",
+                        ),
+                    ),
                 )
             )
-            max_deceleration = float(
+            max_deceleration = axis_motion_api_to_drive(
+                state,
+                axis_index,
                 message.get(
                     "max_deceleration",
-                    message.get("deceleration", current_limits[3]),
+                    message.get(
+                        "deceleration",
+                        axis_motion_drive_to_api(
+                            state,
+                            axis_index,
+                            current_limits[3],
+                            "deceleration",
+                        ),
+                    ),
                 )
             )
             update_axis_motion_limits(
@@ -1332,13 +1843,6 @@ def handle_axis_motion_limits(message, master, state, client):
     except Exception as exc:
         reject_command_message(client, command, str(exc))
         return
-
-    print(
-        "Received axis/motion_limits: "
-        f"axes={axes} limits={state['motion_limits']}",
-        flush=True,
-    )
-
 
 def update_axis_motion_limits(
     master,
@@ -1385,38 +1889,89 @@ def handle_axis_profile_settings(message, master, state, client):
         axes = selected_axes(message, master, command)
         for axis_index in axes:
             current_settings = list(state["profile_settings"][axis_index])
+            is_pv_axis = state["motion_modes"][axis_index] == "pv"
             profile_velocity = float(
                 message.get(
                     "profile_velocity",
-                    message.get("velocity", current_settings[0]),
+                    message.get(
+                        "velocity",
+                        axis_motion_drive_to_api(
+                            state,
+                            axis_index,
+                            current_settings[0],
+                            "velocity",
+                        ),
+                    ),
                 )
             )
+            if is_pv_axis:
+                profile_velocity = axis_motion_drive_to_api(
+                    state,
+                    axis_index,
+                    current_settings[0],
+                    "velocity",
+                )
             profile_acceleration = float(
                 message.get(
                     "profile_acceleration",
-                    message.get("acceleration", current_settings[1]),
+                    message.get(
+                        "acceleration",
+                        axis_motion_drive_to_api(
+                            state,
+                            axis_index,
+                            current_settings[1],
+                            "acceleration",
+                        ),
+                    ),
                 )
             )
             profile_deceleration = float(
                 message.get(
                     "profile_deceleration",
-                    message.get("deceleration", current_settings[2]),
+                    message.get(
+                        "deceleration",
+                        axis_motion_drive_to_api(
+                            state,
+                            axis_index,
+                            current_settings[2],
+                            "deceleration",
+                        ),
+                    ),
                 )
             )
-            profile_jerk = float(
-                message.get(
-                    "profile_jerk",
-                    message.get("jerk", current_settings[3]),
+            profile_jerk = None
+            if (
+                not is_pv_axis
+                and ("profile_jerk" in message or "jerk" in message)
+            ):
+                profile_jerk = float(
+                    message.get(
+                        "profile_jerk",
+                        message.get("jerk"),
+                    )
                 )
-            )
             update_axis_profile_settings(
                 master,
                 state,
                 axis_index,
-                profile_velocity,
-                profile_acceleration,
-                profile_deceleration,
-                profile_jerk,
+                axis_motion_api_to_drive(state, axis_index, profile_velocity),
+                axis_motion_api_to_drive(
+                    state,
+                    axis_index,
+                    profile_acceleration,
+                    "acceleration",
+                ),
+                axis_motion_api_to_drive(
+                    state,
+                    axis_index,
+                    profile_deceleration,
+                    "deceleration",
+                ),
+                (
+                    axis_motion_api_to_drive(state, axis_index, profile_jerk, "jerk")
+                    if profile_jerk is not None
+                    else None
+                ),
             )
     except Exception as exc:
         reject_command_message(client, command, str(exc))
@@ -1436,24 +1991,44 @@ def update_axis_profile_settings(
     profile_velocity,
     profile_acceleration,
     profile_deceleration,
-    profile_jerk,
+    profile_jerk=None,
 ):
+    current_jerk = state["profile_settings"][axis_index][3]
+    is_pv_axis = state["motion_modes"][axis_index] == "pv"
     state["profile_settings"][axis_index] = [
         profile_velocity,
         profile_acceleration,
         profile_deceleration,
-        profile_jerk,
+        current_jerk if profile_jerk is None else profile_jerk,
     ]
-    if master.slaves[axis_index].rxpdo.has_field("profile_velocity"):
-        master.slaves[axis_index].rxpdo.profile_velocity = int(profile_velocity)
-    DEVICE_PROFILE.write_profile_settings(
-        master,
-        axis_index,
-        profile_velocity,
-        profile_acceleration,
-        profile_deceleration,
-    )
-    DEVICE_PROFILE.write_profile_jerk(master, axis_index, profile_jerk)
+    if not is_pv_axis and master.slaves[axis_index].rxpdo.has_field("profile_velocity"):
+        master.slaves[axis_index].rxpdo.profile_velocity = require_uint32_value(
+            profile_velocity,
+            f"axis {axis_index} profile_velocity",
+        )
+    if is_pv_axis:
+        master.sdo_write_uint32(
+            axis_index,
+            DEVICE_PROFILE.PROFILE_ACCELERATION_INDEX,
+            0,
+            max(0, int(profile_acceleration)),
+        )
+        master.sdo_write_uint32(
+            axis_index,
+            DEVICE_PROFILE.PROFILE_DECELERATION_INDEX,
+            0,
+            max(0, int(profile_deceleration)),
+        )
+    else:
+        DEVICE_PROFILE.write_profile_settings(
+            master,
+            axis_index,
+            profile_velocity,
+            profile_acceleration,
+            profile_deceleration,
+        )
+    if profile_jerk is not None:
+        DEVICE_PROFILE.write_profile_jerk(master, axis_index, profile_jerk)
 
 
 def handle_axis_software_position_limits(message, master, state, client):
@@ -1462,23 +2037,41 @@ def handle_axis_software_position_limits(message, master, state, client):
         axes = selected_axes(message, master, command)
         for axis_index in axes:
             current_limits = list(state["software_position_limits"][axis_index])
-            negative_limit = int(round(float(
+            negative_limit_api = float(
                 message.get(
                     "negative_limit",
                     message.get(
                         "negative_software_position_limit",
-                        current_limits[0],
+                        axis_position_drive_to_api(
+                            state,
+                            axis_index,
+                            current_limits[0],
+                        ),
                     ),
                 )
-            )))
-            positive_limit = int(round(float(
+            )
+            positive_limit_api = float(
                 message.get(
                     "positive_limit",
                     message.get(
                         "positive_software_position_limit",
-                        current_limits[1],
+                        axis_position_drive_to_api(
+                            state,
+                            axis_index,
+                            current_limits[1],
+                        ),
                     ),
                 )
+            )
+            negative_limit = int(round(axis_position_api_to_drive(
+                state,
+                axis_index,
+                negative_limit_api,
+            )))
+            positive_limit = int(round(axis_position_api_to_drive(
+                state,
+                axis_index,
+                positive_limit_api,
             )))
             if negative_limit > positive_limit:
                 raise ValueError(
@@ -1550,6 +2143,14 @@ def handle_motion_mode(message, master, state, client=None):
     if all(state["motion_modes"][axis_index] == requested_mode for axis_index in axis_indices):
         return
 
+    if requested_mode == "pv" and reject_if_pv_not_allowed(
+        state,
+        axis_indices,
+        client,
+        command,
+    ):
+        return
+
     try:
         for axis_index in axis_indices:
             require_pdo_fields_for_mode(master, requested_mode, axis_index)
@@ -1608,7 +2209,7 @@ def handle_motion_mode(message, master, state, client=None):
 
 def handle_fault_reset(master, state, axis_indices=None):
     print(
-        "Received fault reset: pulsing fault reset bit only",
+        "Received fault reset: pulsing fault reset bit, then switching on",
         flush=True,
     )
     if axis_indices is None:
@@ -1633,9 +2234,18 @@ def handle_fault_reset(master, state, axis_indices=None):
         slave.rxpdo.controlword = controlword & ~0x0080
     exchange(master, cycles=2)
 
+    for axis_index in axis_indices:
+        master.slaves[axis_index].rxpdo.controlword = 0x0006
+    exchange(master, cycles=5)
+
+    for axis_index in axis_indices:
+        master.slaves[axis_index].rxpdo.controlword = 0x0007
+    exchange(master, cycles=5)
+
     print(
-        "Fault reset pulse complete. "
+        "Fault reset complete. "
         f"axes={axis_indices} "
+        f"statuswords={[f'0x{master.slaves[index].txpdo.statusword:04X}' for index in axis_indices]} "
         f"controlwords={[f'0x{master.slaves[index].rxpdo.controlword:04X}' for index in axis_indices]}",
         flush=True,
     )
@@ -2055,7 +2665,7 @@ def handle_message(message, master, state, client):
         handle_trajectory_status(client, master, state)
     elif message_type == "trajectory/move":
         handle_trajectory_command(
-            message,
+            trajectory_message_api_to_drive(message, state),
             master,
             state,
             axis_count=axis_count,
@@ -2085,6 +2695,8 @@ def handle_message(message, master, state, client):
         handle_axis_move_abs(message, master, state, client)
     elif message_type == "axis/move_rel":
         handle_axis_move_rel(message, master, state, client)
+    elif message_type == "axis/move_vel":
+        handle_axis_move_vel(message, master, state, client)
     elif message_type == "axis/jog_start":
         handle_axis_jog_start(message, master, state, client)
     elif message_type == "axis/jog_stop":
@@ -2195,9 +2807,58 @@ def command_profile_positions(master, target_positions, axis_indices):
         target_position = target_positions[axis_index]
         slave = master.slaves[axis_index]
         slave.rxpdo.mode_of_operation = PROFILE_POSITION_MODE
-        slave.rxpdo.target_position = int(target_position)
+        slave.rxpdo.target_position = require_int32_value(
+            target_position,
+            f"axis {axis_index} target_position",
+        )
 
     pp_setpoint_handshake(master, axis_indices)
+
+
+def command_profile_velocities(master, state, axis_indices, velocities, command, client=None):
+    faults = faulted_axes(master)
+    if faults:
+        hold_faulted_axes(master, state)
+        master.sync_trajectory_to_actual_positions()
+        print(
+            f"Ignored {command} because at least one drive is faulted. "
+            f"faulted_axes={faults} "
+            f"statuswords={[f'0x{slave.txpdo.statusword:04X}' for slave in master.slaves]}",
+            flush=True,
+        )
+        return
+
+    if reject_if_any_axis_disabled(master, axis_indices, client, command):
+        return
+
+    if reject_if_pv_not_allowed(state, axis_indices, client, command):
+        return
+
+    for axis_index, velocity in zip(axis_indices, velocities):
+        require_pdo_fields_for_mode(master, "pv", axis_index)
+        slave = master.slaves[axis_index]
+        target_velocity = require_int32_value(
+            velocity,
+            f"axis {axis_index} target_velocity",
+        )
+        slave.rxpdo.target_velocity = target_velocity
+        if state["motion_modes"][axis_index] != "pv":
+            hold_axis_at_actual_position(master, state, axis_index)
+            configure_motion_mode(master, "pv", axis_index)
+            state["motion_modes"][axis_index] = "pv"
+        slave.rxpdo.mode_of_operation = PROFILE_VELOCITY_MODE
+        slave.rxpdo.target_velocity = target_velocity
+        slave.rxpdo.controlword = 0x000F
+        master.trajectory_generators[axis_index].command_velocity = float(velocity)
+        master.trajectory_generators[axis_index].target_position = float(
+            slave.txpdo.actual_position
+        )
+        master.trajectory_generators[axis_index].command_position = float(
+            slave.txpdo.actual_position
+        )
+
+    update_motion_mode_summary(state)
+    exchange(master, cycles=2)
 
 
 def pp_setpoint_handshake(master, axis_indices):
@@ -2229,15 +2890,18 @@ def pp_setpoint_handshake(master, axis_indices):
     )
 
     if not (ack_cleared_before and ack_set and ack_cleared_after):
-        print(
+        diagnostics = diagnostics_summary(master, axis_indices)
+        message = (
             "PP set-point handshake did not complete cleanly. "
             f"axes={axis_indices} "
             f"ack_cleared_before={ack_cleared_before} "
             f"ack_set={ack_set} "
             f"ack_cleared_after={ack_cleared_after} "
-            f"statuswords={[f'0x{master.slaves[index].txpdo.statusword:04X}' for index in axis_indices]}",
-            flush=True,
+            f"statuswords={[f'0x{master.slaves[index].txpdo.statusword:04X}' for index in axis_indices]} "
+            f"diagnostics={diagnostics}"
         )
+        print(message, flush=True)
+        raise RuntimeError(message)
 
 
 def wait_pp_setpoint_ack(master, axis_indices, expected, max_cycles):
@@ -2254,12 +2918,18 @@ def wait_pp_setpoint_ack(master, axis_indices, expected, max_cycles):
 
 
 def command_csp_positions(master, target_positions, axis_indices):
+    checked_positions = list(target_positions)
+    for axis_index in axis_indices:
+        checked_positions[axis_index] = require_int32_value(
+            checked_positions[axis_index],
+            f"axis {axis_index} target_position",
+        )
     for axis_index in axis_indices:
         slave = master.slaves[axis_index]
         slave.rxpdo.mode_of_operation = CSP_MODE
         slave.rxpdo.controlword = 0x000F
 
-    master.set_target_positions(target_positions)
+    master.set_target_positions(checked_positions)
 
 # Server Loops
 
@@ -2489,6 +3159,9 @@ def initial_server_state(
     software_position_limits,
     profile_settings=None,
     motion_limits=None,
+    user_position_units=None,
+    converting_unit_exponents=None,
+    axis_metadata=None,
     initialized=True,
     initialization_error="",
 ):
@@ -2512,6 +3185,15 @@ def initial_server_state(
             ]
             for _ in range(args.axis_count)
         ]
+    if user_position_units is None:
+        user_position_units = [None for _ in range(args.axis_count)]
+    if converting_unit_exponents is None:
+        converting_unit_exponents = [None for _ in range(args.axis_count)]
+    if axis_metadata is None:
+        axis_metadata = build_axis_metadata(
+            user_position_units,
+            converting_unit_exponents,
+        )
     return {
         "drive_initialized": bool(initialized),
         "initialization_error": initialization_error,
@@ -2527,6 +3209,9 @@ def initial_server_state(
         "motion_limits": motion_limits,
         "profile_settings": profile_settings,
         "software_position_limits": software_position_limits,
+        "axis_metadata": axis_metadata,
+        "user_position_units": user_position_units,
+        "converting_unit_exponents": converting_unit_exponents,
         "motion_mode": args.motion_mode,
         "motion_modes": [
             args.motion_mode
@@ -2605,6 +3290,8 @@ def main():
             ]
             profile_settings = None
             read_motion_limits_state = None
+            user_position_units = None
+            converting_unit_exponents = None
             positions = [0.0 for _ in range(args.axis_count)]
             state = initial_server_state(
                 args,
@@ -2612,6 +3299,8 @@ def main():
                 software_position_limits,
                 profile_settings=profile_settings,
                 motion_limits=read_motion_limits_state,
+                user_position_units=user_position_units,
+                converting_unit_exponents=converting_unit_exponents,
                 initialized=False,
                 initialization_error=initialization_error,
             )
@@ -2642,10 +3331,74 @@ def main():
                 ]
                 for _ in range(args.axis_count)
             ]
+            user_position_units = read_axis_user_position_units(master)
+            converting_unit_exponents = read_axis_converting_unit_exponents(master)
+            axis_metadata = build_axis_metadata(
+                user_position_units,
+                converting_unit_exponents,
+            )
+            unit_state = {
+                "axis_metadata": axis_metadata,
+                "position_counts_per_unit": (
+                    args.csp_counts_per_unit
+                    if args.backend == "pysoem"
+                    else 1.0
+                ),
+            }
+            profile_settings = [
+                [
+                    axis_motion_api_to_drive(unit_state, axis_index, args.max_velocity),
+                    axis_motion_api_to_drive(
+                        unit_state,
+                        axis_index,
+                        args.acceleration,
+                        "acceleration",
+                    ),
+                    axis_motion_api_to_drive(
+                        unit_state,
+                        axis_index,
+                        args.deceleration,
+                        "deceleration",
+                    ),
+                    axis_motion_api_to_drive(
+                        unit_state,
+                        axis_index,
+                        args.pp_jerk,
+                        "jerk",
+                    ),
+                ]
+                for axis_index in range(args.axis_count)
+            ]
+            read_motion_limits_state = [
+                [
+                    axis_motion_api_to_drive(unit_state, axis_index, args.max_velocity),
+                    axis_motion_api_to_drive(
+                        unit_state,
+                        axis_index,
+                        -abs(args.max_velocity),
+                    ),
+                    axis_motion_api_to_drive(
+                        unit_state,
+                        axis_index,
+                        args.acceleration,
+                        "acceleration",
+                    ),
+                    axis_motion_api_to_drive(
+                        unit_state,
+                        axis_index,
+                        args.deceleration,
+                        "deceleration",
+                    ),
+                ]
+                for axis_index in range(args.axis_count)
+            ]
             for axis_index, axis_profile_settings in enumerate(profile_settings):
                 slave = master.slaves[axis_index]
                 if slave.rxpdo.has_field("profile_velocity"):
-                    slave.rxpdo.profile_velocity = int(axis_profile_settings[0])
+                    slave.rxpdo.profile_velocity = require_uint32_value(
+                        axis_profile_settings[0],
+                        f"axis {axis_index} profile_velocity",
+                    )
             for axis_index, axis_limits in enumerate(read_motion_limits_state):
                 master.slaves[axis_index].axis_server_motion_limits = list(axis_limits)
                 master.set_axis_motion_limits(
@@ -2684,6 +3437,9 @@ def main():
                 software_position_limits,
                 profile_settings=profile_settings,
                 motion_limits=read_motion_limits_state,
+                user_position_units=user_position_units,
+                converting_unit_exponents=converting_unit_exponents,
+                axis_metadata=axis_metadata,
                 initialized=True,
             )
 

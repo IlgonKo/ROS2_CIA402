@@ -38,6 +38,71 @@ STATUSWORD_BITS = [
 ]
 
 
+PV_USER_POSITION_UNITS = {
+    0x1000: "rad",
+    0x4100: "deg",
+    0xB400: "rev",
+}
+
+LINEAR_USER_POSITION_UNITS = {
+    0x0100: "mm",
+}
+
+
+def user_position_unit_name(user_position_unit):
+    if user_position_unit is None:
+        return "unknown"
+    unit = int(user_position_unit)
+    return (
+        PV_USER_POSITION_UNITS.get(unit)
+        or LINEAR_USER_POSITION_UNITS.get(unit)
+        or f"0x{unit:04X}"
+    )
+
+
+def axis_motion_kind(user_position_unit):
+    if user_position_unit is None:
+        return "unknown"
+    unit = int(user_position_unit)
+    if unit in PV_USER_POSITION_UNITS:
+        return "rotary"
+    if unit in LINEAR_USER_POSITION_UNITS:
+        return "linear"
+    return "unknown"
+
+
+def scale_from_exponent(exponent, default=1.0):
+    if exponent is None:
+        return default
+    return 10.0 ** int(exponent)
+
+
+def build_axis_metadata(axis_index, user_position_unit, exponents):
+    if exponents is None:
+        exponents = [None, None, None, None]
+    position_unit = user_position_unit_name(user_position_unit)
+    acceleration_scale = scale_from_exponent(exponents[2], 1.0)
+    return {
+        "axis": axis_index,
+        "user_position_unit": user_position_unit,
+        "user_position_unit_name": position_unit,
+        "motion_kind": axis_motion_kind(user_position_unit),
+        "pv_allowed": user_position_unit is not None
+        and int(user_position_unit) in PV_USER_POSITION_UNITS,
+        "converting_unit_exponents": exponents,
+        "position_unit": position_unit,
+        "velocity_unit": f"{position_unit}/s",
+        "acceleration_unit": f"{position_unit}/s^2",
+        "deceleration_unit": f"{position_unit}/s^2",
+        "jerk_unit": f"{position_unit}/s^3",
+        "position_scale": scale_from_exponent(exponents[0], 1.0),
+        "velocity_scale": scale_from_exponent(exponents[1], 1.0),
+        "acceleration_scale": acceleration_scale,
+        "deceleration_scale": acceleration_scale,
+        "jerk_scale": scale_from_exponent(exponents[3], 1.0),
+    }
+
+
 def load_env_file(path):
     values = {}
     if not path.exists():
@@ -228,33 +293,76 @@ class AxisServerClient:
         elif index == 0x6061 and subindex == 0:
             self._diagnostics_for_axis(axis_index)["mode_display"] = int(value)
         elif index == 0x607D and subindex in (1, 2):
+            api_value = self._position_drive_to_api(axis_index, value)
             limits = self.feedback.setdefault(
                 "software_position_limits",
                 [0.0 for _ in range(self.axis_count * 2)],
             )
-            limits[axis_index * 2 + subindex - 1] = float(value)
+            limits[axis_index * 2 + subindex - 1] = api_value
         elif index == 0x6081 and subindex == 0:
-            self._set_flat_feedback_value("profile_settings", 4, axis_index, 0, value)
+            self._set_flat_feedback_value(
+                "profile_settings",
+                4,
+                axis_index,
+                0,
+                self._motion_drive_to_api(axis_index, value, "velocity"),
+            )
         elif index == 0x6083 and subindex == 0:
-            self._set_flat_feedback_value("profile_settings", 4, axis_index, 1, value)
+            self._set_flat_feedback_value(
+                "profile_settings",
+                4,
+                axis_index,
+                1,
+                self._motion_drive_to_api(axis_index, value, "acceleration"),
+            )
         elif index == 0x6084 and subindex == 0:
-            self._set_flat_feedback_value("profile_settings", 4, axis_index, 2, value)
+            self._set_flat_feedback_value(
+                "profile_settings",
+                4,
+                axis_index,
+                2,
+                self._motion_drive_to_api(axis_index, value, "deceleration"),
+            )
         elif index == 0x60A4 and subindex == 1:
-            self._set_flat_feedback_value("profile_settings", 4, axis_index, 3, value)
+            self._set_flat_feedback_value(
+                "profile_settings",
+                4,
+                axis_index,
+                3,
+                self._motion_drive_to_api(axis_index, value, "jerk"),
+            )
         elif index == 0x607F and subindex == 0:
-            self._set_flat_feedback_value("motion_limits", 4, axis_index, 0, value)
+            self._set_flat_feedback_value(
+                "motion_limits",
+                4,
+                axis_index,
+                0,
+                self._motion_drive_to_api(axis_index, value, "velocity"),
+            )
         elif index == 0x2183 and subindex == 0x0C:
             self._set_flat_feedback_value(
                 "motion_limits",
                 4,
                 axis_index,
                 1,
-                float(value) * 1000.0,
+                self._motion_drive_to_api(axis_index, float(value) * 1000.0),
             )
         elif index == 0x60C5 and subindex == 0:
-            self._set_flat_feedback_value("motion_limits", 4, axis_index, 2, value)
+            self._set_flat_feedback_value(
+                "motion_limits",
+                4,
+                axis_index,
+                2,
+                self._motion_drive_to_api(axis_index, value, "acceleration"),
+            )
         elif index == 0x60C6 and subindex == 0:
-            self._set_flat_feedback_value("motion_limits", 4, axis_index, 3, value)
+            self._set_flat_feedback_value(
+                "motion_limits",
+                4,
+                axis_index,
+                3,
+                self._motion_drive_to_api(axis_index, value, "deceleration"),
+            )
 
     def _diagnostics_for_axis(self, axis_index):
         diagnostics = self.feedback.setdefault("diagnostics", [])
@@ -271,6 +379,37 @@ class AxisServerClient:
         while len(flat) < required:
             flat.append(0.0)
         flat[axis_index * fields_per_axis + field] = float(value)
+
+    def _axis_metadata(self, axis_index):
+        metadata = self.feedback.setdefault(
+            "axis_metadata",
+            [{} for _ in range(self.axis_count)],
+        )
+        if axis_index < len(metadata) and isinstance(metadata[axis_index], dict):
+            return metadata[axis_index]
+        return {}
+
+    def _position_drive_to_api(self, axis_index, value):
+        metadata = self._axis_metadata(axis_index)
+        if metadata.get("motion_kind") == "rotary":
+            scale = 1_000_000.0
+        else:
+            scale = float(self.feedback.get("position_counts_per_unit", 1.0))
+        return float(value) / max(scale, 1e-9)
+
+    def _motion_drive_to_api(self, axis_index, value, kind="velocity"):
+        metadata = self._axis_metadata(axis_index)
+        key = {
+            "velocity": "velocity_scale",
+            "acceleration": "acceleration_scale",
+            "deceleration": "deceleration_scale",
+            "jerk": "jerk_scale",
+        }.get(kind, "velocity_scale")
+        try:
+            scale = float(metadata.get(key, 1.0))
+        except (TypeError, ValueError):
+            scale = 1.0
+        return float(value) * scale
 
     def get_snapshot(self):
         with self.lock:
@@ -316,6 +455,24 @@ class AxisServerClient:
             ]
         self.send_json(message)
 
+    def send_axis_move_velocity(self, axis_index, velocity):
+        self.send_json(
+            {
+                "cmd": "axis/move_vel",
+                "axis": int(axis_index),
+                "velocity": float(velocity),
+            }
+        )
+
+    def send_axes_move_velocity(self, axes, velocities):
+        self.send_json(
+            {
+                "cmd": "axis/move_vel",
+                "axes": [int(axis_index) for axis_index in axes],
+                "velocities": [float(velocity) for velocity in velocities],
+            }
+        )
+
     def send_axis_enable(self, axis_index):
         self.send_json(
             {
@@ -333,16 +490,20 @@ class AxisServerClient:
         )
 
     def send_profile_settings(self, axis_index, profile_settings):
-        self.send_json(
-            {
-                "cmd": "axis/profile",
-                "axis": int(axis_index),
-                "profile_velocity": float(profile_settings[0]),
-                "profile_acceleration": float(profile_settings[1]),
-                "profile_deceleration": float(profile_settings[2]),
-                "profile_jerk": float(profile_settings[3]),
-            }
-        )
+        message = {
+            "cmd": "axis/profile",
+            "axis": int(axis_index),
+        }
+        if len(profile_settings) == 2:
+            message["profile_acceleration"] = float(profile_settings[0])
+            message["profile_deceleration"] = float(profile_settings[1])
+        else:
+            message["profile_velocity"] = float(profile_settings[0])
+            message["profile_acceleration"] = float(profile_settings[1])
+            message["profile_deceleration"] = float(profile_settings[2])
+            if len(profile_settings) > 3 and profile_settings[3] is not None:
+                message["profile_jerk"] = float(profile_settings[3])
+        self.send_json(message)
 
     def send_axis_motion_limits(self, axis_index, axis_limits):
         self.send_json(
@@ -682,6 +843,10 @@ class AxisServerControlPanel:
             tk.BooleanVar(value=True)
             for _ in range(self.axis_count)
         ]
+        self.multi_motion_mode_vars = [
+            tk.StringVar(value="pp")
+            for _ in range(self.axis_count)
+        ]
         self.multi_target_position_vars = [
             tk.StringVar(value="0.0")
             for _ in range(self.axis_count)
@@ -740,7 +905,14 @@ class AxisServerControlPanel:
             for _ in range(self.axis_count)
         ]
         self.latest_motion_modes = ["pp" for _ in range(self.axis_count)]
+        self.latest_user_position_units = [None for _ in range(self.axis_count)]
+        self.latest_converting_unit_exponents = [
+            None for _ in range(self.axis_count)
+        ]
+        self.latest_axis_metadata = [{} for _ in range(self.axis_count)]
         self.position_counts_per_unit = 1000.0
+        self.mode_frame = None
+        self.pv_mode_button = None
         self.csp_mode_button = None
         self.axis_selector_notebook = None
         self.single_control_notebook = None
@@ -750,6 +922,22 @@ class AxisServerControlPanel:
         self.multi_velocity_trace = None
         self.manual_controlword_frame = None
         self.manual_controlword_buttons = []
+        self.multi_mode_widgets = []
+        self.multi_command_label_widgets = []
+        self.multi_profile_label_widgets = []
+        self.multi_profile_entry_widgets = []
+        self.multi_repeat_a_label_widgets = []
+        self.multi_repeat_b_label_widgets = []
+        self.multi_repeat_profile_label_widgets = []
+        self.multi_repeat_profile_entry_widgets = []
+        self.motion_field_labels = {}
+        self.motion_entry_widgets = {}
+        self.profile_label_widgets = []
+        self.profile_entry_widgets = []
+        self.limit_label_widgets = []
+        self.software_limit_label_widgets = []
+        self.repeat_label_widgets = {}
+        self.diagnosis_unit_var = tk.StringVar(value="Unit: unknown")
 
         self.repeat_enabled = False
         self.jog_active_axis = None
@@ -763,6 +951,7 @@ class AxisServerControlPanel:
         self.repeat_generation = 0
         self.multi_repeat_enabled = False
         self.multi_repeat_axes = []
+        self.multi_repeat_modes = []
         self.multi_repeat_points = None
         self.multi_repeat_profile_velocities = []
         self.multi_repeat_index = 0
@@ -846,17 +1035,25 @@ class AxisServerControlPanel:
             status_frame.columnconfigure(index % 8, weight=1)
             self.statusword_lamps.append(lamp)
 
-        mode_frame = ttk.LabelFrame(self.single_axis_area, text="Motion Mode")
-        mode_frame.pack(fill="x", pady=(0, 10))
+        self.mode_frame = ttk.LabelFrame(self.single_axis_area, text="Motion Mode")
+        self.mode_frame.pack(fill="x", pady=(0, 10))
         ttk.Radiobutton(
-            mode_frame,
+            self.mode_frame,
             text="PP",
             value="pp",
             variable=self.motion_mode_var,
             command=self.apply_motion_mode,
         ).pack(side="left", padx=8, pady=5)
+        self.pv_mode_button = ttk.Radiobutton(
+            self.mode_frame,
+            text="PV",
+            value="pv",
+            variable=self.motion_mode_var,
+            command=self.apply_motion_mode,
+        )
+        self.pv_mode_button.pack(side="left", padx=8, pady=5)
         self.csp_mode_button = ttk.Radiobutton(
-            mode_frame,
+            self.mode_frame,
             text="CSP",
             value="csp",
             variable=self.motion_mode_var,
@@ -895,7 +1092,9 @@ class AxisServerControlPanel:
         for index, (label, var, kind) in enumerate(fields):
             row = index // 4
             column = (index % 4) * 2
-            ttk.Label(detail, text=label).grid(
+            label_widget = ttk.Label(detail, text=label)
+            self.motion_field_labels[label] = label_widget
+            label_widget.grid(
                 row=row,
                 column=column,
                 padx=5,
@@ -904,6 +1103,7 @@ class AxisServerControlPanel:
             )
             if kind.startswith("entry"):
                 entry = ttk.Entry(detail, textvariable=var, justify="right", width=14)
+                self.motion_entry_widgets[label] = entry
                 entry.bind(
                     "<KeyRelease>",
                     lambda _event, watched_var=var: self.mark_dirty(watched_var),
@@ -1033,7 +1233,8 @@ class AxisServerControlPanel:
             pady=4,
             sticky="w",
         )
-        ttk.Label(repeat, text="Point A mm").grid(row=0, column=2, padx=5, pady=4)
+        self.repeat_label_widgets["point_a"] = ttk.Label(repeat, text="Point A mm")
+        self.repeat_label_widgets["point_a"].grid(row=0, column=2, padx=5, pady=4)
         entry = ttk.Entry(
             repeat,
             textvariable=self.repeat_point_a_var,
@@ -1042,7 +1243,8 @@ class AxisServerControlPanel:
         )
         self.bind_entry_focus(entry, self.repeat_point_a_var)
         entry.grid(row=0, column=3, padx=5, pady=4)
-        ttk.Label(repeat, text="Point B mm").grid(row=0, column=4, padx=5, pady=4)
+        self.repeat_label_widgets["point_b"] = ttk.Label(repeat, text="Point B mm")
+        self.repeat_label_widgets["point_b"].grid(row=0, column=4, padx=5, pady=4)
         entry = ttk.Entry(
             repeat,
             textvariable=self.repeat_point_b_var,
@@ -1051,7 +1253,8 @@ class AxisServerControlPanel:
         )
         self.bind_entry_focus(entry, self.repeat_point_b_var)
         entry.grid(row=0, column=5, padx=5, pady=4)
-        ttk.Label(repeat, text="Profile Velocity mm/s").grid(
+        self.repeat_label_widgets["velocity"] = ttk.Label(repeat, text="Profile Velocity mm/s")
+        self.repeat_label_widgets["velocity"].grid(
             row=0,
             column=6,
             padx=5,
@@ -1096,7 +1299,9 @@ class AxisServerControlPanel:
             ("Profile Jerk mm/s^3", self.profile_vars[3]),
         ]
         for index, (label, var) in enumerate(profile_fields):
-            ttk.Label(profile_frame, text=label).grid(
+            label_widget = ttk.Label(profile_frame, text=label)
+            self.profile_label_widgets.append(label_widget)
+            label_widget.grid(
                 row=0,
                 column=index * 2,
                 padx=5,
@@ -1110,6 +1315,7 @@ class AxisServerControlPanel:
             )
             self.bind_entry_focus(entry, var)
             entry.grid(row=0, column=index * 2 + 1, padx=5, pady=5, sticky="ew")
+            self.profile_entry_widgets.append(entry)
             profile_frame.columnconfigure(index * 2 + 1, weight=1)
 
         settings_buttons = ttk.Frame(settings_tab)
@@ -1129,7 +1335,9 @@ class AxisServerControlPanel:
             ("Max Decel mm/s^2", self.limit_vars[3]),
         ]
         for index, (label, var) in enumerate(limit_fields):
-            ttk.Label(limit_frame, text=label).grid(
+            label_widget = ttk.Label(limit_frame, text=label)
+            self.limit_label_widgets.append(label_widget)
+            label_widget.grid(
                 row=0,
                 column=index * 2,
                 padx=5,
@@ -1152,7 +1360,9 @@ class AxisServerControlPanel:
             ("Positive SW Limit mm", self.software_limit_vars[1]),
         ]
         for index, (label, var) in enumerate(sw_limit_fields):
-            ttk.Label(sw_limit_frame, text=label).grid(
+            label_widget = ttk.Label(sw_limit_frame, text=label)
+            self.software_limit_label_widgets.append(label_widget)
+            label_widget.grid(
                 row=0,
                 column=index * 2,
                 padx=5,
@@ -1248,6 +1458,10 @@ class AxisServerControlPanel:
             text="Write",
             command=self.diagnosis_write,
         ).pack(side="left", padx=4)
+        ttk.Label(
+            diagnosis_buttons,
+            textvariable=self.diagnosis_unit_var,
+        ).pack(side="right", padx=4)
 
         diagnosis_result = ttk.LabelFrame(diagnosis_tab, text="Result")
         diagnosis_result.pack(fill="both", expand=True)
@@ -1281,9 +1495,12 @@ class AxisServerControlPanel:
         headings = [
             "Use",
             "Axis",
-            "Target Position mm",
-            "Profile Velocity mm/s",
-            "Actual Position mm",
+            "Mode",
+            "Command",
+            "Value",
+            "Profile Velocity",
+            "Value",
+            "Actual Position",
         ]
         for column, text in enumerate(headings):
             ttk.Label(command_frame, text=text).grid(
@@ -1293,7 +1510,7 @@ class AxisServerControlPanel:
                 pady=5,
                 sticky="ew",
             )
-            command_frame.columnconfigure(column, weight=1 if column in (2, 3, 4) else 0)
+            command_frame.columnconfigure(column, weight=1 if column in (4, 6, 7) else 0)
 
         for axis_index, axis_name in enumerate(self.axis_names):
             row = axis_index + 1
@@ -1308,6 +1525,23 @@ class AxisServerControlPanel:
                 pady=4,
                 sticky="w",
             )
+            mode_combo = ttk.Combobox(
+                command_frame,
+                textvariable=self.multi_motion_mode_vars[axis_index],
+                values=self.motion_mode_options(axis_index),
+                state="readonly",
+                width=5,
+            )
+            mode_combo.bind(
+                "<<ComboboxSelected>>",
+                lambda _event, axis=axis_index: self.on_multi_motion_mode_changed(axis),
+            )
+            mode_combo.grid(row=row, column=2, padx=5, pady=4, sticky="ew")
+            self.multi_mode_widgets.append(mode_combo)
+
+            command_label = ttk.Label(command_frame, text="Target Position")
+            command_label.grid(row=row, column=3, padx=5, pady=4, sticky="e")
+            self.multi_command_label_widgets.append(command_label)
             target_entry = ttk.Entry(
                 command_frame,
                 textvariable=self.multi_target_position_vars[axis_index],
@@ -1324,8 +1558,11 @@ class AxisServerControlPanel:
                 target_entry,
                 self.multi_target_position_vars[axis_index],
             )
-            target_entry.grid(row=row, column=2, padx=5, pady=4, sticky="ew")
+            target_entry.grid(row=row, column=4, padx=5, pady=4, sticky="ew")
 
+            profile_label = ttk.Label(command_frame, text="Profile Velocity")
+            profile_label.grid(row=row, column=5, padx=5, pady=4, sticky="e")
+            self.multi_profile_label_widgets.append(profile_label)
             velocity_entry = ttk.Entry(
                 command_frame,
                 textvariable=self.multi_profile_velocity_vars[axis_index],
@@ -1342,14 +1579,15 @@ class AxisServerControlPanel:
                 velocity_entry,
                 self.multi_profile_velocity_vars[axis_index],
             )
-            velocity_entry.grid(row=row, column=3, padx=5, pady=4, sticky="ew")
+            velocity_entry.grid(row=row, column=6, padx=5, pady=4, sticky="ew")
+            self.multi_profile_entry_widgets.append(velocity_entry)
 
             ttk.Label(
                 command_frame,
                 textvariable=self.multi_actual_position_vars[axis_index],
                 anchor="e",
                 width=16,
-            ).grid(row=row, column=4, padx=5, pady=4, sticky="ew")
+            ).grid(row=row, column=7, padx=5, pady=4, sticky="ew")
 
         buttons = ttk.Frame(parent)
         buttons.pack(fill="x", pady=(0, 10))
@@ -1375,9 +1613,13 @@ class AxisServerControlPanel:
         repeat_headings = [
             "Use",
             "Axis",
-            "Point A mm",
-            "Point B mm",
-            "Profile Velocity mm/s",
+            "Mode",
+            "A",
+            "Value",
+            "B",
+            "Value",
+            "Profile Velocity",
+            "Value",
         ]
         for column, text in enumerate(repeat_headings):
             ttk.Label(repeat_frame, text=text).grid(
@@ -1387,7 +1629,7 @@ class AxisServerControlPanel:
                 pady=5,
                 sticky="ew",
             )
-            repeat_frame.columnconfigure(column, weight=1 if column >= 2 else 0)
+            repeat_frame.columnconfigure(column, weight=1 if column in (4, 6, 8) else 0)
 
         for axis_index, axis_name in enumerate(self.axis_names):
             row = axis_index + 1
@@ -1402,10 +1644,34 @@ class AxisServerControlPanel:
                 pady=4,
                 sticky="w",
             )
+            repeat_mode_combo = ttk.Combobox(
+                repeat_frame,
+                textvariable=self.multi_motion_mode_vars[axis_index],
+                values=self.motion_mode_options(axis_index),
+                state="readonly",
+                width=5,
+            )
+            repeat_mode_combo.bind(
+                "<<ComboboxSelected>>",
+                lambda _event, axis=axis_index: self.on_multi_motion_mode_changed(axis),
+            )
+            repeat_mode_combo.grid(row=row, column=2, padx=5, pady=4, sticky="ew")
+            self.multi_mode_widgets.append(repeat_mode_combo)
+
+            a_label = ttk.Label(repeat_frame, text="Point A")
+            a_label.grid(row=row, column=3, padx=5, pady=4, sticky="e")
+            self.multi_repeat_a_label_widgets.append(a_label)
+            b_label = ttk.Label(repeat_frame, text="Point B")
+            b_label.grid(row=row, column=5, padx=5, pady=4, sticky="e")
+            self.multi_repeat_b_label_widgets.append(b_label)
+            profile_label = ttk.Label(repeat_frame, text="Profile Velocity")
+            profile_label.grid(row=row, column=7, padx=5, pady=4, sticky="e")
+            self.multi_repeat_profile_label_widgets.append(profile_label)
+
             for column, var in [
-                (2, self.multi_repeat_point_a_vars[axis_index]),
-                (3, self.multi_repeat_point_b_vars[axis_index]),
-                (4, self.multi_repeat_profile_velocity_vars[axis_index]),
+                (4, self.multi_repeat_point_a_vars[axis_index]),
+                (6, self.multi_repeat_point_b_vars[axis_index]),
+                (8, self.multi_repeat_profile_velocity_vars[axis_index]),
             ]:
                 entry = ttk.Entry(
                     repeat_frame,
@@ -1419,6 +1685,8 @@ class AxisServerControlPanel:
                 )
                 self.bind_entry_focus(entry, var)
                 entry.grid(row=row, column=column, padx=5, pady=4, sticky="ew")
+                if column == 8:
+                    self.multi_repeat_profile_entry_widgets.append(entry)
 
         repeat_controls = ttk.Frame(parent)
         repeat_controls.pack(fill="x", pady=(0, 10))
@@ -1442,7 +1710,7 @@ class AxisServerControlPanel:
         ttk.Button(
             repeat_controls,
             text="Stop Repeat",
-            command=self.stop_multi_repeat,
+            command=self.stop_multi_repeat_motion,
         ).pack(side="left", padx=4)
 
         trace_controls = ttk.Frame(parent)
@@ -1490,11 +1758,23 @@ class AxisServerControlPanel:
         if self.single_control_notebook.index("current") != 0:
             self.stop_repeat()
             self.stop_jog()
+            self.stop_selected_pv_axis()
 
     def stop_tab_motion(self):
         self.stop_repeat()
         self.stop_multi_repeat()
         self.stop_jog()
+        self.stop_selected_pv_axis()
+
+    def stop_selected_pv_axis(self):
+        axis_index = self.selected_axis()
+        if axis_index < 0 or axis_index >= self.axis_count:
+            return
+        if axis_index >= len(self.latest_motion_modes):
+            return
+        if self.latest_motion_modes[axis_index] != "pv":
+            return
+        self.try_send(lambda: self.client.send_axis_stop(axis_index))
 
     def show_single_axis_area(self):
         if self.multi_axis_area is not None and self.multi_axis_area.winfo_ismapped():
@@ -1525,13 +1805,19 @@ class AxisServerControlPanel:
         if self.try_send(
             lambda: self.client.send_profile_settings(axis_index, profile_settings)
         ):
-            self.queue_panel_sdo_reads([
-                (axis_index, "0x6081", "0x00", "uint32"),
+            reads = [
                 (axis_index, "0x6083", "0x00", "uint32"),
                 (axis_index, "0x6084", "0x00", "uint32"),
-                (axis_index, "0x60A4", "0x01", "uint32"),
-            ])
-        for var in self.profile_vars:
+            ]
+            if self.latest_motion_modes[axis_index] != "pv":
+                reads.insert(0, (axis_index, "0x6081", "0x00", "uint32"))
+                reads.append((axis_index, "0x60A4", "0x01", "uint32"))
+            self.queue_panel_sdo_reads(reads)
+        if self.latest_motion_modes[axis_index] == "pv":
+            dirty_vars = self.profile_vars[1:3]
+        else:
+            dirty_vars = self.profile_vars[:len(profile_settings)]
+        for var in dirty_vars:
             self.dirty_vars.discard(id(var))
 
     def apply_motion_limits(self):
@@ -1539,7 +1825,9 @@ class AxisServerControlPanel:
         if axis_limits is None:
             return
         axis_index = self.selected_axis()
-        if self.try_send(lambda: self.client.send_axis_motion_limits(axis_index, axis_limits)):
+        if self.try_send(
+            lambda: self.client.send_axis_motion_limits(axis_index, axis_limits)
+        ):
             self.queue_panel_sdo_reads([
                 (axis_index, "0x607F", "0x00", "uint32"),
                 (axis_index, "0x2183", "0x0C", "float32"),
@@ -1554,14 +1842,12 @@ class AxisServerControlPanel:
         if software_limits_mm is None:
             return
 
-        negative_limit = self.position_unit_to_count(software_limits_mm[0])
-        positive_limit = self.position_unit_to_count(software_limits_mm[1])
         axis_index = self.selected_axis()
         if self.try_send(
             lambda: self.client.send_axis_software_position_limits(
                 axis_index,
-                negative_limit,
-                positive_limit,
+                software_limits_mm[0],
+                software_limits_mm[1],
             )
         ):
             self.queue_panel_sdo_reads([
@@ -1573,17 +1859,21 @@ class AxisServerControlPanel:
 
     def send_command(self):
         axis_index = self.selected_axis()
-        target_position_mm = self.read_selected_command_value()
-        if target_position_mm is None:
+        command_value = self.read_selected_command_value()
+        if command_value is None:
+            return
+        if self.latest_motion_modes[axis_index] == "pv":
+            self.try_send(
+                lambda: self.client.send_axis_move_velocity(axis_index, command_value)
+            )
             return
         profile_velocity = self.read_selected_motion_profile_velocity()
         if profile_velocity is None:
             return
-        target_position = self.position_unit_to_count(target_position_mm)
         self.try_send(
             lambda: self.client.send_axis_move_absolute(
                 axis_index,
-                target_position,
+                command_value,
                 profile_velocity,
             )
         )
@@ -1594,17 +1884,45 @@ class AxisServerControlPanel:
         command = self.read_multi_axis_command()
         if command is None:
             return
-        axes, positions, profile_velocities = command
-        if self.try_send(
-            lambda: self.client.send_axes_move_absolute(
-                axes,
-                positions,
-                profile_velocities,
-            )
-        ):
+        axes, modes, values, profile_velocities = command
+        if self.try_send(lambda: self.send_multi_axis_command(
+            axes,
+            modes,
+            values,
+            profile_velocities,
+        )):
             for axis_index in axes:
                 self.dirty_vars.discard(id(self.multi_target_position_vars[axis_index]))
                 self.dirty_vars.discard(id(self.multi_profile_velocity_vars[axis_index]))
+
+    def send_multi_axis_command(self, axes, modes, values, profile_velocities=None):
+        for axis_index, mode in zip(axes, modes):
+            self.client.send_motion_mode(mode, axis_index)
+
+        position_axes = []
+        positions = []
+        position_profile_velocities = []
+        velocity_axes = []
+        velocities = []
+        for local_index, axis_index in enumerate(axes):
+            mode = modes[local_index]
+            if mode == "pv":
+                velocity_axes.append(axis_index)
+                velocities.append(values[local_index])
+            else:
+                position_axes.append(axis_index)
+                positions.append(values[local_index])
+                if profile_velocities is not None:
+                    position_profile_velocities.append(profile_velocities[local_index])
+
+        if position_axes:
+            self.client.send_axes_move_absolute(
+                position_axes,
+                positions,
+                position_profile_velocities if profile_velocities is not None else None,
+            )
+        if velocity_axes:
+            self.client.send_axes_move_velocity(velocity_axes, velocities)
 
     def multi_axis_stop(self):
         self.stop_repeat()
@@ -1742,6 +2060,219 @@ class AxisServerControlPanel:
             "Disable" if self.selected_axis_operation_enabled else "Enable"
         )
 
+    def axis_user_position_unit(self, axis_index):
+        metadata = self.axis_metadata(axis_index)
+        value = metadata.get("user_position_unit")
+        if value is not None:
+            try:
+                return int(value)
+            except (TypeError, ValueError):
+                return None
+        return None
+
+    def axis_metadata(self, axis_index):
+        if axis_index < len(self.latest_axis_metadata):
+            metadata = self.latest_axis_metadata[axis_index]
+            if isinstance(metadata, dict):
+                return metadata
+        return {}
+
+    def axis_unit_labels(self, axis_index):
+        metadata = self.axis_metadata(axis_index)
+        position_unit = metadata.get("position_unit", "mm")
+        velocity_unit = metadata.get("velocity_unit", f"{position_unit}/s")
+        acceleration_unit = metadata.get("acceleration_unit", f"{position_unit}/s^2")
+        jerk_unit = metadata.get("jerk_unit", f"{position_unit}/s^3")
+        return position_unit, velocity_unit, acceleration_unit, jerk_unit
+
+    def axis_unit_scale(self, axis_index):
+        metadata = self.axis_metadata(axis_index)
+        if metadata.get("motion_kind") == "rotary":
+            return 1_000_000.0
+        return self.position_counts_per_unit
+
+    def axis_motion_scale(self, axis_index, kind="velocity"):
+        metadata = self.axis_metadata(axis_index)
+        key = {
+            "velocity": "velocity_scale",
+            "acceleration": "acceleration_scale",
+            "deceleration": "deceleration_scale",
+            "jerk": "jerk_scale",
+        }.get(kind, "velocity_scale")
+        try:
+            return float(metadata.get(key, 1.0))
+        except (TypeError, ValueError):
+            return 1.0
+
+    def axis_pv_allowed(self, axis_index):
+        return bool(self.axis_metadata(axis_index).get("pv_allowed", False))
+
+    def motion_mode_options(self, axis_index):
+        options = ["pp"]
+        if self.axis_pv_allowed(axis_index):
+            options.append("pv")
+        if self.server_mode == "advanced":
+            options.append("csp")
+        return options
+
+    def on_multi_motion_mode_changed(self, axis_index):
+        mode = self.multi_motion_mode_vars[axis_index].get()
+        if mode == "pv" and not self.axis_pv_allowed(axis_index):
+            self.multi_motion_mode_vars[axis_index].set(self.latest_motion_modes[axis_index])
+            messagebox.showinfo(
+                "PV Not Available",
+                "PV mode is available only for rad, degree, or revolution axes.",
+            )
+            return
+        if mode == "csp" and self.server_mode != "advanced":
+            self.multi_motion_mode_vars[axis_index].set(self.latest_motion_modes[axis_index])
+            return
+        self.update_multi_axis_mode_controls()
+        self.try_send(lambda: self.client.send_motion_mode(mode, axis_index))
+
+    def update_multi_axis_mode_controls(self):
+        if (
+            len(self.multi_command_label_widgets) < self.axis_count
+            or len(self.multi_profile_label_widgets) < self.axis_count
+            or len(self.multi_profile_entry_widgets) < self.axis_count
+            or len(self.multi_repeat_a_label_widgets) < self.axis_count
+            or len(self.multi_repeat_b_label_widgets) < self.axis_count
+            or len(self.multi_repeat_profile_label_widgets) < self.axis_count
+            or len(self.multi_repeat_profile_entry_widgets) < self.axis_count
+        ):
+            return
+
+        for axis_index in range(self.axis_count):
+            mode = self.multi_motion_mode_vars[axis_index].get()
+            pos_unit, vel_unit, _accel_unit, _jerk_unit = self.axis_unit_labels(axis_index)
+            options = self.motion_mode_options(axis_index)
+            for widget_index in (axis_index, self.axis_count + axis_index):
+                if widget_index < len(self.multi_mode_widgets):
+                    self.multi_mode_widgets[widget_index].configure(values=options)
+            command_label = self.multi_command_label_widgets[axis_index]
+            profile_label = self.multi_profile_label_widgets[axis_index]
+            profile_entry = self.multi_profile_entry_widgets[axis_index]
+            repeat_a_label = self.multi_repeat_a_label_widgets[axis_index]
+            repeat_b_label = self.multi_repeat_b_label_widgets[axis_index]
+            repeat_profile_label = self.multi_repeat_profile_label_widgets[axis_index]
+            repeat_profile_entry = self.multi_repeat_profile_entry_widgets[axis_index]
+
+            if mode == "pv":
+                command_label.configure(text=f"Target Velocity {vel_unit}")
+                profile_label.configure(text="Profile Velocity")
+                profile_label.configure(state="disabled")
+                profile_entry.configure(state="disabled")
+                repeat_a_label.configure(text=f"Velocity A {vel_unit}")
+                repeat_b_label.configure(text=f"Velocity B {vel_unit}")
+                repeat_profile_label.configure(state="disabled")
+                repeat_profile_entry.configure(state="disabled")
+            else:
+                command_label.configure(text=f"Target Position {pos_unit}")
+                profile_label.configure(text=f"Profile Velocity {vel_unit}")
+                profile_label.configure(state="normal")
+                profile_entry.configure(state="normal")
+                repeat_a_label.configure(text=f"Point A {pos_unit}")
+                repeat_b_label.configure(text=f"Point B {pos_unit}")
+                repeat_profile_label.configure(text=f"Profile Velocity {vel_unit}")
+                repeat_profile_label.configure(state="normal")
+                repeat_profile_entry.configure(state="normal")
+
+    def update_unit_labels(self, axis_index, motion_mode):
+        pos_unit, vel_unit, accel_unit, jerk_unit = self.axis_unit_labels(axis_index)
+        command_label = (
+            f"Target Velocity {vel_unit}"
+            if motion_mode == "pv"
+            else f"Target Position {pos_unit}"
+        )
+        label_updates = {
+            "Target Position mm": command_label,
+            "Profile Velocity mm/s": f"Profile Velocity {vel_unit}",
+            "Active Target Position mm": f"Active Target Position {pos_unit}",
+            "Actual Position mm": f"Actual Position {pos_unit}",
+            "Actual Velocity mm/s": f"Actual Velocity {vel_unit}",
+            "Command Velocity mm/s": f"Command Velocity {vel_unit}",
+        }
+        for original, text in label_updates.items():
+            widget = self.motion_field_labels.get(original)
+            if widget is not None:
+                widget.configure(text=text)
+
+        profile_labels = [
+            f"Profile Velocity {vel_unit}",
+            f"Profile Accel {accel_unit}",
+            f"Profile Decel {accel_unit}",
+            f"Profile Jerk {jerk_unit}",
+        ]
+        for widget, text in zip(self.profile_label_widgets, profile_labels):
+            widget.configure(text=text)
+        self.update_profile_field_states(motion_mode)
+
+        limit_labels = [
+            f"Max Profile Velocity (+) {vel_unit}",
+            f"Max Profile Velocity (-) {vel_unit}",
+            f"Max Accel {accel_unit}",
+            f"Max Decel {accel_unit}",
+        ]
+        for widget, text in zip(self.limit_label_widgets, limit_labels):
+            widget.configure(text=text)
+
+        sw_limit_labels = [
+            f"Negative SW Limit {pos_unit}",
+            f"Positive SW Limit {pos_unit}",
+        ]
+        for widget, text in zip(self.software_limit_label_widgets, sw_limit_labels):
+            widget.configure(text=text)
+
+        repeat_updates = {
+            "point_a": f"Point A {pos_unit}",
+            "point_b": f"Point B {pos_unit}",
+            "velocity": f"Profile Velocity {vel_unit}",
+        }
+        for key, text in repeat_updates.items():
+            widget = self.repeat_label_widgets.get(key)
+            if widget is not None:
+                widget.configure(text=text)
+
+        user_unit = self.axis_user_position_unit(axis_index)
+        unit_text = f"0x{user_unit:04X}" if user_unit is not None else "unknown"
+        self.diagnosis_unit_var.set(f"Unit: {pos_unit} ({unit_text})")
+
+    def update_profile_field_states(self, motion_mode):
+        if len(self.profile_label_widgets) < 4 or len(self.profile_entry_widgets) < 4:
+            return
+        velocity_widgets = (
+            self.profile_label_widgets[0],
+            self.profile_entry_widgets[0],
+        )
+        motion_velocity_widgets = [
+            widget
+            for widget in (
+                self.motion_field_labels.get("Profile Velocity mm/s"),
+                self.motion_entry_widgets.get("Profile Velocity mm/s"),
+            )
+            if widget is not None
+        ]
+        jerk_widgets = (
+            self.profile_label_widgets[3],
+            self.profile_entry_widgets[3],
+        )
+        if motion_mode == "pv":
+            for widget in velocity_widgets:
+                widget.configure(state="disabled")
+            for widget in motion_velocity_widgets:
+                widget.configure(state="disabled")
+            for widget in jerk_widgets:
+                widget.grid_remove()
+            self.dirty_vars.discard(id(self.profile_vars[0]))
+            self.dirty_vars.discard(id(self.profile_vars[3]))
+        else:
+            for widget in velocity_widgets:
+                widget.configure(state="normal")
+            for widget in motion_velocity_widgets:
+                widget.configure(state="normal")
+            for widget in jerk_widgets:
+                widget.grid()
+
     def selected_axis(self):
         return int(self.selected_axis_var.get())
 
@@ -1754,10 +2285,12 @@ class AxisServerControlPanel:
         return axes or [0]
 
     def multi_trace_series_names(self, axes, value_name):
-        return [
-            f"{self.axis_names[axis_index]} {value_name}"
-            for axis_index in axes
-        ]
+        names = []
+        for axis_index in axes:
+            pos_unit, vel_unit, _accel_unit, _jerk_unit = self.axis_unit_labels(axis_index)
+            unit = vel_unit if "Velocity" in value_name else pos_unit
+            names.append(f"{self.axis_names[axis_index]} {value_name} {unit}")
+        return names
 
     def send_manual_controlword(self, controlword):
         axis_index = self.selected_axis()
@@ -1787,14 +2320,14 @@ class AxisServerControlPanel:
 
     def apply_motion_mode(self):
         mode = self.motion_mode_var.get()
-        if mode == "csp" and self.server_mode != "advanced":
-            messagebox.showinfo(
-                "Advanced Mode Required",
-                "CSP mode is available only when Axis Server mode is advanced.",
-            )
-            self.motion_mode_var.set(self.latest_motion_modes[self.selected_axis()])
-            return
         axis_index = self.selected_axis()
+        if mode == "pv" and not self.axis_pv_allowed(axis_index):
+            messagebox.showinfo(
+                "PV Not Available",
+                "PV mode is available only for rad, degree, or revolution axes.",
+            )
+            self.motion_mode_var.set(self.latest_motion_modes[axis_index])
+            return
         self.try_send(lambda: self.client.send_motion_mode(mode, axis_index))
 
     def start_repeat(self):
@@ -1826,9 +2359,10 @@ class AxisServerControlPanel:
         if repeat_config is None:
             return
         self.multi_repeat_generation += 1
-        axes, point_a, point_b, profile_velocities, period = repeat_config
+        axes, modes, point_a, point_b, profile_velocities, period = repeat_config
         self.multi_repeat_enabled = True
         self.multi_repeat_axes = axes
+        self.multi_repeat_modes = modes
         self.multi_repeat_points = [point_a, point_b]
         self.multi_repeat_profile_velocities = profile_velocities
         self.multi_repeat_period = period
@@ -1841,17 +2375,29 @@ class AxisServerControlPanel:
         self.multi_repeat_generation += 1
         self.multi_repeat_enabled = False
         self.multi_repeat_axes = []
+        self.multi_repeat_modes = []
         self.multi_repeat_points = None
         self.multi_repeat_last_targets = None
         self.multi_repeat_waiting_to_send = False
 
+    def stop_multi_repeat_motion(self):
+        axes = list(self.multi_repeat_axes)
+        self.stop_multi_repeat()
+        if axes:
+            self.try_send(lambda: self.client.send_axes_stop(axes))
+
     def read_selected_profile_values(self):
+        is_pv = self.latest_motion_modes[self.selected_axis()] == "pv"
+        profile_vars = self.profile_vars[1:3] if is_pv else self.profile_vars
         try:
-            return [float(var.get()) for var in self.profile_vars]
+            return [float(var.get()) for var in profile_vars]
         except ValueError:
+            fields = "Profile Accel, Decel" if is_pv else "Profile Velocity, Accel, Decel"
+            if not is_pv:
+                fields += ", Jerk"
             messagebox.showerror(
                 "Invalid Input",
-                "Profile Velocity, Accel, Decel, Jerk must be numeric values.",
+                f"{fields} must be numeric values.",
             )
             return None
 
@@ -1923,26 +2469,28 @@ class AxisServerControlPanel:
         if axes is None:
             return None
 
-        positions = []
+        modes = []
+        values = []
         profile_velocities = []
         try:
             for axis_index in axes:
-                positions.append(
-                    self.position_unit_to_count(
-                        float(self.multi_target_position_vars[axis_index].get())
+                mode = self.multi_motion_mode_vars[axis_index].get()
+                modes.append(mode)
+                values.append(float(self.multi_target_position_vars[axis_index].get()))
+                if mode == "pv":
+                    profile_velocities.append(None)
+                else:
+                    profile_velocities.append(
+                        float(self.multi_profile_velocity_vars[axis_index].get())
                     )
-                )
-                profile_velocities.append(
-                    float(self.multi_profile_velocity_vars[axis_index].get())
-                )
         except ValueError:
             messagebox.showerror(
                 "Invalid Input",
-                "Multi-axis target positions and profile velocities must be numeric.",
+                "Multi-axis command values and profile velocities must be numeric.",
             )
             return None
 
-        return axes, positions, profile_velocities
+        return axes, modes, values, profile_velocities
 
     def read_multi_repeat_values(self):
         axes = self.selected_multi_axes()
@@ -1951,31 +2499,33 @@ class AxisServerControlPanel:
 
         point_a = []
         point_b = []
+        modes = []
         profile_velocities = []
         try:
             for axis_index in axes:
+                mode = self.multi_motion_mode_vars[axis_index].get()
+                modes.append(mode)
                 point_a.append(
-                    self.position_unit_to_count(
-                        float(self.multi_repeat_point_a_vars[axis_index].get())
-                    )
+                    float(self.multi_repeat_point_a_vars[axis_index].get())
                 )
                 point_b.append(
-                    self.position_unit_to_count(
-                        float(self.multi_repeat_point_b_vars[axis_index].get())
+                    float(self.multi_repeat_point_b_vars[axis_index].get())
+                )
+                if mode == "pv":
+                    profile_velocities.append(None)
+                else:
+                    profile_velocity = float(
+                        self.multi_repeat_profile_velocity_vars[axis_index].get()
                     )
-                )
-                profile_velocity = float(
-                    self.multi_repeat_profile_velocity_vars[axis_index].get()
-                )
-                if profile_velocity <= 0:
-                    raise ValueError
-                profile_velocities.append(profile_velocity)
+                    if profile_velocity <= 0:
+                        raise ValueError
+                    profile_velocities.append(profile_velocity)
             period = float(self.multi_repeat_period_var.get())
         except ValueError:
             messagebox.showerror(
                 "Invalid Input",
-                "Multi-axis repeat points, profile velocities, and period must be numeric. "
-                "Profile velocities and period must be greater than 0.",
+                "Multi-axis repeat values and period must be numeric. "
+                "Position-mode profile velocities and period must be greater than 0.",
             )
             return None
 
@@ -1986,7 +2536,7 @@ class AxisServerControlPanel:
             )
             return None
 
-        return axes, point_a, point_b, profile_velocities, period
+        return axes, modes, point_a, point_b, profile_velocities, period
 
     def read_repeat_values(self):
         try:
@@ -2012,7 +2562,12 @@ class AxisServerControlPanel:
                 "Repeat period must be greater than 0.",
             )
             return None
-        return point_a, point_b, profile_velocity, period
+        return (
+            point_a,
+            point_b,
+            profile_velocity,
+            period,
+        )
 
     def read_diagnosis_request(self, include_value):
         data_type = self.diagnosis_type_var.get().strip().lower()
@@ -2172,12 +2727,30 @@ class AxisServerControlPanel:
         profile_settings = self._profile_settings(feedback)
         motion_limits = self._motion_limits(feedback)
         software_position_limits = self._software_position_limits(feedback)
+        user_position_units = self._values(feedback, "user_position_units", None)
+        converting_unit_exponents = self._axis_lists(
+            feedback,
+            "converting_unit_exponents",
+            4,
+            None,
+        )
+        axis_metadata = self._axis_metadata(
+            feedback,
+            user_position_units,
+            converting_unit_exponents,
+        )
         self.latest_target_positions = target_positions
         self.latest_actual_positions = actual_positions
         self.latest_profile_settings = profile_settings
         self.latest_motion_limits = motion_limits
         self.latest_software_position_limits = software_position_limits
         self.latest_motion_modes = motion_modes[:self.axis_count]
+        self.latest_user_position_units = user_position_units
+        self.latest_converting_unit_exponents = converting_unit_exponents
+        self.latest_axis_metadata = axis_metadata
+        for axis_index, mode in enumerate(self.latest_motion_modes):
+            if axis_index < len(self.multi_motion_mode_vars):
+                self.multi_motion_mode_vars[axis_index].set(mode)
         self.server_capabilities = dict(feedback.get("capabilities", {}))
         self.update_command_authority(feedback.get("command_authority", {}))
         self.position_counts_per_unit = max(position_counts_per_unit, 1e-9)
@@ -2190,22 +2763,27 @@ class AxisServerControlPanel:
         self.update_axis_enable_button(selected_statusword)
 
         selected_motion_mode = self.latest_motion_modes[selected_axis]
-        if selected_motion_mode in {"pp", "csp"}:
+        if selected_motion_mode in {"pp", "pv", "csp"}:
             self.server_motion_mode = selected_motion_mode
             if self.motion_mode_var.get() != selected_motion_mode:
                 self.motion_mode_var.set(selected_motion_mode)
             self.update_mode_dependent_controls()
+        self.update_unit_labels(selected_axis, selected_motion_mode)
+        pos_unit, vel_unit, _accel_unit, _jerk_unit = self.axis_unit_labels(selected_axis)
 
         self.target_var.set(
-            f"{self.position_count_to_unit(target_positions[selected_axis]):.3f}"
+            f"{self.position_count_to_unit(target_positions[selected_axis], selected_axis):.3f}"
         )
         self.actual_position_var.set(
-            f"{self.position_count_to_unit(actual_positions[selected_axis]):.3f}"
+            f"{self.position_count_to_unit(actual_positions[selected_axis], selected_axis):.3f}"
         )
-        actual_velocity = float(actual_velocities[selected_axis])
+        actual_velocity = self.velocity_count_to_unit(
+            actual_velocities[selected_axis],
+            selected_axis,
+        )
         self.actual_velocity_var.set(f"{actual_velocity:.3f}")
         self.command_velocity_var.set(
-            f"{self.velocity_count_to_unit(command_velocities[selected_axis]):.3f}"
+            f"{self.velocity_count_to_unit(command_velocities[selected_axis], selected_axis):.3f}"
             if selected_motion_mode == "csp"
             else "n/a"
         )
@@ -2216,60 +2794,69 @@ class AxisServerControlPanel:
         diag = diagnostics[selected_axis] if selected_axis < len(diagnostics) else {}
         self.error_code_var.set(self._format_error_code(diag))
 
+        profile_kinds = ["velocity", "acceleration", "deceleration", "jerk"]
         for limit_index in range(4):
+            if selected_motion_mode == "pv" and limit_index in (0, 3):
+                continue
             var = self.profile_vars[limit_index]
             if id(var) not in self.dirty_vars:
-                var.set(f"{profile_settings[selected_axis][limit_index]:.3f}")
+                var.set(
+                    f"{self.motion_drive_to_unit(profile_settings[selected_axis][limit_index], selected_axis, profile_kinds[limit_index]):.3f}"
+                )
 
+        limit_kinds = ["velocity", "velocity", "acceleration", "deceleration"]
         for limit_index in range(4):
             var = self.limit_vars[limit_index]
             if id(var) not in self.dirty_vars:
-                var.set(f"{motion_limits[selected_axis][limit_index]:.3f}")
+                var.set(
+                    f"{self.motion_drive_to_unit(motion_limits[selected_axis][limit_index], selected_axis, limit_kinds[limit_index]):.3f}"
+                )
 
         for limit_index in range(2):
             var = self.software_limit_vars[limit_index]
             if id(var) not in self.dirty_vars:
                 var.set(
-                    f"{self.position_count_to_unit(software_position_limits[selected_axis][limit_index]):.3f}"
+                    f"{self.position_count_to_unit(software_position_limits[selected_axis][limit_index], selected_axis):.3f}"
                 )
 
         self.update_multi_axis_fields(actual_positions, profile_settings)
+        self.update_multi_axis_mode_controls()
 
         if selected_motion_mode == "csp":
             self.position_trace.set_series_names(
                 [
-                    "Actual Position mm",
-                    "Target Position mm",
-                    "CSP Command Position mm",
-                    "Drive Setpoint Position mm",
+                    f"Actual Position {pos_unit}",
+                    f"Target Position {pos_unit}",
+                    f"CSP Command Position {pos_unit}",
+                    f"Drive Setpoint Position {pos_unit}",
                 ]
             )
             self.velocity_trace.set_series_names(
-                ["Actual Velocity mm/s", "Command Velocity mm/s"]
+                [f"Actual Velocity {vel_unit}", f"Command Velocity {vel_unit}"]
             )
             self.position_trace.add_sample(
                 [
-                    self.position_count_to_unit(actual_positions[selected_axis]),
-                    self.position_count_to_unit(target_positions[selected_axis]),
-                    self.position_count_to_unit(command_positions[selected_axis]),
-                    self.position_count_to_unit(setpoint_positions[selected_axis]),
+                    self.position_count_to_unit(actual_positions[selected_axis], selected_axis),
+                    self.position_count_to_unit(target_positions[selected_axis], selected_axis),
+                    self.position_count_to_unit(command_positions[selected_axis], selected_axis),
+                    self.position_count_to_unit(setpoint_positions[selected_axis], selected_axis),
                 ]
             )
             self.velocity_trace.add_sample(
                 [
                     actual_velocity,
-                    self.velocity_count_to_unit(command_velocities[selected_axis]),
+                    self.velocity_count_to_unit(command_velocities[selected_axis], selected_axis),
                 ]
             )
         else:
             self.position_trace.set_series_names(
-                ["Actual Position mm", "Target Position mm"]
+                [f"Actual Position {pos_unit}", f"Target Position {pos_unit}"]
             )
-            self.velocity_trace.set_series_names(["Actual Velocity mm/s"])
+            self.velocity_trace.set_series_names([f"Actual Velocity {vel_unit}"])
             self.position_trace.add_sample(
                 [
-                    self.position_count_to_unit(actual_positions[selected_axis]),
-                    self.position_count_to_unit(target_positions[selected_axis]),
+                    self.position_count_to_unit(actual_positions[selected_axis], selected_axis),
+                    self.position_count_to_unit(target_positions[selected_axis], selected_axis),
                 ]
             )
             self.velocity_trace.add_sample([actual_velocity])
@@ -2278,19 +2865,19 @@ class AxisServerControlPanel:
         multi_trace_axes = self.selected_multi_trace_axes()
         if self.multi_position_trace is not None:
             self.multi_position_trace.set_series_names(
-                self.multi_trace_series_names(multi_trace_axes, "Actual Position mm")
+                self.multi_trace_series_names(multi_trace_axes, "Actual Position")
             )
             self.multi_position_trace.add_sample([
-                self.position_count_to_unit(actual_positions[axis_index])
+                self.position_count_to_unit(actual_positions[axis_index], axis_index)
                 for axis_index in multi_trace_axes
             ])
             self.multi_position_trace.draw()
         if self.multi_velocity_trace is not None:
             self.multi_velocity_trace.set_series_names(
-                self.multi_trace_series_names(multi_trace_axes, "Actual Velocity mm/s")
+                self.multi_trace_series_names(multi_trace_axes, "Actual Velocity")
             )
             self.multi_velocity_trace.add_sample([
-                float(actual_velocities[axis_index])
+                self.velocity_count_to_unit(actual_velocities[axis_index], axis_index)
                 for axis_index in multi_trace_axes
             ])
             self.multi_velocity_trace.draw()
@@ -2302,14 +2889,18 @@ class AxisServerControlPanel:
     def update_multi_axis_fields(self, actual_positions, profile_settings):
         for axis_index in range(self.axis_count):
             self.multi_actual_position_vars[axis_index].set(
-                f"{self.position_count_to_unit(actual_positions[axis_index]):.3f}"
+                f"{self.position_count_to_unit(actual_positions[axis_index], axis_index):.3f}"
             )
-            velocity_var = self.multi_profile_velocity_vars[axis_index]
-            if id(velocity_var) not in self.dirty_vars:
-                velocity_var.set(f"{profile_settings[axis_index][0]:.3f}")
+            mode = self.multi_motion_mode_vars[axis_index].get()
+            if mode != "pv":
+                velocity_var = self.multi_profile_velocity_vars[axis_index]
+                if id(velocity_var) not in self.dirty_vars:
+                    velocity_var.set(
+                        f"{self.motion_drive_to_unit(profile_settings[axis_index][0], axis_index):.3f}"
+                    )
 
             actual_position_text = (
-                f"{self.position_count_to_unit(actual_positions[axis_index]):.3f}"
+                f"{self.position_count_to_unit(actual_positions[axis_index], axis_index):.3f}"
             )
             for repeat_var in (
                 self.multi_repeat_point_a_vars[axis_index],
@@ -2318,9 +2909,12 @@ class AxisServerControlPanel:
                 if not repeat_var.get().strip():
                     repeat_var.set(actual_position_text)
 
-            repeat_velocity_var = self.multi_repeat_profile_velocity_vars[axis_index]
-            if id(repeat_velocity_var) not in self.dirty_vars:
-                repeat_velocity_var.set(f"{profile_settings[axis_index][0]:.3f}")
+            if mode != "pv":
+                repeat_velocity_var = self.multi_repeat_profile_velocity_vars[axis_index]
+                if id(repeat_velocity_var) not in self.dirty_vars:
+                    repeat_velocity_var.set(
+                        f"{self.motion_drive_to_unit(profile_settings[axis_index][0], axis_index):.3f}"
+                    )
 
     def update_command_authority(self, authority):
         owner = authority.get("owner", None)
@@ -2336,15 +2930,27 @@ class AxisServerControlPanel:
             self.command_authority_button_var.set("Request Authority")
 
     def update_mode_dependent_controls(self):
-        if self.csp_mode_button is not None:
-            self.csp_mode_button.configure(
-                state="normal" if self.server_mode == "advanced" else "disabled"
+        selected_axis = self.selected_axis()
+        if self.pv_mode_button is not None:
+            self.pv_mode_button.configure(
+                state="normal" if self.axis_pv_allowed(selected_axis) else "disabled"
             )
+            if (
+                not self.axis_pv_allowed(selected_axis)
+                and self.motion_mode_var.get() == "pv"
+            ):
+                self.motion_mode_var.set(self.latest_motion_modes[selected_axis])
+        if self.csp_mode_button is not None:
+            if self.server_mode == "advanced":
+                if not self.csp_mode_button.winfo_ismapped():
+                    self.csp_mode_button.pack(side="left", padx=8, pady=5)
+            elif self.csp_mode_button.winfo_ismapped():
+                self.csp_mode_button.pack_forget()
             if (
                 self.server_mode != "advanced"
                 and self.motion_mode_var.get() == "csp"
             ):
-                self.motion_mode_var.set(self.latest_motion_modes[self.selected_axis()])
+                self.motion_mode_var.set(self.latest_motion_modes[selected_axis])
         manual_cw_state = "normal" if self.server_mode == "advanced" else "disabled"
         for button in self.manual_controlword_buttons:
             button.configure(state=manual_cw_state)
@@ -2419,11 +3025,13 @@ class AxisServerControlPanel:
 
         now = time.monotonic()
         axes = list(self.multi_repeat_axes)
+        modes = list(self.multi_repeat_modes)
         targets = list(self.multi_repeat_points[self.multi_repeat_index])
         if self.multi_repeat_last_targets is None:
             self.try_send(
-                lambda: self.client.send_axes_move_absolute(
+                lambda: self.send_multi_axis_command(
                     axes,
+                    modes,
                     targets,
                     self.multi_repeat_profile_velocities,
                 )
@@ -2434,9 +3042,14 @@ class AxisServerControlPanel:
         if self.multi_repeat_waiting_to_send or now < self.multi_repeat_wait_until:
             return
 
-        reached = all(
+        position_targets = [
+            (axis_index, target)
+            for axis_index, mode, target in zip(axes, modes, self.multi_repeat_last_targets)
+            if mode != "pv"
+        ]
+        reached = not position_targets or all(
             abs(actual_positions[axis_index] - target) <= REPEAT_TOLERANCE
-            for axis_index, target in zip(axes, self.multi_repeat_last_targets)
+            for axis_index, target in position_targets
         )
         if not reached:
             return
@@ -2448,18 +3061,19 @@ class AxisServerControlPanel:
         generation = self.multi_repeat_generation
         self.root.after(
             int(self.multi_repeat_period * 1000),
-            lambda: self._send_multi_repeat_targets(axes, next_targets, generation),
+            lambda: self._send_multi_repeat_targets(axes, modes, next_targets, generation),
         )
 
-    def _send_multi_repeat_targets(self, axes, targets, generation):
+    def _send_multi_repeat_targets(self, axes, modes, targets, generation):
         if (
             not self.multi_repeat_enabled
             or generation != self.multi_repeat_generation
         ):
             return
         self.try_send(
-            lambda: self.client.send_axes_move_absolute(
+            lambda: self.send_multi_axis_command(
                 axes,
+                modes,
                 targets,
                 self.multi_repeat_profile_velocities,
             )
@@ -2469,23 +3083,69 @@ class AxisServerControlPanel:
 
     def _target_vector_for_axis(self, axis_index, target_position):
         targets = list(self.latest_target_positions)
-        targets[axis_index] = self.position_unit_to_count(float(target_position))
+        targets[axis_index] = self.position_unit_to_count(
+            float(target_position),
+            axis_index,
+        )
         return targets
 
-    def position_count_to_unit(self, position_count):
-        return float(position_count) / self.position_counts_per_unit
+    def position_count_to_unit(self, position_count, axis_index=None):
+        return float(position_count)
 
-    def position_unit_to_count(self, position_unit):
-        return float(position_unit) * self.position_counts_per_unit
+    def position_unit_to_count(self, position_unit, axis_index=None):
+        return float(position_unit)
 
-    def velocity_count_to_unit(self, velocity_count):
-        return float(velocity_count) / self.position_counts_per_unit
+    def velocity_count_to_unit(self, velocity_count, axis_index=None):
+        return float(velocity_count)
+
+    def motion_drive_to_unit(self, value, axis_index=None, kind="velocity"):
+        return float(value)
+
+    def motion_unit_to_drive(self, value, axis_index=None, kind="velocity"):
+        return float(value)
 
     def _values(self, feedback, key, default):
         values = list(feedback.get(key, []))
         while len(values) < self.axis_count:
             values.append(default)
         return values[:self.axis_count]
+
+    def _axis_lists(self, feedback, key, fields_per_axis, default):
+        values = list(feedback.get(key, []))
+        if values and all(isinstance(value, list) for value in values):
+            rows = [list(value) for value in values]
+        else:
+            flat = values
+            required = self.axis_count * fields_per_axis
+            while len(flat) < required:
+                flat.append(default)
+            rows = [
+                flat[index * fields_per_axis:(index + 1) * fields_per_axis]
+                for index in range(self.axis_count)
+            ]
+        while len(rows) < self.axis_count:
+            rows.append([default for _ in range(fields_per_axis)])
+        return [
+            (row + [default for _ in range(fields_per_axis)])[:fields_per_axis]
+            for row in rows[:self.axis_count]
+        ]
+
+    def _axis_metadata(self, feedback, user_position_units, converting_unit_exponents):
+        metadata = list(feedback.get("axis_metadata", []))
+        while len(metadata) < self.axis_count:
+            metadata.append({})
+        rows = []
+        for axis_index in range(self.axis_count):
+            axis_metadata = metadata[axis_index]
+            if isinstance(axis_metadata, dict) and axis_metadata:
+                rows.append(axis_metadata)
+                continue
+            rows.append(build_axis_metadata(
+                axis_index,
+                user_position_units[axis_index],
+                converting_unit_exponents[axis_index],
+            ))
+        return rows
 
     def _motion_limits(self, feedback):
         flat = list(feedback.get("motion_limits", []))

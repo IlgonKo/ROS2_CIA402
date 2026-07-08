@@ -141,19 +141,22 @@ Motion modes:
 
 ```text
 pp   Profile Position, default and recommended for Windows/Linux non-RT hosts
+pv   Profile Velocity, target velocity command through `axis/move_vel`
 csp  Cyclic Synchronous Position, available for smoother target streaming
 ```
 
-PP profile velocity objects can be interpreted by the drive in configured user
-units such as mm/s, while CSP target positions are streamed in position counts.
-Use `PYSOEM_CSP_COUNTS_PER_UNIT` to align CSP speed with PP speed. Example:
+Axis Server command and feedback units are normalized at the TCP API boundary:
+linear axes use `mm`, `mm/s`, `mm/s^2`, and rotary axes use `deg`, `deg/s`,
+`deg/s^2`. The server reads the drive user unit and conversion settings during
+startup and converts to the drive's PDO/SDO units internally.
+Use `PYSOEM_CSP_COUNTS_PER_UNIT` to align linear CSP count scaling. Example:
 
 ```text
 PYSOEM_CSP_COUNTS_PER_UNIT=1000.0
 ```
 
-With that setting, a panel Max Velocity of `1000` becomes `1,000,000 count/s`
-inside the CSP trajectory generator.
+With that setting, a linear-axis API position command of `1.0` means `1 mm`,
+or `1000` internal counts.
 
 For CSP testing, reduce the process-data cycle time in `.env` if the generated
 target stream is too coarse:

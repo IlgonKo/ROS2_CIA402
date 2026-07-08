@@ -6,6 +6,7 @@ class CMMTDeviceProfile:
     name = "cmmt"
 
     PROFILE_POSITION_MODE = 1
+    PROFILE_VELOCITY_MODE = 3
     JOG_MODE = -3
     HOMING_MODE = 6
     CSP_MODE = 8
@@ -29,6 +30,13 @@ class CMMTDeviceProfile:
     CSP_INTERPOLATION_MODE_SUBINDEX = 0x0D
     PP_JERK_INDEX = 0x60A4
     PP_JERK_SUBINDEX = 0x01
+    USER_UNIT_INDEX = 0x216E
+    USER_UNIT_POSITION_SUBINDEX = 0x01
+    CONVERTING_UNIT_INDEX = 0x2194
+    CONVERTING_UNIT_POSITION_SUBINDEX = 0x01
+    CONVERTING_UNIT_VELOCITY_SUBINDEX = 0x02
+    CONVERTING_UNIT_ACCELERATION_SUBINDEX = 0x03
+    CONVERTING_UNIT_JERK_SUBINDEX = 0x04
     SOFTWARE_POSITION_LIMIT_INDEX = 0x607D
     MAX_PROFILE_VELOCITY_INDEX = 0x607F
     NEGATIVE_VELOCITY_LIMIT_INDEX = 0x2183
@@ -47,6 +55,7 @@ class CMMTDeviceProfile:
 
     MOTION_MODES = {
         "pp": PROFILE_POSITION_MODE,
+        "pv": PROFILE_VELOCITY_MODE,
         "jog": JOG_MODE,
         "csp": CSP_MODE,
     }
@@ -169,6 +178,37 @@ class CMMTDeviceProfile:
             diagnostics["mode_display"] = f"read failed: {exc}"
 
         return diagnostics
+
+    def read_user_unit_position(self, master, axis_index):
+        return master.sdo_read_uint16(
+            axis_index,
+            self.USER_UNIT_INDEX,
+            self.USER_UNIT_POSITION_SUBINDEX,
+        )
+
+    def read_converting_unit_exponents(self, master, axis_index):
+        return [
+            int(master.sdo_read_int8(
+                axis_index,
+                self.CONVERTING_UNIT_INDEX,
+                self.CONVERTING_UNIT_POSITION_SUBINDEX,
+            )),
+            int(master.sdo_read_int8(
+                axis_index,
+                self.CONVERTING_UNIT_INDEX,
+                self.CONVERTING_UNIT_VELOCITY_SUBINDEX,
+            )),
+            int(master.sdo_read_int8(
+                axis_index,
+                self.CONVERTING_UNIT_INDEX,
+                self.CONVERTING_UNIT_ACCELERATION_SUBINDEX,
+            )),
+            int(master.sdo_read_int8(
+                axis_index,
+                self.CONVERTING_UNIT_INDEX,
+                self.CONVERTING_UNIT_JERK_SUBINDEX,
+            )),
+        ]
 
     def format_error_code(self, error_code):
         if not isinstance(error_code, int):
