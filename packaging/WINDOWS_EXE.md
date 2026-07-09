@@ -26,6 +26,8 @@ dist\ROS2_CIA402
   .env.example
   device\cmmt\.env.example
   Reference\cmmt_error_catalog.json
+  Tools\list_ethercat_nics.ps1
+  Tools\npcap-1.88.exe
 ```
 
 Local `.env` files are intentionally not copied by the build script. Copy or
@@ -46,8 +48,20 @@ cd dist\ROS2_CIA402
 
 ## Run With Real EtherCAT Hardware
 
-Npcap must be installed on the Windows PC. The server loads Npcap DLLs from the
-standard installation paths at runtime.
+Npcap must be installed on the Windows PC. Run the bundled installer if needed:
+
+```powershell
+.\Tools\npcap-1.88.exe
+```
+
+Enable the WinPcap API-compatible mode option during Npcap installation. The
+server loads Npcap DLLs from the standard installation paths at runtime.
+
+To list Windows Npcap adapter names:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\Tools\list_ethercat_nics.ps1
+```
 
 Set the real adapter name and device settings in `.env`, then run:
 

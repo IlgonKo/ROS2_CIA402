@@ -3210,6 +3210,15 @@ def run_degraded_server_loop(server, master, state):
 
 # Main Entry
 
+def list_adapters():
+    loader = PySOEMMaster("unused", 1)
+    pysoem = loader._load_pysoem()
+    for adapter in pysoem.find_adapters():
+        print(f"name={adapter.name}")
+        print(f"desc={adapter.desc}")
+        print()
+
+
 def default_diagnostics(axis_count_value, error_message=""):
     text = error_message or "not initialized"
     return [
@@ -3321,6 +3330,10 @@ def initial_server_state(
 
 def main():
     args = parse_args()
+    if args.list_adapters:
+        list_adapters()
+        return
+
     if args.axis_count < 1:
         raise ValueError("--axis-count must be at least 1")
 

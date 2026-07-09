@@ -118,6 +118,11 @@ def parse_args():
         help="PySOEM adapter, for example enp1s0 on Linux or \\Device\\NPF_{...} on Windows.",
     )
     parser.add_argument(
+        "--list-adapters",
+        action="store_true",
+        help="List PySOEM/Npcap adapter names and exit.",
+    )
+    parser.add_argument(
         "--backend",
         choices=["mock", "pysoem"],
         default=os.environ.get("AXIS_SERVER_BACKEND", "pysoem").lower(),
