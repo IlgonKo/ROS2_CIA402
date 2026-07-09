@@ -141,16 +141,16 @@ class Cia402CommandBridgeNode(Node):
             self.jog_position_callback,
             10,
         )
-        self.command_authority_request_sub = self.create_subscription(
+        self.authority_acquire_sub = self.create_subscription(
             Empty,
-            "/command_authority/request",
-            self.command_authority_request_callback,
+            "/authority/acquire",
+            self.authority_acquire_callback,
             10,
         )
-        self.command_authority_release_sub = self.create_subscription(
+        self.authority_release_sub = self.create_subscription(
             Empty,
-            "/command_authority/release",
-            self.command_authority_release_callback,
+            "/authority/release",
+            self.authority_release_callback,
             10,
         )
 
@@ -196,7 +196,7 @@ class Cia402CommandBridgeNode(Node):
         )
         self.command_authority_pub = self.create_publisher(
             String,
-            "/command_authority/status",
+            "/authority/status",
             10,
         )
         self.command_rejected_pub = self.create_publisher(
@@ -540,12 +540,11 @@ class Cia402CommandBridgeNode(Node):
         self.request_axis_server_authority()
         return False
 
-    def request_axis_server_authority(self, force=False):
+    def request_axis_server_authority(self):
         self.auto_request_authority = True
         return self.send_json(
             {
-                "type": "command_authority_request",
-                "force": bool(force),
+                "cmd": "authority/acquire",
             }
         )
 
@@ -556,11 +555,13 @@ class Cia402CommandBridgeNode(Node):
         self.repeat_points = None
         self.last_sent_repeat_target = None
         self.repeat_waiting_to_send = False
-        return self.send_json({"type": "command_authority_release"})
+        return self.send_json({"cmd": "authority/release"})
 
     def update_axis_server_authority_state(self, authority):
         if not isinstance(authority, dict):
             return
+        if authority.get("reason") in {"authority_required", "authority_busy"}:
+            self.has_axis_server_authority = False
         if "owned_by_this_client" in authority:
             self.has_axis_server_authority = bool(
                 authority.get("owned_by_this_client", False)
@@ -786,13 +787,13 @@ class Cia402CommandBridgeNode(Node):
             "Ignoring /jog_position in ROS Bridge. Use Axis Panel for manual jog."
         )
 
-    def command_authority_request_callback(self, _msg):
-        self.request_axis_server_authority(force=True)
+    def authority_acquire_callback(self, _msg):
+        self.request_axis_server_authority()
         self.get_logger().info(
-            "Requested Axis Server command authority takeover; auto request enabled"
+            "Requested Axis Server command authority; auto request enabled"
         )
 
-    def command_authority_release_callback(self, _msg):
+    def authority_release_callback(self, _msg):
         self.release_axis_server_authority()
         self.get_logger().info(
             "Released Axis Server command authority; auto request disabled"
@@ -841,11 +842,16 @@ class Cia402CommandBridgeNode(Node):
                 self.publish_feedback(message)
             elif message.get("type") == "log":
                 self.get_logger().info(message.get("text", ""))
-            elif message.get("type") == "command_authority":
+            elif message.get("type") in {
+                "authority/acquire",
+                "authority/release",
+                "authority/status",
+            }:
                 self.update_axis_server_authority_state(message)
                 self.publish_string(self.command_authority_pub, message)
                 self.get_logger().info(message.get("message", ""))
             elif message.get("type") == "command_rejected":
+                self.update_axis_server_authority_state(message)
                 self.publish_string(self.command_rejected_pub, message)
                 self.get_logger().warn(message.get("message", "Command rejected"))
 

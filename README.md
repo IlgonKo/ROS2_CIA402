@@ -132,10 +132,13 @@ bash scripts/host/panel.sh --build
 ```
 
 The Axis Server accepts multiple TCP clients. Command messages require command
-authority: a client must request authority from the panel before sending motion
-commands, manual controlwords, limit changes, mode changes, jogs, or alarm ack.
-If another client already holds authority, the server rejects the request and
-reports the current owner. Feedback remains broadcast to all connected clients.
+authority on the TCP connection that sends them: a client sends
+`authority/acquire` once before motion commands, manual controlwords,
+limit changes, mode changes, jogs, or alarm ack. If no client owns authority,
+the server grants it to that connection. If another connection already owns it,
+the server rejects the request with `authority_busy` and reports the current
+owner. Feedback remains broadcast to all connected clients. Closing the owning
+connection or sending `authority/release` releases authority.
 
 Motion modes:
 
@@ -363,6 +366,9 @@ on the same Linux host with host networking.
 By default, the ROS Bridge requests Axis Server command authority automatically
 after connecting. Set `ROS_BRIDGE_AUTO_REQUEST_AUTHORITY=0` if command authority
 should be managed by another client such as the local Axis Panel.
+Authority is connection-based: the Bridge does not use or expose command tokens,
+and request buttons do not forcibly take authority from another connected
+client.
 
 Standard ROS motion command:
 
@@ -377,8 +383,8 @@ Project-specific management topics:
 /controlword                  std_msgs/Int32MultiArray, [cw] or [axis, cw]
 /jog_position                 std_msgs/Float64MultiArray, [axis, distance]
 /alarm_ack                    std_msgs/Empty
-/command_authority/request    std_msgs/Empty
-/command_authority/release    std_msgs/Empty
+/authority/acquire            std_msgs/Empty
+/authority/release            std_msgs/Empty
 ```
 
 The ROS Control Panel Command tab can select the command transport:
@@ -424,7 +430,7 @@ Core ROS feedback topics:
 /drive_diagnostics
 /motion_limits_feedback
 /motion_modes_feedback
-/command_authority/status
+/authority/status
 /command_rejected
 ```
 

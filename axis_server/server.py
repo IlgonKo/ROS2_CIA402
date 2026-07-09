@@ -90,6 +90,12 @@ COMMAND_MESSAGE_TYPES = {
     "trajectory/stop",
 }
 
+AUTHORITY_MESSAGE_TYPES = {
+    "authority/acquire",
+    "authority/release",
+    "authority/status",
+}
+
 ADVANCED_MESSAGE_TYPES = {
     "debug/controlword",
     "trajectory/move",
@@ -2566,41 +2572,44 @@ def selected_single_axis(message, master, command):
     return axes[0]
 
 
-def handle_command_authority_request(client, state):
+def authority_status_payload(client, state, message_type="authority/status"):
     owner = state.get("command_authority_owner")
-    force = bool(client.get("last_message_force", False))
-    if owner is None or owner == client["id"] or force:
-        previous_owner = owner
+    owned_by_this_client = owner is not None and owner == client["id"]
+    return {
+        "type": message_type,
+        "ok": True,
+        "owner": owner,
+        "owned_by_this_client": owned_by_this_client,
+        "available": owner is None,
+        "reason": None,
+    }
+
+
+def handle_authority_acquire(client, state):
+    owner = state.get("command_authority_owner")
+    if owner is None or owner == client["id"]:
         state["command_authority_owner"] = client["id"]
-        send_client_message(
-            client,
-            {
-                "type": "command_authority",
-                "granted": True,
-                "owner": client["id"],
-                "message": (
-                    "Command authority granted."
-                    if previous_owner in (None, client["id"])
-                    else f"Command authority taken from client {previous_owner}."
-                ),
-            },
+        payload = authority_status_payload(client, state, "authority/acquire")
+        payload["granted"] = True
+        payload["message"] = (
+            "Command authority granted."
+            if owner is None
+            else "This connection already owns command authority."
         )
-        if previous_owner not in (None, client["id"]):
-            print(
-                "Command authority force-granted to "
-                f"client {client['id']}; previous_owner={previous_owner}",
-                flush=True,
-            )
-        else:
-            print(f"Command authority granted to client {client['id']}", flush=True)
+        send_client_message(client, payload)
+        print(f"Command authority granted to client {client['id']}", flush=True)
         return
 
     send_client_message(
         client,
         {
-            "type": "command_authority",
+            "type": "authority/acquire",
+            "ok": False,
             "granted": False,
+            "reason": "authority_busy",
             "owner": owner,
+            "owned_by_this_client": False,
+            "available": False,
             "message": f"Command authority is already held by client {owner}.",
         },
     )
@@ -2610,21 +2619,30 @@ def handle_command_authority_request(client, state):
     )
 
 
-def handle_command_authority_release(client, state):
+def handle_authority_release(client, state):
     owner = state.get("command_authority_owner")
     if owner == client["id"]:
         state["command_authority_owner"] = None
+        reason = None
         message = "Command authority released."
         print(f"Command authority released by client {client['id']}", flush=True)
+    elif owner is None:
+        reason = "authority_required"
+        message = "This connection does not hold command authority."
     else:
+        reason = "authority_busy"
         message = "This client does not hold command authority."
 
     send_client_message(
         client,
         {
-            "type": "command_authority",
+            "type": "authority/release",
+            "ok": owner == client["id"],
             "granted": False,
+            "reason": reason,
             "owner": state.get("command_authority_owner"),
+            "owned_by_this_client": False,
+            "available": state.get("command_authority_owner") is None,
             "message": message,
         },
     )
@@ -2636,12 +2654,17 @@ def client_has_command_authority(client, state):
 
 def reject_command_without_authority(client, message, state):
     owner = state.get("command_authority_owner")
+    reason = "authority_required" if owner is None else "authority_busy"
     send_client_message(
         client,
         {
             "type": "command_rejected",
+            "ok": False,
+            "reason": reason,
             "command": command_name(message),
             "owner": owner,
+            "available": owner is None,
+            "owned_by_this_client": False,
             "message": (
                 "Command authority is required."
                 if owner is None
@@ -2677,14 +2700,13 @@ def handle_message(message, master, state, client):
     raw_message_type = command_name(message)
     message_type = public_command_name(message)
 
-    if raw_message_type == "command_authority_request":
-        client["last_message_force"] = bool(message.get("force", False))
-        handle_command_authority_request(client, state)
-        client["last_message_force"] = False
-        return
-
-    if raw_message_type == "command_authority_release":
-        handle_command_authority_release(client, state)
+    if message_type in AUTHORITY_MESSAGE_TYPES:
+        if message_type == "authority/acquire":
+            handle_authority_acquire(client, state)
+        elif message_type == "authority/release":
+            handle_authority_release(client, state)
+        elif message_type == "authority/status":
+            send_client_message(client, authority_status_payload(client, state))
         return
 
     if message_type in ("system/status", "axis/status"):
@@ -3181,7 +3203,6 @@ def run_degraded_server_loop(server, master, state):
                 "addr": addr,
                 "buffer": "",
                 "last_feedback_time": 0.0,
-                "last_message_force": False,
             }
             clients.append(client)
             next_client_id += 1

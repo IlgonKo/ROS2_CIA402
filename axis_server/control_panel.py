@@ -300,7 +300,12 @@ class AxisServerClient:
             message = json.loads(line)
             if message.get("type") == "feedback":
                 self._store_feedback(message)
-            elif message.get("type") in {"command_authority", "command_rejected"}:
+            elif message.get("type") in {
+                "authority/acquire",
+                "authority/release",
+                "authority/status",
+                "command_rejected",
+            }:
                 self._store_notice(message)
             elif message.get("type") in {"axis/param_read", "axis/param_write"}:
                 self._store_diagnosis_result(message)
@@ -314,6 +319,28 @@ class AxisServerClient:
     def _store_notice(self, message):
         with self.lock:
             self.last_notice = str(message.get("message", ""))
+            if message.get("type") in {
+                "authority/acquire",
+                "authority/release",
+                "authority/status",
+            }:
+                self.feedback["command_authority"] = {
+                    "owner": message.get("owner"),
+                    "owned_by_this_client": bool(
+                        message.get("owned_by_this_client", False)
+                    ),
+                    "available": bool(message.get("available", False)),
+                }
+            elif (
+                message.get("type") == "command_rejected"
+                and message.get("reason")
+                in {"authority_required", "authority_busy"}
+            ):
+                self.feedback["command_authority"] = {
+                    "owner": message.get("owner"),
+                    "owned_by_this_client": False,
+                    "available": bool(message.get("available", False)),
+                }
 
     def _store_diagnosis_result(self, message):
         with self.lock:
@@ -683,10 +710,10 @@ class AxisServerClient:
         )
 
     def request_command_authority(self):
-        self.send_json({"type": "command_authority_request"})
+        self.send_json({"cmd": "authority/acquire"})
 
     def release_command_authority(self):
-        self.send_json({"type": "command_authority_release"})
+        self.send_json({"cmd": "authority/release"})
 
     def send_param_read(self, axis_index, index, subindex, data_type):
         self.send_json(

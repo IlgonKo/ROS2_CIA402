@@ -176,14 +176,14 @@ class AxisControlPanelNode(Node):
             FollowJointTrajectory,
             "/cia402_joint_trajectory_controller/follow_joint_trajectory",
         )
-        self.command_authority_request_pub = self.create_publisher(
+        self.authority_acquire_pub = self.create_publisher(
             Empty,
-            "/command_authority/request",
+            "/authority/acquire",
             10,
         )
-        self.command_authority_release_pub = self.create_publisher(
+        self.authority_release_pub = self.create_publisher(
             Empty,
-            "/command_authority/release",
+            "/authority/release",
             10,
         )
 
@@ -201,7 +201,7 @@ class AxisControlPanelNode(Node):
         )
         self.create_subscription(
             String,
-            "/command_authority/status",
+            "/authority/status",
             self.command_authority_callback,
             10,
         )
@@ -364,11 +364,11 @@ class AxisControlPanelNode(Node):
             return False
 
     def request_command_authority(self):
-        self.command_authority_request_pub.publish(Empty())
+        self.authority_acquire_pub.publish(Empty())
         self.command_authority_text = "Authority request sent to ROS Bridge"
 
     def release_command_authority(self):
-        self.command_authority_release_pub.publish(Empty())
+        self.authority_release_pub.publish(Empty())
         self.command_authority_text = "Authority release sent to ROS Bridge"
 
     def target_position_callback(self, msg):
@@ -457,6 +457,13 @@ class AxisControlPanelNode(Node):
         try:
             payload = json.loads(msg.data)
             text = payload.get("message", msg.data)
+            if payload.get("reason") in {"authority_required", "authority_busy"}:
+                if payload.get("owner", None) is None:
+                    self.command_authority_text = "Authority: available"
+                else:
+                    self.command_authority_text = (
+                        f"Authority: client {payload['owner']}"
+                    )
         except json.JSONDecodeError:
             text = msg.data
         self.action_result_text = f"Result: rejected {text}"
