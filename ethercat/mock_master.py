@@ -24,6 +24,10 @@ class MockMaster:
         )
         self.csp_profile = str(csp_profile).strip().lower()
         self.last_csp_command_steps = []
+        self.axis_csp_counts_per_unit = [
+            float(csp_counts_per_unit)
+            for _ in self.slaves
+        ]
         self.dc = DistributedClock()
         self.working_counter = WorkingCounter()
         self.wkc = 0
@@ -91,6 +95,9 @@ class MockMaster:
         slave.motion_limits.jerk = float(jerk)
         slave.axis.set_motion_limits(max_velocity, acceleration, deceleration)
 
+    def set_axis_csp_counts_per_unit(self, axis_index, counts_per_unit):
+        self.axis_csp_counts_per_unit[axis_index] = float(counts_per_unit)
+
     def sdo_write_int8(self, slave_index, index, subindex, value):
         self._write_object(slave_index, index, value, subindex)
 
@@ -154,19 +161,20 @@ class MockMaster:
                 continue
 
             limits = slave.motion_limits
+            csp_counts_per_unit = self.axis_csp_counts_per_unit[axis_index]
             previous_command_position = float(generator.command_position)
             previous_sent_position = int(slave.rxpdo.target_position)
             command_position = float(generator.update(
                 self.cycle_time,
-                limits.max_velocity * self.csp_counts_per_unit,
-                limits.acceleration * self.csp_counts_per_unit,
-                limits.deceleration * self.csp_counts_per_unit,
-                limits.jerk * self.csp_counts_per_unit,
+                limits.max_velocity * csp_counts_per_unit,
+                limits.acceleration * csp_counts_per_unit,
+                limits.deceleration * csp_counts_per_unit,
+                limits.jerk * csp_counts_per_unit,
             ))
             sent_position = int(round(command_position))
             slave.rxpdo.target_position = sent_position
             if self.csp_velocity_offset_enabled:
-                velocity_scale = max(self.csp_counts_per_unit, 1e-9)
+                velocity_scale = max(csp_counts_per_unit, 1e-9)
                 slave.rxpdo.velocity_offset = int(round(
                     float(generator.command_velocity) / velocity_scale
                 ))
@@ -241,6 +249,10 @@ class MockMaster:
             return slave.txpdo.actual_velocity
         if index == 0x60A4 and subindex == 1:
             return slave.axis.servo.od.read(0x60A4, 1)
+        if index == 0x216E and subindex == 0x01:
+            return slave.axis.servo.od.read(0x216E, 0x01)
+        if index == 0x2194 and subindex in (0x01, 0x02, 0x03, 0x04):
+            return slave.axis.servo.od.read(0x2194, subindex)
         if index == 0x2145 and subindex == 0x0C:
             return 0
         if index == 0x1001:
@@ -307,6 +319,10 @@ class MockMaster:
             slave.axis.servo.od.write(0x1C32, int(value), subindex)
         elif index == 0x60A4 and subindex == 1:
             slave.axis.servo.od.write(0x60A4, int(value), 1)
+        elif index == 0x216E and subindex == 0x01:
+            slave.axis.servo.od.write(0x216E, int(value), 0x01)
+        elif index == 0x2194 and subindex in (0x01, 0x02, 0x03, 0x04):
+            slave.axis.servo.od.write(0x2194, int(value), subindex)
         elif index == 0x6081:
             if slave.rxpdo.has_field("profile_velocity"):
                 slave.rxpdo.profile_velocity = int(value)

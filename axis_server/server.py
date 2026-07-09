@@ -1,12 +1,15 @@
 from collections import deque
 import json
+import os
 from pathlib import Path
 import select
 import socket
 import sys
 import time
 
-PROJECT_ROOT = Path(__file__).resolve().parents[1]
+PROJECT_ROOT = Path(
+    os.environ.get("AXIS_SERVER_PROJECT_ROOT", Path(__file__).resolve().parents[1])
+).resolve()
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
@@ -124,7 +127,7 @@ def create_master(args, motion_limits):
         master = MockMaster(
             slaves,
             cycle_time=args.cycle_time,
-            csp_counts_per_unit=1.0,
+            csp_counts_per_unit=args.csp_counts_per_unit,
             csp_velocity_offset_enabled=args.csp_velocity_offset,
             csp_command_step_threshold=args.csp_command_step_threshold,
             csp_command_step_error_threshold=(
@@ -333,7 +336,7 @@ PV_USER_POSITION_UNITS = {
 
 
 LINEAR_USER_POSITION_UNITS = {
-    0x0100: "mm",
+    0x0100: "m",
 }
 
 
@@ -359,10 +362,37 @@ def axis_motion_kind(user_position_unit):
     return "unknown"
 
 
+def api_position_unit_name(user_position_unit):
+    motion_kind = axis_motion_kind(user_position_unit)
+    if motion_kind == "rotary":
+        return "deg"
+    if motion_kind == "linear":
+        return "mm"
+    return user_position_unit_name(user_position_unit)
+
+
+def api_to_user_unit_factor(user_position_unit):
+    if user_position_unit is None:
+        return 1.0
+    unit = int(user_position_unit)
+    if unit in LINEAR_USER_POSITION_UNITS:
+        return 0.001
+    if unit == 0x1000:
+        return 3.141592653589793 / 180.0
+    if unit == 0x4100:
+        return 1.0
+    if unit == 0xB400:
+        return 1.0 / 360.0
+    return 1.0
+
+
 def scale_from_exponent(exponent, default=1.0):
     if exponent is None:
         return default
-    return 10.0 ** int(exponent)
+    exponent_value = int(exponent)
+    if exponent_value > 0:
+        return 10.0 ** (-exponent_value)
+    return 10.0 ** exponent_value
 
 
 def build_axis_metadata(user_position_units, converting_unit_exponents):
@@ -382,12 +412,13 @@ def build_axis_metadata(user_position_units, converting_unit_exponents):
         if exponents is None:
             exponents = [None, None, None, None]
         motion_kind = axis_motion_kind(user_position_unit)
-        position_unit = user_position_unit_name(user_position_unit)
+        user_unit_name = user_position_unit_name(user_position_unit)
+        position_unit = api_position_unit_name(user_position_unit)
         acceleration_scale = scale_from_exponent(exponents[2], 1.0)
         metadata.append({
             "axis": axis_index,
             "user_position_unit": user_position_unit,
-            "user_position_unit_name": position_unit,
+            "user_position_unit_name": user_unit_name,
             "motion_kind": motion_kind,
             "pv_allowed": (
                 pv_allowed_user_position_unit(user_position_unit)
@@ -425,9 +456,17 @@ def axis_metadata(state, axis_index):
 
 def axis_position_counts_per_api_unit(state, axis_index):
     metadata = axis_metadata(state, axis_index)
-    if metadata.get("motion_kind") == "rotary":
-        return 1_000_000.0
+    if metadata.get("motion_kind") in ("linear", "rotary"):
+        position_scale = max(float(metadata.get("position_scale", 1.0)), 1e-12)
+        return api_to_user_unit_factor(metadata.get("user_position_unit")) / position_scale
     return max(float(state.get("position_counts_per_unit", 1.0)), 1e-9)
+
+
+def axis_position_counts_per_api_units(state, axis_count_value):
+    return [
+        axis_position_counts_per_api_unit(state, axis_index)
+        for axis_index in range(axis_count_value)
+    ]
 
 
 def axis_position_drive_to_api(state, axis_index, value):
@@ -453,11 +492,15 @@ def axis_motion_scale(state, axis_index, kind="velocity"):
 
 
 def axis_motion_drive_to_api(state, axis_index, value, kind="velocity"):
-    return float(value) * axis_motion_scale(state, axis_index, kind)
+    metadata = axis_metadata(state, axis_index)
+    factor = api_to_user_unit_factor(metadata.get("user_position_unit"))
+    return float(value) * axis_motion_scale(state, axis_index, kind) / factor
 
 
 def axis_motion_api_to_drive(state, axis_index, value, kind="velocity"):
-    return float(value) / axis_motion_scale(state, axis_index, kind)
+    metadata = axis_metadata(state, axis_index)
+    factor = api_to_user_unit_factor(metadata.get("user_position_unit"))
+    return float(value) * factor / axis_motion_scale(state, axis_index, kind)
 
 
 def require_int32_value(value, field_name):
@@ -768,6 +811,10 @@ def feedback_message(master, state, client_id=None):
         "server_mode": state.get("server_mode", "basic"),
         "csp_counts_per_unit": master.csp_counts_per_unit,
         "position_counts_per_unit": state["position_counts_per_unit"],
+        "axis_position_counts_per_unit": state.get(
+            "axis_position_counts_per_unit",
+            [],
+        ),
         "capabilities": state["capabilities"],
         "trajectory": public_trajectory_state(state),
         "homing": public_homing_state(state),
@@ -1813,7 +1860,8 @@ def handle_axis_motion_limits(message, master, state, client):
                             "acceleration",
                         ),
                     ),
-                )
+                ),
+                "acceleration",
             )
             max_deceleration = axis_motion_api_to_drive(
                 state,
@@ -1829,7 +1877,8 @@ def handle_axis_motion_limits(message, master, state, client):
                             "deceleration",
                         ),
                     ),
-                )
+                ),
+                "deceleration",
             )
             update_axis_motion_limits(
                 master,
@@ -1859,11 +1908,16 @@ def update_axis_motion_limits(
         acceleration,
         deceleration,
     ]
+    api_axis_limits = motion_limits_drive_to_api(
+        state,
+        axis_index,
+        state["motion_limits"][axis_index],
+    )
     master.set_axis_motion_limits(
         axis_index,
-        max(abs(positive_velocity_limit), abs(negative_velocity_limit)),
-        acceleration,
-        deceleration,
+        max(abs(api_axis_limits[0]), abs(api_axis_limits[1])),
+        api_axis_limits[2],
+        api_axis_limits[3],
         0.0,
     )
     master.slaves[axis_index].axis_server_motion_limits = list(
@@ -2085,10 +2139,26 @@ def handle_axis_software_position_limits(message, master, state, client):
                 negative_limit,
                 positive_limit,
             )
+            try:
+                readback_limits = DEVICE_PROFILE.read_software_position_limits(
+                    master,
+                    axis_index,
+                )
+            except Exception as exc:
+                readback_limits = [f"read failed: {exc}", f"read failed: {exc}"]
             state["software_position_limits"][axis_index] = [
                 negative_limit,
                 positive_limit,
             ]
+            print(
+                "Axis software position limits write: "
+                f"axis={axis_index} "
+                f"api=({negative_limit_api}, {positive_limit_api}) "
+                f"drive=({negative_limit}, {positive_limit}) "
+                f"readback={readback_limits} "
+                f"metadata={axis_metadata(state, axis_index)}",
+                flush=True,
+            )
     except Exception as exc:
         reject_command_message(client, command, str(exc))
         return
@@ -3219,8 +3289,10 @@ def initial_server_state(
         ],
         "position_counts_per_unit": (
             args.csp_counts_per_unit
-            if args.backend == "pysoem"
-            else 1.0
+        ),
+        "axis_position_counts_per_unit": axis_position_counts_per_api_units(
+            {"axis_metadata": axis_metadata, "position_counts_per_unit": args.csp_counts_per_unit},
+            args.axis_count,
         ),
         "capabilities": {
             "position_loop_gain": args.backend == "mock",
@@ -3345,6 +3417,13 @@ def main():
                     else 1.0
                 ),
             }
+            axis_position_scales = axis_position_counts_per_api_units(
+                unit_state,
+                args.axis_count,
+            )
+            for axis_index, scale in enumerate(axis_position_scales):
+                if hasattr(master, "set_axis_csp_counts_per_unit"):
+                    master.set_axis_csp_counts_per_unit(axis_index, scale)
             profile_settings = [
                 [
                     axis_motion_api_to_drive(unit_state, axis_index, args.max_velocity),
@@ -3401,12 +3480,17 @@ def main():
                     )
             for axis_index, axis_limits in enumerate(read_motion_limits_state):
                 master.slaves[axis_index].axis_server_motion_limits = list(axis_limits)
+                api_axis_limits = motion_limits_drive_to_api(
+                    unit_state,
+                    axis_index,
+                    axis_limits,
+                )
                 master.set_axis_motion_limits(
                     axis_index,
-                    max(abs(axis_limits[0]), abs(axis_limits[1])),
-                    axis_limits[2],
-                    axis_limits[3],
-                    0.0,
+                    max(abs(api_axis_limits[0]), abs(api_axis_limits[1])),
+                    api_axis_limits[2],
+                    api_axis_limits[3],
+                    args.jerk,
                 )
             positions = actual_positions(master)
             print(
@@ -3441,6 +3525,12 @@ def main():
                 converting_unit_exponents=converting_unit_exponents,
                 axis_metadata=axis_metadata,
                 initialized=True,
+            )
+            state["axis_position_counts_per_unit"] = axis_position_scales
+            state["position_counts_per_unit"] = (
+                axis_position_scales[0]
+                if axis_position_scales
+                else args.csp_counts_per_unit
             )
 
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as server:

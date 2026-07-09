@@ -11,7 +11,9 @@ from tkinter import messagebox
 from tkinter import ttk
 
 
-PROJECT_ROOT = Path(__file__).resolve().parents[1]
+PROJECT_ROOT = Path(
+    os.environ.get("AXIS_SERVER_PROJECT_ROOT", Path(__file__).resolve().parents[1])
+).resolve()
 GUI_PERIOD_MS = 50
 RECONNECT_PERIOD = 1.0
 HISTORY_SIZE = 500
@@ -45,7 +47,7 @@ PV_USER_POSITION_UNITS = {
 }
 
 LINEAR_USER_POSITION_UNITS = {
-    0x0100: "mm",
+    0x0100: "m",
 }
 
 
@@ -71,21 +73,49 @@ def axis_motion_kind(user_position_unit):
     return "unknown"
 
 
+def api_position_unit_name(user_position_unit):
+    motion_kind = axis_motion_kind(user_position_unit)
+    if motion_kind == "rotary":
+        return "deg"
+    if motion_kind == "linear":
+        return "mm"
+    return user_position_unit_name(user_position_unit)
+
+
+def api_to_user_unit_factor(user_position_unit):
+    if user_position_unit is None:
+        return 1.0
+    unit = int(user_position_unit)
+    if unit in LINEAR_USER_POSITION_UNITS:
+        return 0.001
+    if unit == 0x1000:
+        return 3.141592653589793 / 180.0
+    if unit == 0x4100:
+        return 1.0
+    if unit == 0xB400:
+        return 1.0 / 360.0
+    return 1.0
+
+
 def scale_from_exponent(exponent, default=1.0):
     if exponent is None:
         return default
-    return 10.0 ** int(exponent)
+    exponent_value = int(exponent)
+    if exponent_value > 0:
+        return 10.0 ** (-exponent_value)
+    return 10.0 ** exponent_value
 
 
 def build_axis_metadata(axis_index, user_position_unit, exponents):
     if exponents is None:
         exponents = [None, None, None, None]
-    position_unit = user_position_unit_name(user_position_unit)
+    user_unit_name = user_position_unit_name(user_position_unit)
+    position_unit = api_position_unit_name(user_position_unit)
     acceleration_scale = scale_from_exponent(exponents[2], 1.0)
     return {
         "axis": axis_index,
         "user_position_unit": user_position_unit,
-        "user_position_unit_name": position_unit,
+        "user_position_unit_name": user_unit_name,
         "motion_kind": axis_motion_kind(user_position_unit),
         "pv_allowed": user_position_unit is not None
         and int(user_position_unit) in PV_USER_POSITION_UNITS,
@@ -171,6 +201,7 @@ class AxisServerClient:
         self.lock = threading.Lock()
         self.stop_event = threading.Event()
         self.connected = False
+        self.enabled = True
         self.last_error = ""
         self.feedback = {
             "target_positions": [0.0 for _ in range(axis_count)],
@@ -214,8 +245,30 @@ class AxisServerClient:
                 self.sock = None
             self.connected = False
 
+    def set_endpoint(self, host, port):
+        with self.lock:
+            self.host = str(host).strip()
+            self.port = int(port)
+            self.enabled = True
+            self.last_error = "Reconnecting..."
+        self.close()
+
+    def disconnect(self):
+        with self.lock:
+            self.enabled = False
+            self.last_error = "Disconnected by user"
+        self.close()
+
+    def enable_connection(self):
+        with self.lock:
+            self.enabled = True
+            self.last_error = "Connecting..."
+
     def _connection_loop(self):
         while not self.stop_event.is_set():
+            if not self.enabled:
+                time.sleep(RECONNECT_PERIOD)
+                continue
             try:
                 self._connect()
                 self._read_loop()
@@ -391,11 +444,13 @@ class AxisServerClient:
 
     def _position_drive_to_api(self, axis_index, value):
         metadata = self._axis_metadata(axis_index)
-        if metadata.get("motion_kind") == "rotary":
-            scale = 1_000_000.0
+        if metadata.get("motion_kind") in ("linear", "rotary"):
+            position_scale = max(float(metadata.get("position_scale", 1.0)), 1e-12)
+            factor = api_to_user_unit_factor(metadata.get("user_position_unit"))
+            counts_per_api_unit = factor / position_scale
         else:
-            scale = float(self.feedback.get("position_counts_per_unit", 1.0))
-        return float(value) / max(scale, 1e-9)
+            counts_per_api_unit = float(self.feedback.get("position_counts_per_unit", 1.0))
+        return float(value) / max(counts_per_api_unit, 1e-9)
 
     def _motion_drive_to_api(self, axis_index, value, kind="velocity"):
         metadata = self._axis_metadata(axis_index)
@@ -409,7 +464,8 @@ class AxisServerClient:
             scale = float(metadata.get(key, 1.0))
         except (TypeError, ValueError):
             scale = 1.0
-        return float(value) * scale
+        factor = api_to_user_unit_factor(metadata.get("user_position_unit"))
+        return float(value) * scale / factor
 
     def get_snapshot(self):
         with self.lock:
@@ -873,6 +929,9 @@ class AxisServerControlPanel:
         ]
         self.multi_repeat_period_var = tk.StringVar(value="2.0")
         self.jog_step_var = tk.StringVar(value="100.0")
+        self.server_host_var = tk.StringVar(value=self.client.host)
+        self.server_port_var = tk.StringVar(value=str(self.client.port))
+        self.connection_button_var = tk.StringVar(value="Connect")
         self.connection_var = tk.StringVar(value="Disconnected")
         self.command_authority_var = tk.StringVar(value="Authority: available")
         self.command_authority_button_var = tk.StringVar(value="Request Authority")
@@ -918,6 +977,7 @@ class AxisServerControlPanel:
         self.single_control_notebook = None
         self.single_axis_area = None
         self.multi_axis_area = None
+        self.connection_button = None
         self.multi_position_trace = None
         self.multi_velocity_trace = None
         self.manual_controlword_frame = None
@@ -975,6 +1035,22 @@ class AxisServerControlPanel:
         self.root.after(GUI_PERIOD_MS, self.update_gui)
 
     def _build_ui(self):
+        style = ttk.Style(self.root)
+        style.configure("Connected.TButton", foreground="green", background="#2e7d32")
+        style.map(
+            "Connected.TButton",
+            foreground=[
+                ("active", "green"),
+                ("pressed", "green"),
+                ("disabled", "green"),
+            ],
+            background=[
+                ("active", "#43a047"),
+                ("pressed", "#1b5e20"),
+                ("disabled", "#2e7d32"),
+            ],
+        )
+
         outer = ttk.Frame(self.root, padding=12)
         outer.pack(fill="both", expand=True)
 
@@ -994,6 +1070,25 @@ class AxisServerControlPanel:
             side="left",
             padx=4,
         )
+        ttk.Label(header, text="Host").pack(side="left", padx=(14, 4))
+        ttk.Entry(
+            header,
+            textvariable=self.server_host_var,
+            width=18,
+        ).pack(side="left")
+        ttk.Label(header, text="Port").pack(side="left", padx=(8, 4))
+        ttk.Entry(
+            header,
+            textvariable=self.server_port_var,
+            justify="right",
+            width=7,
+        ).pack(side="left")
+        self.connection_button = ttk.Button(
+            header,
+            textvariable=self.connection_button_var,
+            command=self.toggle_server_connection,
+        )
+        self.connection_button.pack(side="left", padx=(6, 4))
         ttk.Label(header, textvariable=self.connection_var).pack(side="right")
         ttk.Label(header, textvariable=self.scale_var).pack(side="right", padx=12)
 
@@ -1775,6 +1870,46 @@ class AxisServerControlPanel:
         if self.latest_motion_modes[axis_index] != "pv":
             return
         self.try_send(lambda: self.client.send_axis_stop(axis_index))
+
+    def apply_server_endpoint(self):
+        host = self.server_host_var.get().strip()
+        if not host:
+            messagebox.showerror("Invalid Input", "Server host is required.")
+            return
+
+        try:
+            port = int(self.server_port_var.get())
+        except ValueError:
+            messagebox.showerror("Invalid Input", "Server port must be numeric.")
+            return
+
+        if port < 1 or port > 65535:
+            messagebox.showerror("Invalid Input", "Server port must be 1..65535.")
+            return
+
+        self.stop_tab_motion()
+        self.client.set_endpoint(host, port)
+        self.panel_sdo_read_connected = False
+        self.connection_var.set(f"Reconnecting {host}:{port}")
+
+    def toggle_server_connection(self):
+        connected, _error, _feedback, _notice, _diagnosis_result = self.client.get_snapshot()
+        if connected:
+            self.stop_tab_motion()
+            self.client.disconnect()
+            self.connection_var.set("Disconnected by user")
+            self.update_connection_button(False)
+            return
+
+        self.client.enable_connection()
+        self.apply_server_endpoint()
+
+    def update_connection_button(self, connected):
+        self.connection_button_var.set("Disconnect" if connected else "Connect")
+        if self.connection_button is not None:
+            self.connection_button.configure(
+                style="Connected.TButton" if connected else "TButton"
+            )
 
     def show_single_axis_area(self):
         if self.multi_axis_area is not None and self.multi_axis_area.winfo_ismapped():
@@ -2696,6 +2831,7 @@ class AxisServerControlPanel:
             if connected
             else f"Disconnected {error}"
         )
+        self.update_connection_button(connected)
         if notice:
             messagebox.showinfo("Axis Server", notice)
         if diagnosis_result:
