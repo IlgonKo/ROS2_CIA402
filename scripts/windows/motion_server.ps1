@@ -39,7 +39,7 @@ Write-Host "PYTHONPATH=$env:PYTHONPATH"
 
 $Arguments = @(
     "-B",
-    (Join-Path $ProjectRoot "axis_server\server.py"),
+    (Join-Path $ProjectRoot "motion_server\server.py"),
     $Interface,
     "--backend", $Backend,
     "--server-mode", $ServerMode,

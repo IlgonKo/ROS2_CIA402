@@ -3,7 +3,7 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
-COMPOSE_FILE="${PROJECT_ROOT}/docker/axis_server/compose.yaml"
+COMPOSE_FILE="${PROJECT_ROOT}/docker/motion_server/compose.yaml"
 ENV_FILE="${PROJECT_ROOT}/.env"
 source "${PROJECT_ROOT}/scripts/env.sh"
 SERVICE_NAME="ros-cia402-axis-server.service"
@@ -46,9 +46,9 @@ Wants=network-online.target
 Type=oneshot
 RemainAfterExit=yes
 WorkingDirectory=${PROJECT_ROOT}
-ExecStartPre=-/usr/bin/docker rm -f ros_cia402_axis_server
+ExecStartPre=-/usr/bin/docker rm -f ros_cia402_motion_server
 ExecStartPre=-/usr/bin/docker rm -f ros2_cia402_pysoem_host
-ExecStart=/usr/bin/bash -lc 'source ${PROJECT_ROOT}/scripts/env.sh; COMPOSE_ENV_FILE="\$(prepare_compose_env_file ${PROJECT_ROOT})"; exec /usr/bin/docker compose -f ${COMPOSE_FILE} --env-file "\${COMPOSE_ENV_FILE}" up -d axis_server'
+ExecStart=/usr/bin/bash -lc 'source ${PROJECT_ROOT}/scripts/env.sh; COMPOSE_ENV_FILE="\$(prepare_compose_env_file ${PROJECT_ROOT})"; exec /usr/bin/docker compose -f ${COMPOSE_FILE} --env-file "\${COMPOSE_ENV_FILE}" up -d motion_server'
 ExecStop=/usr/bin/bash -lc 'source ${PROJECT_ROOT}/scripts/env.sh; COMPOSE_ENV_FILE="\$(prepare_compose_env_file ${PROJECT_ROOT})"; exec /usr/bin/docker compose -f ${COMPOSE_FILE} --env-file "\${COMPOSE_ENV_FILE}" down'
 TimeoutStartSec=0
 
@@ -57,8 +57,8 @@ WantedBy=multi-user.target
 EOF
 
   cd "${PROJECT_ROOT}"
-  docker compose -f "${COMPOSE_FILE}" --env-file "${COMPOSE_ENV_FILE}" build axis_server
-  docker rm -f ros_cia402_axis_server 2>/dev/null || true
+  docker compose -f "${COMPOSE_FILE}" --env-file "${COMPOSE_ENV_FILE}" build motion_server
+  docker rm -f ros_cia402_motion_server 2>/dev/null || true
   docker rm -f ros2_cia402_pysoem_host 2>/dev/null || true
 
   systemctl daemon-reload

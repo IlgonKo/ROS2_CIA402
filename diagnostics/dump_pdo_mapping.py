@@ -6,6 +6,7 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
+from device import get_device_profile
 from ethercat.pysoem_master import PySOEMMaster
 
 
@@ -30,11 +31,11 @@ def decode_mapping_entry(entry):
 
 
 def read_u8(master, axis_index, object_index, subindex):
-    return master.sdo_read_uint8(axis_index, object_index, subindex)
+    return master.sdo.read_uint8(axis_index, object_index, subindex)
 
 
 def read_u32(master, axis_index, object_index, subindex):
-    return master.sdo_read_uint32(axis_index, object_index, subindex)
+    return master.sdo.read_uint32(axis_index, object_index, subindex)
 
 
 def dump_mapping_object(master, axis_index, object_index):
@@ -72,7 +73,7 @@ def dump_assignment(master, axis_index, object_index, label):
 
     pdo_indices = []
     for subindex in range(1, count + 1):
-        pdo_index = master.sdo_read_uint16(axis_index, object_index, subindex)
+        pdo_index = master.sdo.read_uint16(axis_index, object_index, subindex)
         pdo_indices.append(pdo_index)
         print(f"  {subindex}: 0x{pdo_index:04X}")
 
@@ -84,7 +85,10 @@ def main():
 
     master = PySOEMMaster(
         interface_name=args.interface,
-        slave_count=args.axis_count,
+        device_profiles=[
+            get_device_profile("cmmt")
+            for _ in range(args.axis_count)
+        ],
     )
 
     try:

@@ -7,7 +7,11 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
+from device import get_device_profile
+from motion_server.app.runtime import AxisRuntime
+from motion_server.drive import DriveBinding, DriveManager
 from ethercat.pysoem_master import PySOEMMaster
+from motion_server.control.motion_controller import MotionController
 
 
 CYCLE_TIME = 0.01
@@ -66,20 +70,21 @@ def parse_args():
     return parser.parse_args()
 
 
-def exchange(master, cycles=1):
+def exchange(runtime, cycles=1):
     wkc = 0
     for _ in range(cycles):
-        master.send_processdata()
-        wkc = master.receive_processdata()
+        runtime.prepare_processdata()
+        runtime.send_processdata()
+        wkc = runtime.receive_processdata()
         time.sleep(CYCLE_TIME)
     return wkc
 
 
-def print_feedback(prefix, master):
-    slave = master.slaves[0]
+def print_feedback(prefix, runtime):
+    slave = runtime.slaves[0]
     print(
         f"{prefix} "
-        f"WKC={master.wkc}/{master.expected_wkc()} "
+        f"WKC={runtime.wkc}/{runtime.expected_wkc()} "
         f"SW=0x{slave.txpdo.statusword:04X} "
         f"SW_MASK=0x{slave.txpdo.statusword & 0x006F:04X} "
         f"MODE={slave.txpdo.mode_of_operation_display} "
@@ -89,18 +94,18 @@ def print_feedback(prefix, master):
     )
 
 
-def print_process_image(prefix, master):
+def print_process_image(prefix, runtime):
     print(
         f"{prefix} "
-        f"OUT={master.get_slave_output_bytes().hex()} "
-        f"IN={master.get_slave_input_bytes().hex()}"
+        f"OUT={runtime.get_slave_output_bytes().hex()} "
+        f"IN={runtime.get_slave_input_bytes().hex()}"
     )
 
 
-def wait_status(master, expected_status, max_cycles=100):
+def wait_status(runtime, expected_status, max_cycles=100):
     for _ in range(max_cycles):
-        exchange(master, cycles=1)
-        status = master.slaves[0].txpdo.statusword & 0x006F
+        exchange(runtime, cycles=1)
+        status = runtime.slaves[0].txpdo.statusword & 0x006F
         if status == expected_status:
             return True
 
@@ -114,12 +119,12 @@ def read_sdo_or_none(read_fn, *args):
         return f"read failed: {exc}"
 
 
-def print_diagnostics(prefix, master):
-    statusword = read_sdo_or_none(master.sdo_read_uint16, 0, 0x6041, 0)
-    error_code = read_sdo_or_none(master.sdo_read_uint16, 0, 0x603F, 0)
-    error_register = read_sdo_or_none(master.sdo_read_uint8, 0, 0x1001, 0)
-    mode_request = read_sdo_or_none(master.sdo_read_int8, 0, 0x6060, 0)
-    mode_display = read_sdo_or_none(master.sdo_read_int8, 0, 0x6061, 0)
+def print_diagnostics(prefix, runtime):
+    statusword = read_sdo_or_none(runtime.sdo.read_uint16, 0, 0x6041, 0)
+    error_code = read_sdo_or_none(runtime.sdo.read_uint16, 0, 0x603F, 0)
+    error_register = read_sdo_or_none(runtime.sdo.read_uint8, 0, 0x1001, 0)
+    mode_request = read_sdo_or_none(runtime.sdo.read_int8, 0, 0x6060, 0)
+    mode_display = read_sdo_or_none(runtime.sdo.read_int8, 0, 0x6061, 0)
 
     print(
         f"{prefix} "
@@ -138,15 +143,15 @@ def format_hex(value, width):
     return str(value)
 
 
-def fault_reset(master):
-    master.set_controlword_all(0x0080)
-    exchange(master, cycles=20)
-    print_feedback("Fault reset:", master)
-    print_diagnostics("Fault reset diag:", master)
+def fault_reset(runtime):
+    runtime.set_controlword_all(0x0080)
+    exchange(runtime, cycles=20)
+    print_feedback("Fault reset:", runtime)
+    print_diagnostics("Fault reset diag:", runtime)
 
-    master.set_controlword_all(0x0000)
-    exchange(master, cycles=10)
-    print_feedback("After reset clear:", master)
+    runtime.set_controlword_all(0x0000)
+    exchange(runtime, cycles=10)
+    print_feedback("After reset clear:", runtime)
 
 
 def main():
@@ -160,62 +165,71 @@ def main():
         }
     ]
 
-    master = PySOEMMaster(
+    ethercat_master = PySOEMMaster(
         interface_name=args.interface,
-        slave_count=1,
+        device_profiles=[get_device_profile("cmmt")],
         cycle_time=CYCLE_TIME,
+    )
+    motion_controller = MotionController(
+        1,
+        CYCLE_TIME,
         motion_limits=motion_limits,
     )
+    drive_manager = DriveManager(
+        ethercat_master,
+        [DriveBinding(axis_index=0, slave_index=0)],
+    )
+    runtime = AxisRuntime(drive_manager, motion_controller)
 
     try:
-        master.connect()
-        master.set_mode_of_operation_all(8)
+        runtime.connect()
+        runtime.set_mode_of_operation_all(8)
 
         if not args.skip_sdo_mode:
-            master.sdo_write_int8(0, 0x6060, 0, 8)
-            mode_display = master.sdo_read_int8(0, 0x6061, 0)
+            runtime.sdo.write_int8(0, 0x6060, 0, 8)
+            mode_display = runtime.sdo.read_int8(0, 0x6061, 0)
             print(f"Mode display after SDO 0x6060=8: {mode_display}")
 
-        exchange(master, cycles=10)
-        master.sync_trajectory_to_actual_positions()
-        print_feedback("Connected:", master)
-        print_diagnostics("Connected diag:", master)
+        exchange(runtime, cycles=10)
+        runtime.sync_trajectory_to_actual_positions()
+        print_feedback("Connected:", runtime)
+        print_diagnostics("Connected diag:", runtime)
 
-        if master.slaves[0].txpdo.statusword & 0x0008:
-            fault_reset(master)
+        if runtime.slaves[0].txpdo.statusword & 0x0008:
+            fault_reset(runtime)
 
         for label, controlword, expected_status in [
             ("Shutdown:", 0x0006, 0x0021),
             ("Switch on:", 0x0007, 0x0023),
             ("Enable op:", 0x000F, 0x0027),
         ]:
-            master.set_controlword_all(controlword)
-            reached = wait_status(master, expected_status)
-            print_feedback(label, master)
+            runtime.set_controlword_all(controlword)
+            reached = wait_status(runtime, expected_status)
+            print_feedback(label, runtime)
             if not reached:
                 print(
                     f"{label} expected SW_MASK=0x{expected_status:04X} "
                     "was not reached before timeout."
                 )
-            print_diagnostics(f"{label} diag:", master)
-            exchange(master, cycles=2)
-            print_feedback(f"{label} after diag PDO refresh:", master)
-            print_process_image(f"{label} process image:", master)
+            print_diagnostics(f"{label} diag:", runtime)
+            exchange(runtime, cycles=2)
+            print_feedback(f"{label} after diag PDO refresh:", runtime)
+            print_process_image(f"{label} process image:", runtime)
 
         if args.move:
             target_position = args.target
 
             if args.relative:
-                target_position += master.slaves[0].txpdo.actual_position
+                target_position += runtime.slaves[0].txpdo.actual_position
 
             print(f"Commanding target position: {target_position}")
-            master.set_target_positions([target_position])
+            runtime.set_target_positions([target_position])
             for index in range(args.cycles):
-                exchange(master, cycles=1)
+                exchange(runtime, cycles=1)
                 if index % 20 == 0:
-                    print_feedback(f"Move {index:04d}:", master)
+                    print_feedback(f"Move {index:04d}:", runtime)
 
-            print_feedback("Final:", master)
+            print_feedback("Final:", runtime)
         else:
             print(
                 "Motion command was not sent. "
@@ -223,7 +237,7 @@ def main():
             )
 
     finally:
-        master.close()
+        runtime.close()
 
 
 if __name__ == "__main__":

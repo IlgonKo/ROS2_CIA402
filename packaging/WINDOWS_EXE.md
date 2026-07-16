@@ -21,7 +21,7 @@ dist\ROS2_CIA402
 
 ```text
 dist\ROS2_CIA402
-  axis_server.exe
+  motion_server.exe
   axis_control_panel.exe
   .env.example
   device\cmmt\.env.example
@@ -42,7 +42,7 @@ dist\ROS2_CIA402\device\cmmt\.env
 
 ```powershell
 cd dist\ROS2_CIA402
-.\axis_server.exe --backend mock --axis-count 3 --server-mode basic --port 15000
+.\motion_server.exe --backend mock --axis-count 3 --server-mode basic --port 15000
 .\axis_control_panel.exe
 ```
 
@@ -67,7 +67,7 @@ Set the real adapter name and device settings in `.env`, then run:
 
 ```powershell
 cd dist\ROS2_CIA402
-.\axis_server.exe
+.\motion_server.exe
 .\axis_control_panel.exe
 ```
 

@@ -1,4 +1,6 @@
 from device.cmmt.error_catalog import load_cmmt_error_catalog
+from device.cmmt.pdo_codec import CiA402PdoCodec
+from device.cmmt.rxpdo import RxPDO
 from device.cmmt.txpdo import TxPDO
 
 
@@ -59,6 +61,23 @@ class CMMTDeviceProfile:
         "jog": JOG_MODE,
         "csp": CSP_MODE,
     }
+
+    pdo_codec = CiA402PdoCodec
+
+    @staticmethod
+    def create_rxpdo():
+        return RxPDO()
+
+    @staticmethod
+    def create_txpdo():
+        return TxPDO()
+
+    @staticmethod
+    def default_rxpdo1_mapping():
+        return (
+            RxPDO.MAPPING_ENTRIES,
+            "Configured RxPDO1 mapping from CMMT device profile",
+        )
 
     MAIN_GROUPS = {
         1: "Current",
@@ -147,7 +166,7 @@ class CMMTDeviceProfile:
     def read_diagnostics(self, master, axis_index):
         diagnostics = {}
         try:
-            diagnostics["statusword"] = master.sdo_read_uint16(
+            diagnostics["statusword"] = master.sdo.read_uint16(
                 axis_index,
                 self.STATUSWORD_INDEX,
                 0,
@@ -156,7 +175,7 @@ class CMMTDeviceProfile:
             diagnostics["statusword"] = f"read failed: {exc}"
 
         try:
-            diagnostics["error_code"] = master.sdo_read_uint32(
+            diagnostics["error_code"] = master.sdo.read_uint32(
                 axis_index,
                 self.ERROR_CODE_INDEX,
                 self.ERROR_CODE_SUBINDEX,
@@ -169,7 +188,7 @@ class CMMTDeviceProfile:
         )
 
         try:
-            diagnostics["mode_display"] = master.sdo_read_int8(
+            diagnostics["mode_display"] = master.sdo.read_int8(
                 axis_index,
                 self.MODE_DISPLAY_INDEX,
                 0,
@@ -180,7 +199,7 @@ class CMMTDeviceProfile:
         return diagnostics
 
     def read_user_unit_position(self, master, axis_index):
-        return master.sdo_read_uint16(
+        return master.sdo.read_uint16(
             axis_index,
             self.USER_UNIT_INDEX,
             self.USER_UNIT_POSITION_SUBINDEX,
@@ -188,22 +207,22 @@ class CMMTDeviceProfile:
 
     def read_converting_unit_exponents(self, master, axis_index):
         return [
-            int(master.sdo_read_int8(
+            int(master.sdo.read_int8(
                 axis_index,
                 self.CONVERTING_UNIT_INDEX,
                 self.CONVERTING_UNIT_POSITION_SUBINDEX,
             )),
-            int(master.sdo_read_int8(
+            int(master.sdo.read_int8(
                 axis_index,
                 self.CONVERTING_UNIT_INDEX,
                 self.CONVERTING_UNIT_VELOCITY_SUBINDEX,
             )),
-            int(master.sdo_read_int8(
+            int(master.sdo.read_int8(
                 axis_index,
                 self.CONVERTING_UNIT_INDEX,
                 self.CONVERTING_UNIT_ACCELERATION_SUBINDEX,
             )),
-            int(master.sdo_read_int8(
+            int(master.sdo.read_int8(
                 axis_index,
                 self.CONVERTING_UNIT_INDEX,
                 self.CONVERTING_UNIT_JERK_SUBINDEX,
@@ -250,17 +269,17 @@ class CMMTDeviceProfile:
         return " | ".join(parts)
 
     def configure_mode_code(self, master, axis_index, code):
-        master.sdo_write_int8(axis_index, self.MODE_OF_OPERATION_INDEX, 0, code)
+        master.sdo.write_int8(axis_index, self.MODE_OF_OPERATION_INDEX, 0, code)
         master.slaves[axis_index].rxpdo.mode_of_operation = code
 
     def write_csp_interpolation_mode(self, master, axis_index, value):
-        master.sdo_write_uint32(
+        master.sdo.write_uint32(
             axis_index,
             self.CSP_INTERPOLATION_MODE_INDEX,
             self.CSP_INTERPOLATION_MODE_SUBINDEX,
             int(value),
         )
-        return master.sdo_read_uint32(
+        return master.sdo.read_uint32(
             axis_index,
             self.CSP_INTERPOLATION_MODE_INDEX,
             self.CSP_INTERPOLATION_MODE_SUBINDEX,
@@ -274,19 +293,19 @@ class CMMTDeviceProfile:
         profile_acceleration,
         profile_deceleration,
     ):
-        master.sdo_write_uint32(
+        master.sdo.write_uint32(
             axis_index,
             self.PROFILE_VELOCITY_INDEX,
             0,
             max(0, int(profile_velocity)),
         )
-        master.sdo_write_uint32(
+        master.sdo.write_uint32(
             axis_index,
             self.PROFILE_ACCELERATION_INDEX,
             0,
             max(0, int(profile_acceleration)),
         )
-        master.sdo_write_uint32(
+        master.sdo.write_uint32(
             axis_index,
             self.PROFILE_DECELERATION_INDEX,
             0,
@@ -311,25 +330,25 @@ class CMMTDeviceProfile:
         max_acceleration,
         max_deceleration,
     ):
-        master.sdo_write_uint32(
+        master.sdo.write_uint32(
             axis_index,
             self.MAX_PROFILE_VELOCITY_INDEX,
             0,
             max(0, int(positive_velocity_limit)),
         )
-        master.sdo_write_float32(
+        master.sdo.write_float32(
             axis_index,
             self.NEGATIVE_VELOCITY_LIMIT_INDEX,
             self.NEGATIVE_VELOCITY_LIMIT_SUBINDEX,
             float(negative_velocity_limit) / 1000.0,
         )
-        master.sdo_write_uint32(
+        master.sdo.write_uint32(
             axis_index,
             self.MAX_ACCELERATION_INDEX,
             0,
             max(0, int(max_acceleration)),
         )
-        master.sdo_write_uint32(
+        master.sdo.write_uint32(
             axis_index,
             self.MAX_DECELERATION_INDEX,
             0,
@@ -338,22 +357,22 @@ class CMMTDeviceProfile:
 
     def read_profile_settings(self, master, axis_index):
         return [
-            float(master.sdo_read_uint32(
+            float(master.sdo.read_uint32(
                 axis_index,
                 self.PROFILE_VELOCITY_INDEX,
                 0,
             )),
-            float(master.sdo_read_uint32(
+            float(master.sdo.read_uint32(
                 axis_index,
                 self.PROFILE_ACCELERATION_INDEX,
                 0,
             )),
-            float(master.sdo_read_uint32(
+            float(master.sdo.read_uint32(
                 axis_index,
                 self.PROFILE_DECELERATION_INDEX,
                 0,
             )),
-            float(master.sdo_read_uint32(
+            float(master.sdo.read_uint32(
                 axis_index,
                 self.PP_JERK_INDEX,
                 self.PP_JERK_SUBINDEX,
@@ -361,12 +380,12 @@ class CMMTDeviceProfile:
         ]
 
     def read_motion_limits(self, master, axis_index):
-        positive_velocity_limit = float(master.sdo_read_uint32(
+        positive_velocity_limit = float(master.sdo.read_uint32(
             axis_index,
             self.MAX_PROFILE_VELOCITY_INDEX,
             0,
         ))
-        negative_velocity_limit = float(master.sdo_read_float32(
+        negative_velocity_limit = float(master.sdo.read_float32(
             axis_index,
             self.NEGATIVE_VELOCITY_LIMIT_INDEX,
             self.NEGATIVE_VELOCITY_LIMIT_SUBINDEX,
@@ -374,12 +393,12 @@ class CMMTDeviceProfile:
         return [
             positive_velocity_limit,
             negative_velocity_limit,
-            float(master.sdo_read_uint32(
+            float(master.sdo.read_uint32(
                 axis_index,
                 self.MAX_ACCELERATION_INDEX,
                 0,
             )),
-            float(master.sdo_read_uint32(
+            float(master.sdo.read_uint32(
                 axis_index,
                 self.MAX_DECELERATION_INDEX,
                 0,
@@ -387,7 +406,7 @@ class CMMTDeviceProfile:
         ]
 
     def write_profile_jerk(self, master, axis_index, pp_jerk):
-        master.sdo_write_uint32(
+        master.sdo.write_uint32(
             axis_index,
             self.PP_JERK_INDEX,
             self.PP_JERK_SUBINDEX,
@@ -396,12 +415,12 @@ class CMMTDeviceProfile:
 
     def read_software_position_limits(self, master, axis_index):
         return [
-            master.sdo_read_int32(
+            master.sdo.read_int32(
                 axis_index,
                 self.SOFTWARE_POSITION_LIMIT_INDEX,
                 1,
             ),
-            master.sdo_read_int32(
+            master.sdo.read_int32(
                 axis_index,
                 self.SOFTWARE_POSITION_LIMIT_INDEX,
                 2,
@@ -415,13 +434,13 @@ class CMMTDeviceProfile:
         negative_limit,
         positive_limit,
     ):
-        master.sdo_write_int32(
+        master.sdo.write_int32(
             axis_index,
             self.SOFTWARE_POSITION_LIMIT_INDEX,
             1,
             negative_limit,
         )
-        master.sdo_write_int32(
+        master.sdo.write_int32(
             axis_index,
             self.SOFTWARE_POSITION_LIMIT_INDEX,
             2,
@@ -441,55 +460,60 @@ class CMMTDeviceProfile:
             "replaced 0x6064:00 actual position with 0x6062:00 setpoint position",
         )
 
-    def configure_sync_parameters(self, master, axis_count, sync_mode, cycle_time):
+    def configure_sync_parameters(
+        self,
+        master,
+        slave_index,
+        sync_mode,
+        cycle_time,
+    ):
         if sync_mode is None:
             return False
 
-        for axis_index in range(axis_count):
-            master.sdo_write_uint16(
-                axis_index,
-                self.SYNC_PARAMETER_INDEX,
-                0x01,
-                sync_mode,
-            )
-            master.sdo_write_float32(
-                axis_index,
-                self.SYNC_PARAMETER_INDEX,
-                0x02,
-                cycle_time,
-            )
-            master.sdo_write_float32(
-                axis_index,
-                self.SYNC_PARAMETER_INDEX,
-                0x09,
-                cycle_time,
-            )
+        master.sdo.write_uint16(
+            slave_index,
+            self.SYNC_PARAMETER_INDEX,
+            0x01,
+            sync_mode,
+        )
+        master.sdo.write_float32(
+            slave_index,
+            self.SYNC_PARAMETER_INDEX,
+            0x02,
+            cycle_time,
+        )
+        master.sdo.write_float32(
+            slave_index,
+            self.SYNC_PARAMETER_INDEX,
+            0x09,
+            cycle_time,
+        )
         return True
 
     def save_parameters(self, master, axis_index):
-        master.sdo_write_uint32(
+        master.sdo.write_uint32(
             axis_index,
             self.PARAMETER_SAVE_INDEX,
             self.PARAMETER_SAVE_SELECTION_SUBINDEX,
             1,
         )
-        master.sdo_write_uint32(
+        master.sdo.write_uint32(
             axis_index,
             self.PARAMETER_SAVE_INDEX,
             self.PARAMETER_SAVE_COMMAND_SUBINDEX,
             1,
         )
-        status = master.sdo_read_uint32(
+        status = master.sdo.read_uint32(
             axis_index,
             self.PARAMETER_SAVE_INDEX,
             self.PARAMETER_SAVE_STATUS_SUBINDEX,
         )
-        return_code = master.sdo_read_uint32(
+        return_code = master.sdo.read_uint32(
             axis_index,
             self.PARAMETER_SAVE_INDEX,
             self.PARAMETER_SAVE_RETURN_CODE_SUBINDEX,
         )
-        master.sdo_write_uint32(
+        master.sdo.write_uint32(
             axis_index,
             self.PARAMETER_SAVE_INDEX,
             self.PARAMETER_SAVE_COMMAND_SUBINDEX,

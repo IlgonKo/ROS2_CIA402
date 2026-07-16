@@ -71,7 +71,7 @@ class Cia402CommandBridgeNode(Node):
         self.sock = None
         self.sock_file = None
         self.sock_lock = threading.Lock()
-        self.has_axis_server_authority = False
+        self.has_motion_server_authority = False
         self.feedback_lock = threading.Lock()
         self.latest_actual_positions = [0.0 for _ in range(self.axis_count)]
         self.latest_actual_velocities = [0.0 for _ in range(self.axis_count)]
@@ -503,7 +503,7 @@ class Cia402CommandBridgeNode(Node):
             )
             return False
 
-        if not self.ensure_axis_server_authority():
+        if not self.ensure_motion_server_authority():
             self.get_logger().warn(
                 "Ignoring trajectory command until Axis Server authority is granted."
             )
@@ -527,20 +527,20 @@ class Cia402CommandBridgeNode(Node):
             )
             return False
 
-        if not self.ensure_axis_server_authority():
+        if not self.ensure_motion_server_authority():
             self.get_logger().warn(
                 "Ignoring trajectory stop until Axis Server authority is granted."
             )
             return False
         return self.send_json({"type": "trajectory_stop", "mode": "controlled"})
 
-    def ensure_axis_server_authority(self):
-        if self.has_axis_server_authority:
+    def ensure_motion_server_authority(self):
+        if self.has_motion_server_authority:
             return True
-        self.request_axis_server_authority()
+        self.request_motion_server_authority()
         return False
 
-    def request_axis_server_authority(self):
+    def request_motion_server_authority(self):
         self.auto_request_authority = True
         return self.send_json(
             {
@@ -548,27 +548,27 @@ class Cia402CommandBridgeNode(Node):
             }
         )
 
-    def release_axis_server_authority(self):
+    def release_motion_server_authority(self):
         self.auto_request_authority = False
-        self.has_axis_server_authority = False
+        self.has_motion_server_authority = False
         self.repeat_enabled = False
         self.repeat_points = None
         self.last_sent_repeat_target = None
         self.repeat_waiting_to_send = False
         return self.send_json({"cmd": "authority/release"})
 
-    def update_axis_server_authority_state(self, authority):
+    def update_motion_server_authority_state(self, authority):
         if not isinstance(authority, dict):
             return
         if authority.get("reason") in {"authority_required", "authority_busy"}:
-            self.has_axis_server_authority = False
+            self.has_motion_server_authority = False
         if "owned_by_this_client" in authority:
-            self.has_axis_server_authority = bool(
+            self.has_motion_server_authority = bool(
                 authority.get("owned_by_this_client", False)
             )
             return
         if "granted" in authority:
-            self.has_axis_server_authority = bool(authority.get("granted", False))
+            self.has_motion_server_authority = bool(authority.get("granted", False))
 
     def trajectory_points_to_axis_units(self, points):
         converted_points = []
@@ -788,13 +788,13 @@ class Cia402CommandBridgeNode(Node):
         )
 
     def authority_acquire_callback(self, _msg):
-        self.request_axis_server_authority()
+        self.request_motion_server_authority()
         self.get_logger().info(
             "Requested Axis Server command authority; auto request enabled"
         )
 
     def authority_release_callback(self, _msg):
-        self.release_axis_server_authority()
+        self.release_motion_server_authority()
         self.get_logger().info(
             "Released Axis Server command authority; auto request disabled"
         )
@@ -810,7 +810,7 @@ class Cia402CommandBridgeNode(Node):
                 self.get_logger().error(f"Bridge error: {exc}")
             finally:
                 self.close_socket()
-                self.publish_axis_server_disconnected()
+                self.publish_motion_server_disconnected()
 
             time.sleep(RECONNECT_PERIOD)
 
@@ -825,9 +825,9 @@ class Cia402CommandBridgeNode(Node):
             self.sock_file = sock_file
 
         self.get_logger().info("Connected to Axis Server")
-        self.has_axis_server_authority = False
+        self.has_motion_server_authority = False
         if self.auto_request_authority:
-            self.request_axis_server_authority()
+            self.request_motion_server_authority()
         else:
             self.get_logger().info("Auto authority request is disabled")
 
@@ -847,11 +847,11 @@ class Cia402CommandBridgeNode(Node):
                 "authority/release",
                 "authority/status",
             }:
-                self.update_axis_server_authority_state(message)
+                self.update_motion_server_authority_state(message)
                 self.publish_string(self.command_authority_pub, message)
                 self.get_logger().info(message.get("message", ""))
             elif message.get("type") == "command_rejected":
-                self.update_axis_server_authority_state(message)
+                self.update_motion_server_authority_state(message)
                 self.publish_string(self.command_rejected_pub, message)
                 self.get_logger().warn(message.get("message", "Command rejected"))
 
@@ -920,7 +920,7 @@ class Cia402CommandBridgeNode(Node):
             self.command_authority_pub,
             message.get("command_authority", {}),
         )
-        self.update_axis_server_authority_state(message.get("command_authority", {}))
+        self.update_motion_server_authority_state(message.get("command_authority", {}))
         self.update_repeat_motion(actual_positions)
 
     def publish_trajectory_fault_if_needed(self, trajectory):
@@ -1004,9 +1004,9 @@ class Cia402CommandBridgeNode(Node):
                 self.sock.close()
                 self.sock = None
 
-        self.has_axis_server_authority = False
+        self.has_motion_server_authority = False
 
-    def publish_axis_server_disconnected(self):
+    def publish_motion_server_disconnected(self):
         self.publish_string(
             self.command_authority_pub,
             {

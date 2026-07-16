@@ -32,9 +32,9 @@ try {
         Remove-Item -Recurse -Force $PackageRoot
     }
 
-    & $Python -B -m PyInstaller "packaging\axis_server.spec" --noconfirm --distpath "dist\pyinstaller" --workpath "build\pyinstaller"
+    & $Python -B -m PyInstaller "packaging\motion_server.spec" --noconfirm --distpath "dist\pyinstaller" --workpath "build\pyinstaller"
     if ($LASTEXITCODE -ne 0) {
-        throw "axis_server PyInstaller build failed"
+        throw "motion_server PyInstaller build failed"
     }
 
     & $Python -B -m PyInstaller "packaging\axis_control_panel.spec" --noconfirm --distpath "dist\pyinstaller" --workpath "build\pyinstaller"
@@ -43,7 +43,7 @@ try {
     }
 
     New-Item -ItemType Directory -Force $PackageRoot | Out-Null
-    Copy-Item -Recurse -Force "dist\pyinstaller\axis_server\*" $PackageRoot
+    Copy-Item -Recurse -Force "dist\pyinstaller\motion_server\*" $PackageRoot
     Copy-Item -Recurse -Force "dist\pyinstaller\axis_control_panel\*" $PackageRoot
 
     New-Item -ItemType Directory -Force (Join-Path $PackageRoot "device\cmmt") | Out-Null

@@ -1,11 +1,11 @@
 services:
-  axis_server:
+  motion_server:
     build:
       context: ../..
-      dockerfile: docker/axis_server/Dockerfile
+      dockerfile: docker/motion_server/Dockerfile
 
-    image: ros2_cia402_axis_server:dev
-    container_name: ros_cia402_axis_server
+    image: ros2_cia402_motion_server:dev
+    container_name: ros_cia402_motion_server
 
     network_mode: host
     privileged: true
@@ -21,6 +21,8 @@ services:
       AXIS_SERVER_BACKEND: ${AXIS_SERVER_BACKEND:-pysoem}
       AXIS_SERVER_MODE: ${AXIS_SERVER_MODE:-basic}
       PYSOEM_DEVICE: ${PYSOEM_DEVICE:-cmmt}
+      PYSOEM_DEVICE_PROFILES: ${PYSOEM_DEVICE_PROFILES:-}
+      PYSOEM_AXIS_SLAVE_INDICES: ${PYSOEM_AXIS_SLAVE_INDICES:-}
       PYSOEM_INTERFACE: ${PYSOEM_INTERFACE:-enp1s0}
       PYSOEM_AXIS_COUNT: ${PYSOEM_AXIS_COUNT:-1}
       AXIS_SERVER_PORT: ${AXIS_SERVER_PORT:-15000}
@@ -67,7 +69,7 @@ services:
 
     command:
       - bash
-      - /workspace/axis_server/start_server.sh
+      - /workspace/motion_server/start_server.sh
 
     restart: unless-stopped
 
@@ -98,7 +100,7 @@ services:
     command:
       - python3
       - -B
-      - /workspace/axis_server/control_panel.py
+      - /workspace/motion_server/control_panel.py
 
     profiles:
       - panel

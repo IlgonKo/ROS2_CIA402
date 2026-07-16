@@ -87,17 +87,49 @@ class DcPhaseLock:
         return max(minimum, min(maximum, value))
 
 
-def absolute_cycle_deadline(master, dc_phase_lock, monotonic_ns=None):
-    now_monotonic_ns = (
-        time.monotonic_ns()
-        if monotonic_ns is None
-        else int(monotonic_ns)
-    )
-    dc_now_ns = master.estimate_dc_time_ns(now_monotonic_ns)
-    phase_ns = int(dc_now_ns) % dc_phase_lock.cycle_time_ns
-    wait_ns = dc_phase_lock.target_phase_ns() - phase_ns
-    if wait_ns <= 0:
-        wait_ns += dc_phase_lock.cycle_time_ns
+class DcCycleScheduler:
+    def __init__(self, phase_lock):
+        self.phase_lock = phase_lock
 
-    deadline = (now_monotonic_ns + wait_ns) / 1_000_000_000.0
-    return deadline, wait_ns / 1_000_000_000.0
+    def estimate_dc_time_ns(self, master, monotonic_ns=None):
+        last_rx_monotonic_ns = getattr(
+            master,
+            "last_rx_monotonic_ns",
+            None,
+        )
+        last_rx_dc_time_ns = getattr(master, "last_rx_dc_time_ns", 0)
+        if last_rx_monotonic_ns is None or not last_rx_dc_time_ns:
+            return master.get_dc_time_ns()
+
+        if monotonic_ns is None:
+            monotonic_ns = time.monotonic_ns()
+        return int(
+            last_rx_dc_time_ns
+            + int(monotonic_ns)
+            - last_rx_monotonic_ns
+        )
+
+    def estimate_transmit_dc_time_ns(self, master):
+        transmit_monotonic_ns = getattr(
+            master,
+            "last_tx_monotonic_ns",
+            None,
+        )
+        if transmit_monotonic_ns is None:
+            return master.get_dc_time_ns()
+        return self.estimate_dc_time_ns(master, transmit_monotonic_ns)
+
+    def absolute_cycle_deadline(self, master, monotonic_ns=None):
+        now_monotonic_ns = (
+            time.monotonic_ns()
+            if monotonic_ns is None
+            else int(monotonic_ns)
+        )
+        dc_now_ns = self.estimate_dc_time_ns(master, now_monotonic_ns)
+        phase_ns = int(dc_now_ns) % self.phase_lock.cycle_time_ns
+        wait_ns = self.phase_lock.target_phase_ns() - phase_ns
+        if wait_ns <= 0:
+            wait_ns += self.phase_lock.cycle_time_ns
+
+        deadline = (now_monotonic_ns + wait_ns) / 1_000_000_000.0
+        return deadline, wait_ns / 1_000_000_000.0

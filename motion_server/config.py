@@ -1,7 +1,27 @@
 import argparse
 import os
+from pathlib import Path
 
 from device import available_device_names, get_device_profile
+
+
+def load_project_env_defaults():
+    env_path = Path(__file__).resolve().parents[1] / ".env"
+    if not env_path.is_file():
+        return
+
+    for raw_line in env_path.read_text(encoding="utf-8").splitlines():
+        line = raw_line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        key, value = line.split("=", 1)
+        os.environ.setdefault(
+            key.strip(),
+            value.strip().strip('"').strip("'"),
+        )
+
+
+load_project_env_defaults()
 
 
 AXIS_SERVER_MODES = ("basic", "advanced")
@@ -132,7 +152,23 @@ def parse_args():
         "--device",
         choices=available_device_names(),
         default=DEVICE_PROFILE.name,
-        help="Connected drive device profile.",
+        help="Default drive profile used when --device-profiles is empty.",
+    )
+    parser.add_argument(
+        "--device-profiles",
+        default=os.environ.get("PYSOEM_DEVICE_PROFILES", ""),
+        help=(
+            "Comma-separated EtherCAT slave profiles in bus order. "
+            "Empty repeats --device for each motion axis."
+        ),
+    )
+    parser.add_argument(
+        "--axis-slave-indices",
+        default=os.environ.get("PYSOEM_AXIS_SLAVE_INDICES", ""),
+        help=(
+            "Comma-separated EtherCAT slave indices for motion axes. "
+            "Empty uses 0..axis-count-1."
+        ),
     )
     parser.add_argument(
         "--server-mode",
@@ -365,29 +401,29 @@ def required_txpdo_fields_for_entry(setpoint_entry_enabled=False):
     return tuple(dict.fromkeys(fields))
 
 
-def require_pdo_fields_for_mode(master, mode_name, axis_index=None):
+def require_pdo_fields_for_mode(runtime, mode_name, axis_index=None):
     axis_indices = (
-        range(len(master.slaves))
+        range(len(runtime.slaves))
         if axis_index is None
         else [axis_index]
     )
     rxpdo_fields = required_rxpdo_fields_for_mode(
         mode_name,
-        getattr(master, "csp_velocity_offset_enabled", False),
+        getattr(runtime, "csp_velocity_offset_enabled", False),
     )
     for current_axis in axis_indices:
         require_pdo_fields(
-            master.slaves[current_axis].rxpdo,
+            runtime.slaves[current_axis].rxpdo,
             rxpdo_fields,
             context=f"Axis {current_axis} RxPDO {mode_name.upper()}",
         )
 
 
-def require_txpdo_fields(master):
+def require_txpdo_fields(runtime):
     txpdo_fields = required_txpdo_fields_for_entry(
-        getattr(master, "txpdo_setpoint_entry", False),
+        getattr(runtime, "txpdo_setpoint_entry", False),
     )
-    for axis_index, slave in enumerate(master.slaves):
+    for axis_index, slave in enumerate(runtime.slaves):
         require_pdo_fields(
             slave.txpdo,
             txpdo_fields,

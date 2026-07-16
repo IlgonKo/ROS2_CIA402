@@ -30,4 +30,4 @@ Write-Host "Port=$Port"
 Write-Host "AxisCount=$AxisCount"
 Write-Host "PYTHONPATH=$env:PYTHONPATH"
 
-& $Python -B (Join-Path $ProjectRoot "axis_server\control_panel.py")
+& $Python -B (Join-Path $ProjectRoot "motion_server\control_panel.py")

@@ -7,7 +7,7 @@ ROOT = Path(SPECPATH).parent
 
 
 a = Analysis(
-    [str(ROOT / "packaging" / "windows_axis_server.py")],
+    [str(ROOT / "packaging" / "windows_motion_server.py")],
     pathex=[str(ROOT), str(ROOT / "packaging")],
     binaries=[],
     datas=[],
@@ -26,7 +26,7 @@ exe = EXE(
     a.scripts,
     [],
     exclude_binaries=True,
-    name="axis_server",
+    name="motion_server",
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
@@ -45,5 +45,5 @@ coll = COLLECT(
     strip=False,
     upx=True,
     upx_exclude=[],
-    name="axis_server",
+    name="motion_server",
 )

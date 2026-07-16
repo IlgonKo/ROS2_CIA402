@@ -1,5 +1,8 @@
+import struct
+import time
+
 from ethercat.distributed_clock import DistributedClock
-from motion.csp_trajectory_generator import CspTrajectoryGenerator
+from ethercat.sdo_access import SdoAccess
 from ethercat.working_counter import WorkingCounter
 
 
@@ -8,41 +11,23 @@ class MockMaster:
         self,
         slaves,
         cycle_time=0.001,
-        csp_counts_per_unit=1.0,
-        csp_velocity_offset_enabled=False,
-        csp_command_step_threshold=0.0,
-        csp_command_step_error_threshold=0.0,
-        csp_profile="quintic",
     ):
         self.slaves = slaves
         self.cycle_time = cycle_time
-        self.csp_counts_per_unit = float(csp_counts_per_unit)
-        self.csp_velocity_offset_enabled = bool(csp_velocity_offset_enabled)
-        self.csp_command_step_threshold = float(csp_command_step_threshold)
-        self.csp_command_step_error_threshold = float(
-            csp_command_step_error_threshold
-        )
-        self.csp_profile = str(csp_profile).strip().lower()
-        self.last_csp_command_steps = []
-        self.axis_csp_counts_per_unit = [
-            float(csp_counts_per_unit)
-            for _ in self.slaves
-        ]
         self.dc = DistributedClock()
         self.working_counter = WorkingCounter()
         self.wkc = 0
         self.dc_time_ns = 0
+        self.last_tx_dc_time_ns = 0
+        self.last_direct_tx_dc_time_ns = 0
+        self.last_rx_dc_time_ns = 0
+        self.last_tx_monotonic_ns = None
+        self.last_rx_monotonic_ns = None
         self._outputs_sent = False
+        self._processdata_prepared = False
         self._connected = False
         self.last_diagnostics = []
-        self.trajectory_generators = [
-            CspTrajectoryGenerator(
-                slave.txpdo.actual_position,
-                csp_profile=self.csp_profile,
-            )
-            for slave in self.slaves
-        ]
-
+        self.sdo = SdoAccess(self)
         for _ in self.slaves:
             self.working_counter.add_slave()
 
@@ -55,89 +40,56 @@ class MockMaster:
     def expected_wkc(self):
         return self.working_counter.get_expected()
 
-    def set_target_positions(self, target_positions):
-        for generator, target_position in zip(
-            self.trajectory_generators,
-            target_positions,
-        ):
-            generator.set_target_position(target_position)
-
-    def sync_trajectory_to_actual_positions(self):
-        for generator, slave in zip(self.trajectory_generators, self.slaves):
-            actual_position = float(slave.txpdo.actual_position)
-            generator.reset(actual_position)
-
-    def sync_trajectory_to_actual_position(self, axis_index):
-        generator = self.trajectory_generators[axis_index]
-        actual_position = float(self.slaves[axis_index].txpdo.actual_position)
-        generator.reset(actual_position)
-
-    def set_controlword_all(self, controlword):
-        for slave in self.slaves:
-            slave.rxpdo.controlword = controlword
-
-    def set_mode_of_operation_all(self, mode_of_operation):
-        for slave in self.slaves:
-            slave.rxpdo.mode_of_operation = mode_of_operation
-
-    def set_axis_motion_limits(
-        self,
-        axis_index,
-        max_velocity,
-        acceleration,
-        deceleration,
-        jerk=0.0,
-    ):
-        slave = self.slaves[axis_index]
-        slave.motion_limits.max_velocity = float(max_velocity)
-        slave.motion_limits.acceleration = float(acceleration)
-        slave.motion_limits.deceleration = float(deceleration)
-        slave.motion_limits.jerk = float(jerk)
-        slave.axis.set_motion_limits(max_velocity, acceleration, deceleration)
-
-    def set_axis_csp_counts_per_unit(self, axis_index, counts_per_unit):
-        self.axis_csp_counts_per_unit[axis_index] = float(counts_per_unit)
-
-    def sdo_write_int8(self, slave_index, index, subindex, value):
+    def write_sdo(self, slave_index, index, subindex, payload):
+        object_key = (int(index), int(subindex))
+        if object_key in self._float_sdo_objects():
+            value = struct.unpack("<f", payload[:4])[0]
+        else:
+            signed = object_key in self._signed_sdo_objects()
+            value = int.from_bytes(payload, "little", signed=signed)
         self._write_object(slave_index, index, value, subindex)
 
-    def sdo_write_int32(self, slave_index, index, subindex, value):
-        self._write_object(slave_index, index, value, subindex)
+    def read_sdo(self, slave_index, index, subindex, size):
+        value = self._read_object(slave_index, index, subindex)
+        if isinstance(value, float):
+            return struct.pack("<f", value)
+        return int(value).to_bytes(
+            size,
+            "little",
+            signed=int(value) < 0,
+        )
 
-    def sdo_write_uint8(self, slave_index, index, subindex, value):
-        self._write_object(slave_index, index, value, subindex)
+    @staticmethod
+    def _float_sdo_objects():
+        return {
+            (0x2183, 0x0C),
+            (0x212E, 0x02),
+            (0x212E, 0x09),
+        }
 
-    def sdo_write_uint16(self, slave_index, index, subindex, value):
-        self._write_object(slave_index, index, value, subindex)
-
-    def sdo_write_uint32(self, slave_index, index, subindex, value):
-        self._write_object(slave_index, index, value, subindex)
-
-    def sdo_write_float32(self, slave_index, index, subindex, value):
-        self._write_object(slave_index, index, float(value), subindex)
-
-    def sdo_read_int8(self, slave_index, index, subindex):
-        return int(self._read_object(slave_index, index, subindex))
-
-    def sdo_read_int32(self, slave_index, index, subindex):
-        return int(self._read_object(slave_index, index, subindex))
-
-    def sdo_read_uint8(self, slave_index, index, subindex):
-        return int(self._read_object(slave_index, index, subindex)) & 0xFF
-
-    def sdo_read_uint16(self, slave_index, index, subindex):
-        return int(self._read_object(slave_index, index, subindex)) & 0xFFFF
-
-    def sdo_read_uint32(self, slave_index, index, subindex):
-        return int(self._read_object(slave_index, index, subindex)) & 0xFFFFFFFF
-
-    def sdo_read_float32(self, slave_index, index, subindex):
-        return float(self._read_object(slave_index, index, subindex))
+    @staticmethod
+    def _signed_sdo_objects():
+        return {
+            (0x6060, 0),
+            (0x6098, 0),
+            (0x607D, 1),
+            (0x607D, 2),
+        }
 
     def send_processdata(self):
+        if not self._processdata_prepared:
+            raise RuntimeError(
+                "Call prepare_processdata() before send_processdata()."
+            )
         self.dc_time_ns = self.dc.get_time_ns()
-        self._update_csp_targets()
+        self.last_tx_monotonic_ns = time.monotonic_ns()
+        self.last_direct_tx_dc_time_ns = self.dc_time_ns
+        self.last_tx_dc_time_ns = self.dc_time_ns
         self._outputs_sent = True
+        self._processdata_prepared = False
+
+    def prepare_processdata(self):
+        self._processdata_prepared = True
 
     def receive_processdata(self):
         for slave in self.slaves:
@@ -149,66 +101,13 @@ class MockMaster:
             self.wkc = 0
 
         self._outputs_sent = False
+        self.last_rx_dc_time_ns = self.dc_time_ns
+        self.last_rx_monotonic_ns = time.monotonic_ns()
         return self.wkc
 
-    def _update_csp_targets(self):
-        self.last_csp_command_steps = []
-        for axis_index, (slave, generator) in enumerate(zip(
-            self.slaves,
-            self.trajectory_generators,
-        )):
-            if slave.rxpdo.mode_of_operation != 8:
-                continue
+    def get_dc_time_ns(self):
+        return self.dc.get_time_ns()
 
-            limits = slave.motion_limits
-            csp_counts_per_unit = self.axis_csp_counts_per_unit[axis_index]
-            previous_command_position = float(generator.command_position)
-            previous_sent_position = int(slave.rxpdo.target_position)
-            command_position = float(generator.update(
-                self.cycle_time,
-                limits.max_velocity * csp_counts_per_unit,
-                limits.acceleration * csp_counts_per_unit,
-                limits.deceleration * csp_counts_per_unit,
-                limits.jerk * csp_counts_per_unit,
-            ))
-            sent_position = int(round(command_position))
-            slave.rxpdo.target_position = sent_position
-            if self.csp_velocity_offset_enabled:
-                velocity_scale = max(csp_counts_per_unit, 1e-9)
-                slave.rxpdo.velocity_offset = int(round(
-                    float(generator.command_velocity) / velocity_scale
-                ))
-            elif slave.rxpdo.has_field("velocity_offset"):
-                slave.rxpdo.velocity_offset = 0
-            command_step = command_position - previous_command_position
-            sent_step = sent_position - previous_sent_position
-            expected_step = float(generator.command_velocity) * self.cycle_time
-            step_error = sent_step - expected_step
-            if (
-                (
-                    self.csp_command_step_threshold > 0.0
-                    and abs(sent_step) >= self.csp_command_step_threshold
-                )
-                or (
-                    self.csp_command_step_error_threshold > 0.0
-                    and abs(step_error) >= self.csp_command_step_error_threshold
-                )
-            ):
-                self.last_csp_command_steps.append(
-                    {
-                        "axis": axis_index,
-                        "previous_command_position": previous_command_position,
-                        "command_position": command_position,
-                        "command_step": command_step,
-                        "previous_sent_position": previous_sent_position,
-                        "sent_position": sent_position,
-                        "sent_step": sent_step,
-                        "expected_step": expected_step,
-                        "step_error": step_error,
-                        "command_velocity": float(generator.command_velocity),
-                        "target_position": float(generator.target_position),
-                    }
-                )
 
     def _read_object(self, slave_index, index, subindex=0):
         slave = self.slaves[slave_index]
@@ -260,19 +159,19 @@ class MockMaster:
         if index == 0x6081:
             if slave.rxpdo.has_field("profile_velocity"):
                 return slave.rxpdo.profile_velocity
-            return int(slave.motion_limits.max_velocity)
+            return int(slave.axis.get_motion_limits()["max_velocity"])
         if index == 0x6083:
             return slave.axis.servo.od.read(0x6083)
         if index == 0x6084:
             return slave.axis.servo.od.read(0x6084)
         if index == 0x607F:
-            return slave.motion_limits.max_velocity
+            return slave.axis.get_motion_limits()["max_velocity"]
         if index == 0x2183 and subindex == 0x0C:
             return slave.axis.servo.od.read(0x2183, 0x0C)
         if index == 0x60C5:
-            return slave.motion_limits.acceleration
+            return slave.axis.get_motion_limits()["acceleration"]
         if index == 0x60C6:
-            return slave.motion_limits.deceleration
+            return slave.axis.get_motion_limits()["deceleration"]
         raise KeyError(f"Unsupported mock SDO read 0x{index:04X}")
 
     def _write_object(self, slave_index, index, value, subindex=0):
@@ -332,15 +231,12 @@ class MockMaster:
         elif index == 0x6084:
             slave.axis.servo.od.write(0x6084, int(value))
         elif index == 0x607F:
-            slave.motion_limits.max_velocity = float(value)
             slave.axis.servo.od.write(0x607F, value)
         elif index == 0x2183 and subindex == 0x0C:
             slave.axis.servo.od.write(0x2183, float(value), 0x0C)
         elif index == 0x60C5:
-            slave.motion_limits.acceleration = float(value)
             slave.axis.servo.od.write(0x60C5, value)
         elif index == 0x60C6:
-            slave.motion_limits.deceleration = float(value)
             slave.axis.servo.od.write(0x60C6, value)
         else:
             raise KeyError(f"Unsupported mock SDO write 0x{index:04X}")

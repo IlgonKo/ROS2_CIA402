@@ -5,6 +5,8 @@ INTERFACE="${PYSOEM_INTERFACE:-enp1s0}"
 BACKEND="${AXIS_SERVER_BACKEND:-pysoem}"
 SERVER_MODE="${AXIS_SERVER_MODE:-basic}"
 DEVICE="${PYSOEM_DEVICE:-cmmt}"
+DEVICE_PROFILES="${PYSOEM_DEVICE_PROFILES:-}"
+AXIS_SLAVE_INDICES="${PYSOEM_AXIS_SLAVE_INDICES:-}"
 AXIS_COUNT="${PYSOEM_AXIS_COUNT:-1}"
 PORT="${AXIS_SERVER_PORT:-15000}"
 CYCLE_TIME="${PYSOEM_CYCLE_TIME:-0.01}"
@@ -36,6 +38,8 @@ echo "Starting Axis Server"
 echo "Backend=${BACKEND}"
 echo "ServerMode=${SERVER_MODE}"
 echo "Device=${DEVICE}"
+echo "DeviceProfiles=${DEVICE_PROFILES:-default}"
+echo "AxisSlaveIndices=${AXIS_SLAVE_INDICES:-default}"
 echo "Interface=${INTERFACE}"
 echo "AxisCount=${AXIS_COUNT}"
 echo "Port=${PORT}"
@@ -60,11 +64,13 @@ echo "MotionMode=${MOTION_MODE}"
 echo "CommandLogs=${COMMAND_LOGS}"
 
 SERVER_CMD=(
-  python3 -B /workspace/axis_server/server.py
+  python3 -B /workspace/motion_server/server.py
   "${INTERFACE}" \
   --backend "${BACKEND}" \
   --server-mode "${SERVER_MODE}" \
   --device "${DEVICE}" \
+  --device-profiles "${DEVICE_PROFILES}" \
+  --axis-slave-indices "${AXIS_SLAVE_INDICES}" \
   --host 0.0.0.0 \
   --port "${PORT}" \
   --cycle-time "${CYCLE_TIME}" \

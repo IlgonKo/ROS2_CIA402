@@ -2,10 +2,10 @@ $ErrorActionPreference = "Stop"
 
 $ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 $PackageRoot = Resolve-Path (Join-Path $ScriptDir "..")
-$AxisServer = Join-Path $PackageRoot "axis_server.exe"
+$AxisServer = Join-Path $PackageRoot "motion_server.exe"
 
 if (-not (Test-Path $AxisServer)) {
-    throw "axis_server.exe not found: $AxisServer"
+    throw "motion_server.exe not found: $AxisServer"
 }
 
 Write-Host "EtherCAT/Npcap adapters:"

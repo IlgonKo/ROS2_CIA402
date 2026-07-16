@@ -101,7 +101,7 @@ Or use the start helper:
 
 ```bash
 bash scripts/host/start.sh
-docker logs -f ros_cia402_axis_server
+docker logs -f ros_cia402_motion_server
 ```
 
 The Dockerized Axis Server uses host networking and privileged raw Ethernet
@@ -191,13 +191,13 @@ To start the Dockerized PySOEM server automatically when the Ubuntu PC boots:
 ```bash
 sudo bash scripts/host/service.sh install
 systemctl status ros-cia402-axis-server.service
-docker logs -f ros_cia402_axis_server
+docker logs -f ros_cia402_motion_server
 ```
 
 After this installation, Ubuntu boot starts Docker, systemd runs
 `ros-cia402-axis-server.service`, and the service starts the
-`ros_cia402_axis_server` container. The container command starts
-`axis_server/server.py` automatically.
+`ros_cia402_motion_server` container. The container command starts
+`motion_server/server.py` automatically.
 
 To change the EtherCAT NIC or axis count later, edit `.env` and restart:
 
@@ -224,13 +224,13 @@ If the boot service fails, check the systemd and container logs:
 systemctl status ros-cia402-axis-server.service --no-pager
 journalctl -xeu ros-cia402-axis-server.service --no-pager
 docker ps -a
-docker logs ros_cia402_axis_server
+docker logs ros_cia402_motion_server
 ```
 
 If an old container name is blocking startup:
 
 ```bash
-docker rm -f ros_cia402_axis_server
+docker rm -f ros_cia402_motion_server
 sudo systemctl restart ros-cia402-axis-server.service
 ```
 
@@ -250,7 +250,7 @@ docker pull ubuntu:24.04
 Windows PowerShell, only when the EtherCAT device is connected to Windows:
 
 ```powershell
-.\scripts\windows\axis_server.ps1
+.\scripts\windows\motion_server.ps1
 ```
 
 ROS Docker bash:
@@ -465,9 +465,9 @@ The PySOEM Docker image runs Python with bytecode generation disabled so new
 ## Folder guide
 
 ```text
-axis_server/         Axis Server TCP API, backend selection, local panel, and host entrypoint
+motion_server/         Axis Server TCP API, backend selection, local panel, and host entrypoint
 diagnostics/         Adapter listing, PDO dump, and smoke-test utilities
-docker/axis_server/  Axis Server Dockerfile and compose file
+docker/motion_server/  Axis Server Dockerfile and compose file
 docker/axis_panel/   Axis Server Control Panel Dockerfile
 docker/ros/          ROS Compose file
 docker/ros_bridge/   ROS Bridge Dockerfile

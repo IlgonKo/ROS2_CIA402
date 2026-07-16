@@ -64,23 +64,23 @@ def normalize_trajectory_points(raw_points, axes):
         previous_time = point_time
     return points
 
-def estimate_trajectory_duration(master, axes, current, target):
+def estimate_trajectory_duration(runtime, axes, current, target):
     duration = 0.0
     for axis_index, start, end in zip(axes, current, target):
         distance = abs(float(end) - float(start))
         max_velocity = max(
-            float(master.slaves[axis_index].motion_limits.max_velocity)
-            * master.csp_counts_per_unit,
+            float(runtime.motion_limits[axis_index].max_velocity)
+            * runtime.csp_counts_per_unit,
             1e-9,
         )
         acceleration_limit = max(
-            float(master.slaves[axis_index].motion_limits.acceleration)
-            * master.csp_counts_per_unit,
+            float(runtime.motion_limits[axis_index].acceleration)
+            * runtime.csp_counts_per_unit,
             1e-9,
         )
         deceleration_limit = max(
-            float(master.slaves[axis_index].motion_limits.deceleration)
-            * master.csp_counts_per_unit,
+            float(runtime.motion_limits[axis_index].deceleration)
+            * runtime.csp_counts_per_unit,
             1e-9,
         )
         accel_limit = min(acceleration_limit, deceleration_limit)
@@ -89,10 +89,10 @@ def estimate_trajectory_duration(master, axes, current, target):
             1.875 * distance / max_velocity,
             (5.773502691896258 * distance / accel_limit) ** 0.5,
         )
-    return max(duration, master.cycle_time)
+    return max(duration, runtime.cycle_time)
 
 def required_segment_duration_for_axis(
-    master,
+    runtime,
     axis_index,
     previous,
     current,
@@ -104,21 +104,21 @@ def required_segment_duration_for_axis(
         - float(previous["positions"][local_index])
     )
     if distance <= 1e-9:
-        return max(float(initial_dt), master.cycle_time)
+        return max(float(initial_dt), runtime.cycle_time)
 
     velocity_limit = max(
-        float(master.slaves[axis_index].motion_limits.max_velocity)
-        * master.csp_counts_per_unit,
+        float(runtime.motion_limits[axis_index].max_velocity)
+        * runtime.csp_counts_per_unit,
         1e-9,
     )
     acceleration_limit = max(
-        float(master.slaves[axis_index].motion_limits.acceleration)
-        * master.csp_counts_per_unit,
+        float(runtime.motion_limits[axis_index].acceleration)
+        * runtime.csp_counts_per_unit,
         1e-9,
     )
     deceleration_limit = max(
-        float(master.slaves[axis_index].motion_limits.deceleration)
-        * master.csp_counts_per_unit,
+        float(runtime.motion_limits[axis_index].deceleration)
+        * runtime.csp_counts_per_unit,
         1e-9,
     )
     accel_limit = min(acceleration_limit, deceleration_limit)
@@ -127,7 +127,7 @@ def required_segment_duration_for_axis(
         float(initial_dt),
         1.875 * distance / velocity_limit,
         math.sqrt(5.773502691896258 * distance / accel_limit),
-        master.cycle_time,
+        runtime.cycle_time,
     )
 
     if "velocities" not in previous and "velocities" not in current:
@@ -208,7 +208,7 @@ def trajectory_point_value(point, key, local_index, default):
         return default
     return float(values[local_index])
 
-def validate_trajectory_limits(master, axes, points):
+def validate_trajectory_limits(runtime, axes, points):
     for point_index, (previous, current) in enumerate(zip(points, points[1:]), start=1):
         dt = current["time_from_start"] - previous["time_from_start"]
         if dt <= 0.0:
@@ -220,24 +220,24 @@ def validate_trajectory_limits(master, axes, points):
             start = previous["positions"][local_index]
             end = current["positions"][local_index]
             velocity_limit = (
-                float(master.slaves[axis_index].motion_limits.max_velocity)
-                * master.csp_counts_per_unit
+                float(runtime.motion_limits[axis_index].max_velocity)
+                * runtime.csp_counts_per_unit
             )
             acceleration_limit = (
-                float(master.slaves[axis_index].motion_limits.acceleration)
-                * master.csp_counts_per_unit
+                float(runtime.motion_limits[axis_index].acceleration)
+                * runtime.csp_counts_per_unit
             )
             deceleration_limit = (
-                float(master.slaves[axis_index].motion_limits.deceleration)
-                * master.csp_counts_per_unit
+                float(runtime.motion_limits[axis_index].deceleration)
+                * runtime.csp_counts_per_unit
             )
             required_dt = required_segment_duration_for_axis(
-                master,
+                runtime,
                 axis_index,
                 previous,
                 current,
                 local_index,
-                master.cycle_time,
+                runtime.cycle_time,
             )
             if required_dt > dt + 1e-9:
                 return (

@@ -1,7 +1,6 @@
 from device.cmmt.mock_pdo_adapter import MockPdoAdapter
 from device.cmmt.rxpdo import RxPDO
 from device.cmmt.txpdo import TxPDO
-from ethercat.pysoem_master import AxisMotionLimits
 
 
 class MockSlave:
@@ -9,13 +8,6 @@ class MockSlave:
         self.axis = axis
         self.rxpdo = RxPDO()
         self.txpdo = TxPDO()
-        limits = self.axis.get_motion_limits()
-        self.motion_limits = AxisMotionLimits(
-            float(limits["max_velocity"]),
-            float(limits["acceleration"]),
-            float(limits["deceleration"]),
-            float(limits.get("jerk", 0.0)),
-        )
         self.pdo_adapter = MockPdoAdapter(
             self.axis,
             self.rxpdo,
