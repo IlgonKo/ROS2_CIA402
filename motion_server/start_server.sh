@@ -4,10 +4,7 @@ set -euo pipefail
 INTERFACE="${PYSOEM_INTERFACE:-enp1s0}"
 BACKEND="${AXIS_SERVER_BACKEND:-pysoem}"
 SERVER_MODE="${AXIS_SERVER_MODE:-basic}"
-DEVICE="${PYSOEM_DEVICE:-cmmt}"
-DEVICE_PROFILES="${PYSOEM_DEVICE_PROFILES:-}"
-AXIS_SLAVE_INDICES="${PYSOEM_AXIS_SLAVE_INDICES:-}"
-AXIS_COUNT="${PYSOEM_AXIS_COUNT:-1}"
+BUS="${PYSOEM_BUS:-cmmt}"
 PORT="${AXIS_SERVER_PORT:-15000}"
 CYCLE_TIME="${PYSOEM_CYCLE_TIME:-0.01}"
 SPIN_WAIT_TIME="${PYSOEM_SPIN_WAIT_TIME:-0.00015}"
@@ -37,11 +34,8 @@ COMMAND_LOGS="${AXIS_SERVER_COMMAND_LOGS:-0}"
 echo "Starting Axis Server"
 echo "Backend=${BACKEND}"
 echo "ServerMode=${SERVER_MODE}"
-echo "Device=${DEVICE}"
-echo "DeviceProfiles=${DEVICE_PROFILES:-default}"
-echo "AxisSlaveIndices=${AXIS_SLAVE_INDICES:-default}"
+echo "Bus=${BUS}"
 echo "Interface=${INTERFACE}"
-echo "AxisCount=${AXIS_COUNT}"
 echo "Port=${PORT}"
 echo "CycleTime=${CYCLE_TIME}"
 echo "SpinWaitTime=${SPIN_WAIT_TIME}"
@@ -68,9 +62,7 @@ SERVER_CMD=(
   "${INTERFACE}" \
   --backend "${BACKEND}" \
   --server-mode "${SERVER_MODE}" \
-  --device "${DEVICE}" \
-  --device-profiles "${DEVICE_PROFILES}" \
-  --axis-slave-indices "${AXIS_SLAVE_INDICES}" \
+  --bus "${BUS}" \
   --host 0.0.0.0 \
   --port "${PORT}" \
   --cycle-time "${CYCLE_TIME}" \
@@ -90,7 +82,6 @@ SERVER_CMD=(
   --csp-profile "${CSP_PROFILE}" \
   --csp-interpolation-mode "${CSP_INTERPOLATION_MODE}" \
   --derived-velocity-alpha "${DERIVED_VELOCITY_ALPHA}" \
-  --axis-count "${AXIS_COUNT}" \
   --motion-mode "${MOTION_MODE}"
 )
 

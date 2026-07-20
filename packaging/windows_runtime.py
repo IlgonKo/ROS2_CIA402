@@ -29,7 +29,12 @@ def load_axis_env(root):
     values = read_dotenv(root / ".env")
 
     device_env_file = values.get("PYSOEM_DEVICE_ENV_FILE", "")
-    if not device_env_file and values.get("PYSOEM_DEVICE") == "cmmt":
+    bus = values.get("PYSOEM_BUS", "cmmt")
+    bus_entries = [entry.strip().lower() for entry in bus.split(",")]
+    has_cmmt = "cmmt" in bus_entries or any(
+        entry.endswith(":cmmt") for entry in bus_entries
+    )
+    if not device_env_file and has_cmmt:
         device_env_file = "device/cmmt/.env"
 
     if device_env_file:

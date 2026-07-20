@@ -24,10 +24,6 @@ def feedback_message(runtime, state, client_id=None):
             axis_motion_drive_to_api(state, axis_index, slave.txpdo.actual_velocity)
             for axis_index, slave in enumerate(runtime.slaves)
         ],
-        "setpoint_positions": [
-            axis_position_drive_to_api(state, axis_index, slave.txpdo.setpoint_position)
-            for axis_index, slave in enumerate(runtime.slaves)
-        ],
         "derived_velocities": [
             axis_motion_drive_to_api(state, axis_index, value)
             for axis_index, value in enumerate(state["derived_velocities"])

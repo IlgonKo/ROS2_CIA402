@@ -1,13 +1,13 @@
 from interfaces.servo_interface import ServoInterface
-from device.cmmt.mock_object_dictionary import MockObjectDictionary
-from device.cmmt.state_machine import CiA402StateMachine
+from device.virtual_servo_drive.object_dictionary import VirtualObjectDictionary
+from device.cia402 import CiA402StateMachine
 
 
 class VirtualCiA402Servo(ServoInterface): 
     def __init__(self, cycle_time=0.001):
         self.cycle_time = cycle_time
 
-        self.od = MockObjectDictionary()
+        self.od = VirtualObjectDictionary()
         self.sm = CiA402StateMachine()
 
         self.actual_position = 0.0
@@ -58,6 +58,9 @@ class VirtualCiA402Servo(ServoInterface):
 
     def set_target_velocity(self,velocity):
         self.od.write(0x60FF,velocity)
+
+    def set_profile_velocity(self, velocity):
+        self.od.write(0x6081, velocity)
 
     def set_motion_limits(self, max_velocity, acceleration, deceleration):
         self.od.write(0x607F, max_velocity)
@@ -248,7 +251,10 @@ class VirtualCiA402Servo(ServoInterface):
 
         error = target - self.actual_position
         distance = abs(error)
-        if distance <= window and abs(self.actual_velocity) <= max(decel * dt, 1e-9):
+        if distance <= window and abs(self.actual_velocity) <= max(
+            self._acceleration_to_velocity_delta(decel, dt),
+            1e-9,
+        ):
             self.actual_position = target
             self.actual_velocity = 0.0
             self.pp_active = False
@@ -258,9 +264,14 @@ class VirtualCiA402Servo(ServoInterface):
 
         direction = 1.0 if error >= 0.0 else -1.0
         velocity_toward_target = self.actual_velocity * direction
+        position_velocity_toward_target = (
+            self._velocity_to_position_rate(self.actual_velocity) * direction
+        )
+        decel_position_rate = self._acceleration_to_position_rate(decel)
         stopping_distance = (
-            max(velocity_toward_target, 0.0) ** 2 / (2.0 * decel)
-            if decel > 0.0
+            max(position_velocity_toward_target, 0.0) ** 2
+            / (2.0 * decel_position_rate)
+            if decel_position_rate > 0.0
             else 0.0
         )
 
@@ -277,9 +288,12 @@ class VirtualCiA402Servo(ServoInterface):
         self.actual_velocity = self._move_towards(
             self.actual_velocity,
             desired_velocity,
-            velocity_limit * dt,
+            self._acceleration_to_velocity_delta(velocity_limit, dt),
         )
-        next_position = self.actual_position + self.actual_velocity * dt
+        next_position = (
+            self.actual_position
+            + self._velocity_to_position_rate(self.actual_velocity) * dt
+        )
 
         if (
             (target - self.actual_position) == 0.0 or
@@ -299,7 +313,7 @@ class VirtualCiA402Servo(ServoInterface):
         self.actual_velocity = self._move_towards(
             self.actual_velocity,
             0.0,
-            decel * self.cycle_time,
+            self._acceleration_to_velocity_delta(decel, self.cycle_time),
         )
 
     def _move_towards(self, current, target, max_delta):
@@ -315,6 +329,42 @@ class VirtualCiA402Servo(ServoInterface):
     def _write_actual_feedback(self):
         self.od.write(0x6064, self.actual_position)
         self.od.write(0x606C, self.actual_velocity)
+
+    def _scale_from_exponent(self, exponent):
+        exponent = int(exponent)
+        return 10.0 ** (-exponent) if exponent > 0 else 10.0 ** exponent
+
+    def _unit_scale(self, subindex, default=1.0):
+        try:
+            return self._scale_from_exponent(self.od.read(0x2194, subindex))
+        except Exception:
+            return float(default)
+
+    def _position_scale(self):
+        return max(self._unit_scale(0x01), 1e-12)
+
+    def _velocity_scale(self):
+        return max(self._unit_scale(0x02), 1e-12)
+
+    def _acceleration_scale(self):
+        return max(self._unit_scale(0x03), 1e-12)
+
+    def _velocity_to_position_rate(self, velocity):
+        return float(velocity) * self._velocity_scale() / self._position_scale()
+
+    def _position_rate_to_velocity(self, position_rate):
+        return float(position_rate) * self._position_scale() / self._velocity_scale()
+
+    def _acceleration_to_position_rate(self, acceleration):
+        return float(acceleration) * self._acceleration_scale() / self._position_scale()
+
+    def _acceleration_to_velocity_delta(self, acceleration, dt):
+        return (
+            float(acceleration)
+            * self._acceleration_scale()
+            / self._velocity_scale()
+            * float(dt)
+        )
 
     # ---------------------------------
     # PV
@@ -342,12 +392,15 @@ class VirtualCiA402Servo(ServoInterface):
         self.actual_velocity = self._move_towards(
             self.actual_velocity,
             target_velocity,
-            limit * self.cycle_time,
+            self._acceleration_to_velocity_delta(limit, self.cycle_time),
         )
-        self.actual_position += self.actual_velocity * self.cycle_time
+        self.actual_position += (
+            self._velocity_to_position_rate(self.actual_velocity)
+            * self.cycle_time
+        )
         self._write_actual_feedback()
         self.target_reached = abs(self.actual_velocity - target_velocity) <= max(
-            limit * self.cycle_time,
+            self._acceleration_to_velocity_delta(limit, self.cycle_time),
             1e-9,
         )
 
@@ -373,7 +426,7 @@ class VirtualCiA402Servo(ServoInterface):
         
         error = target - self.actual_position
         
-        desired_velocity = self.kp * error
+        desired_velocity = self._position_rate_to_velocity(self.kp * error)
         desired_velocity = max(
             min(desired_velocity, max_vel),
             -max_vel,
@@ -386,13 +439,19 @@ class VirtualCiA402Servo(ServoInterface):
         else:
             limit = decel
 
-        max_delta_v = limit * self.cycle_time
+        max_delta_v = self._acceleration_to_velocity_delta(
+            limit,
+            self.cycle_time,
+        )
 
         delta_v = max(min(delta_v, max_delta_v), -max_delta_v)
 
         self.actual_velocity += delta_v
 
-        self.actual_position += (self.actual_velocity * self.cycle_time)
+        self.actual_position += (
+            self._velocity_to_position_rate(self.actual_velocity)
+            * self.cycle_time
+        )
         
         self.od.write(0x6064, self.actual_position)
 

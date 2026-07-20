@@ -21,6 +21,10 @@ class Axis:
     def set_target_velocity(self,velocity):
         self.servo.set_target_velocity(velocity)
 
+    def set_profile_velocity(self, velocity):
+        if hasattr(self.servo, "set_profile_velocity"):
+            self.servo.set_profile_velocity(velocity)
+
     def set_motion_limits(self, max_velocity, acceleration, deceleration):
         self.servo.set_motion_limits(
             max_velocity,

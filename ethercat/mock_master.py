@@ -128,7 +128,11 @@ class MockMaster:
         if index == 0x607A:
             return slave.rxpdo.target_position
         if index == 0x6062:
-            return slave.txpdo.setpoint_position
+            return getattr(
+                slave.txpdo,
+                "setpoint_position",
+                slave.txpdo.actual_position,
+            )
         if index == 0x607D:
             limits = slave.axis.get_software_position_limits()
             if subindex == 1:

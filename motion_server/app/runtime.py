@@ -54,10 +54,6 @@ class AxisRuntime:
         return self.motion_controller.csp_velocity_offset_enabled
 
     @property
-    def txpdo_setpoint_entry(self):
-        return self.ethercat_master.txpdo_setpoint_entry
-
-    @property
     def last_csp_command_steps(self):
         return self.motion_controller.last_csp_command_steps
 

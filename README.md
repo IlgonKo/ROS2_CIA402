@@ -13,7 +13,7 @@ ROS Control Panel
   -> TCP JSON
   -> Axis Server backend=mock
   -> MockMaster / MockSlave
-  -> VirtualCiA402Servo
+  -> device/virtual_servo_drive
 ```
 
 ## Real Festo CMMT path
@@ -58,7 +58,7 @@ Runtime settings are stored in `.env`:
 ```text
 PYSOEM_INTERFACE=enp1s0
 AXIS_SERVER_BACKEND=pysoem
-PYSOEM_AXIS_COUNT=1
+PYSOEM_BUS=cmmt
 AXIS_SERVER_PORT=15000
 PYSOEM_CYCLE_TIME=0.01
 PYSOEM_DERIVED_VELOCITY_ALPHA=0.2
@@ -71,6 +71,12 @@ PYSOEM_CSP_COUNTS_PER_UNIT=1000.0
 PYSOEM_MOTION_MODE=pp
 ```
 
+Virtual servo drive settings are stored in `device/virtual_servo_drive/.env`:
+
+```text
+MOCK_AXIS_TYPES=linear,linear,rotary
+```
+
 On Linux, `.env` is a hidden file. In the Files app, press `Ctrl+H` to show it,
 or check it from a terminal:
 
@@ -81,13 +87,13 @@ cat .env
 
 The host scripts pass this file explicitly to Docker Compose with
 `--env-file .env`. When `scripts/host/start.sh` runs, it prints the backend,
-axis count, and interface values it read from `.env`.
+bus layout, and interface values it read from `.env`.
 
-For a mock backend, use:
+For a three-axis mock backend, use:
 
 ```text
 AXIS_SERVER_BACKEND=mock
-PYSOEM_AXIS_COUNT=3
+PYSOEM_BUS=cmmt,cmmt,cmmt
 ```
 
 For multiple same-profile CiA402 slaves, edit `.env` once:
@@ -109,6 +115,40 @@ access so the container can send EtherCAT frames through the Ubuntu PC NIC.
 The Axis Server image is intentionally separate from the GUI image. The server
 image contains PySOEM and EtherCAT access only; the panel image contains Tk GUI
 dependencies and connects to the server through TCP.
+
+Non-motion EtherCAT devices can be listed in the same physical bus layout with
+an `io:` prefix. For example, two CMMT motion axes plus a CPX-AP-I-EC I/O
+station:
+
+```text
+PYSOEM_BUS=cmmt,cmmt,io:cpx_ap_i_ec
+```
+
+The CPX profile keeps the device PDO mapping and uses
+`device/cpx_ap_i_ec/.env` to describe the I/O image by count:
+
+```text
+CPX_DIGITAL_INPUTS=16
+CPX_ANALOG_INPUTS=2
+CPX_DIGITAL_OUTPUTS=16
+CPX_ANALOG_OUTPUTS=1
+CPX_ANALOG_BITS=16
+```
+
+The configured byte size is compared with the actual PDO byte size before
+`config_map()`. If all CPX counts are zero, the profile accepts the device PDO
+size as raw bytes.
+
+The CPX object dictionary is based on the CPX-AP-I-EC manual. Fixed objects
+such as `0x27F0`, `0x27F1`, `0xF000`, and `0xF980` are declared directly.
+Repeating module areas such as `0x9000...0x9FFF`, `0xA000...0xA4F0`,
+`0xF030...0xF03F`, and `0xF050...0xF05F` are resolved by the CPX object lookup
+helper instead of being expanded into thousands of static entries.
+
+Axis Server does not remap PDOs at runtime. CMMT profiles validate the drive's
+configured PDO mapping before `config_map()`, then use that process-image layout
+for encode/decode. If the drive mapping does not match the expected CMMT layout,
+startup stops with a mapping mismatch message.
 
 Linux local Axis Server control and visualization:
 
@@ -152,6 +192,17 @@ Axis Server command and feedback units are normalized at the TCP API boundary:
 linear axes use `mm`, `mm/s`, `mm/s^2`, and rotary axes use `deg`, `deg/s`,
 `deg/s^2`. The server reads the drive user unit and conversion settings during
 startup and converts to the drive's PDO/SDO units internally.
+
+For the mock backend, virtual axis units can be selected from
+`device/virtual_servo_drive/.env`:
+
+```text
+MOCK_AXIS_TYPES=linear,linear,rotary
+```
+
+Use `MOCK_AXIS_USER_UNITS` only when an exact mock `0x216E:01` value is needed,
+for example `0x0100` for linear metre or `0x4100` for rotary degree.
+
 Use `PYSOEM_CSP_COUNTS_PER_UNIT` to align linear CSP count scaling. Example:
 
 ```text
@@ -478,5 +529,9 @@ scripts/ros/         ROS container launch helpers
 scripts/windows/     Windows sync helper and optional direct Axis Server launcher
 ros/                 ROS bridge/control panel and trace display
 ethercat/            Mock/PySOEM EtherCAT transport, distributed clock, and WKC code
-device/cmmt/         Festo CMMT profile, CiA402 OD/PDO codec, mock PDO mapper, and virtual servo
+device/common_object_dictionary/ Common EtherCAT/OD helper definitions shared by device profiles
+device/cia402/       Common CiA402 object dictionary and state machine
+device/cmmt/         Festo CMMT profile, vendor OD extensions, PDO codec, and settings
+device/cpx_ap_i_ec/  Festo CPX-AP-I-EC I/O profile, PDO codec, and settings
+device/virtual_servo_drive/ Virtual servo-drive backend and PDO adapter
 ```

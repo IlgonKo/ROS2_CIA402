@@ -1,4 +1,4 @@
-class MockPdoAdapter:
+class VirtualPdoAdapter:
     def __init__(self, axis, rxpdo, txpdo):
         self.axis = axis
         self.rxpdo = rxpdo
@@ -9,6 +9,8 @@ class MockPdoAdapter:
         self.axis.set_mode(self.rxpdo.mode_of_operation)
         if self.rxpdo.has_field("target_position"):
             self.axis.set_target_position(self.rxpdo.target_position)
+        if self.rxpdo.has_field("profile_velocity"):
+            self.axis.set_profile_velocity(self.rxpdo.profile_velocity)
         if self.rxpdo.has_field("target_velocity"):
             self.axis.set_target_velocity(self.rxpdo.target_velocity)
 

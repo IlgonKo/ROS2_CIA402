@@ -198,7 +198,11 @@ class DriveManager:
     ):
         axis = getattr(self.drives[axis_index], "axis", None)
         if axis is not None:
-            axis.set_motion_limits(max_velocity, acceleration, deceleration)
+            axis.set_motion_limits(
+                self.motion_api_to_drive(axis_index, max_velocity),
+                self.motion_api_to_drive(axis_index, acceleration, "acceleration"),
+                self.motion_api_to_drive(axis_index, deceleration, "deceleration"),
+            )
 
     def _validate_bindings(self):
         axis_indices = [binding.axis_index for binding in self.drive_bindings]

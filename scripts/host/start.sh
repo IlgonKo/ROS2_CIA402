@@ -24,7 +24,7 @@ cd "${PROJECT_ROOT}"
 
 if [[ ! -f "${ENV_FILE}" ]]; then
   echo "Missing ${ENV_FILE}"
-  echo "Create it from .env.example, then edit AXIS_SERVER_BACKEND and PYSOEM_AXIS_COUNT."
+  echo "Create it from .env.example, then edit AXIS_SERVER_BACKEND and PYSOEM_BUS."
   echo "  cp .env.example .env"
   exit 1
 fi
@@ -33,7 +33,7 @@ COMPOSE_ENV_FILE="$(prepare_compose_env_file "${PROJECT_ROOT}")"
 
 echo "Using env file: ${ENV_FILE}"
 echo "Using compose env file: ${COMPOSE_ENV_FILE}"
-grep -E '^(AXIS_SERVER_BACKEND|PYSOEM_AXIS_COUNT|PYSOEM_INTERFACE|PYSOEM_DEVICE|PYSOEM_DEVICE_ENV_FILE)=' "${COMPOSE_ENV_FILE}" || true
+grep -E '^(AXIS_SERVER_BACKEND|PYSOEM_BUS|PYSOEM_INTERFACE|PYSOEM_DEVICE_ENV_FILE|MOCK_AXIS_TYPES|MOCK_AXIS_USER_UNITS)=' "${COMPOSE_ENV_FILE}" || true
 
 echo "Stopping existing Axis Server containers"
 docker compose -f "${COMPOSE_FILE}" --env-file "${COMPOSE_ENV_FILE}" stop motion_server

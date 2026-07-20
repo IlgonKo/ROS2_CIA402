@@ -25,6 +25,7 @@ dist\ROS2_CIA402
   axis_control_panel.exe
   .env.example
   device\cmmt\.env.example
+  device\cpx_ap_i_ec\.env.example
   Reference\cmmt_error_catalog.json
   Tools\list_ethercat_nics.ps1
   Tools\npcap-1.88.exe
@@ -36,13 +37,14 @@ create these files manually when running against real hardware:
 ```text
 dist\ROS2_CIA402\.env
 dist\ROS2_CIA402\device\cmmt\.env
+dist\ROS2_CIA402\device\cpx_ap_i_ec\.env
 ```
 
 ## Run With Mock Axes
 
 ```powershell
 cd dist\ROS2_CIA402
-.\motion_server.exe --backend mock --axis-count 3 --server-mode basic --port 15000
+.\motion_server.exe --backend mock --bus cmmt,cmmt,cmmt --server-mode basic --port 15000
 .\axis_control_panel.exe
 ```
 

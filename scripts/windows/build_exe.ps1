@@ -47,11 +47,15 @@ try {
     Copy-Item -Recurse -Force "dist\pyinstaller\axis_control_panel\*" $PackageRoot
 
     New-Item -ItemType Directory -Force (Join-Path $PackageRoot "device\cmmt") | Out-Null
+    New-Item -ItemType Directory -Force (Join-Path $PackageRoot "device\cpx_ap_i_ec") | Out-Null
+    New-Item -ItemType Directory -Force (Join-Path $PackageRoot "device\virtual_servo_drive") | Out-Null
     New-Item -ItemType Directory -Force (Join-Path $PackageRoot "Reference") | Out-Null
     New-Item -ItemType Directory -Force $ToolsRoot | Out-Null
 
     Copy-Item -Force ".env.example" (Join-Path $PackageRoot ".env.example")
     Copy-Item -Force "device\cmmt\.env.example" (Join-Path $PackageRoot "device\cmmt\.env.example")
+    Copy-Item -Force "device\cpx_ap_i_ec\.env.example" (Join-Path $PackageRoot "device\cpx_ap_i_ec\.env.example")
+    Copy-Item -Force "device\virtual_servo_drive\.env.example" (Join-Path $PackageRoot "device\virtual_servo_drive\.env.example")
     Copy-Item -Force "Reference\cmmt_error_catalog.json" (Join-Path $PackageRoot "Reference\cmmt_error_catalog.json")
     Copy-Item -Force "packaging\WINDOWS_EXE.md" (Join-Path $PackageRoot "WINDOWS_EXE.md")
     Copy-Item -Force "scripts\windows\list_ethercat_nics.ps1" (Join-Path $ToolsRoot "list_ethercat_nics.ps1")
@@ -70,11 +74,17 @@ try {
         if (Test-Path "device\cmmt\.env") {
             Copy-Item -Force "device\cmmt\.env" (Join-Path $PackageRoot "device\cmmt\.env")
         }
+        if (Test-Path "device\cpx_ap_i_ec\.env") {
+            Copy-Item -Force "device\cpx_ap_i_ec\.env" (Join-Path $PackageRoot "device\cpx_ap_i_ec\.env")
+        }
+        if (Test-Path "device\virtual_servo_drive\.env") {
+            Copy-Item -Force "device\virtual_servo_drive\.env" (Join-Path $PackageRoot "device\virtual_servo_drive\.env")
+        }
     }
 
     Write-Host "Built Windows package: $PackageRoot"
     if ($SkipLocalEnv) {
-        Write-Host "Copy .env and device\cmmt\.env into that folder before running against real hardware."
+        Write-Host "Copy .env and device-specific .env files into that folder before running."
     } else {
         Write-Host "Local .env files were copied into the package folder for this PC."
     }

@@ -72,12 +72,74 @@ class CMMTDeviceProfile:
     def create_txpdo():
         return TxPDO()
 
-    @staticmethod
-    def default_rxpdo1_mapping():
-        return (
-            RxPDO.MAPPING_ENTRIES,
-            "Configured RxPDO1 mapping from CMMT device profile",
+    def prepare_process_image(
+        self,
+        master,
+        slave_index,
+    ):
+        expected_rxpdo = RxPDO.MAPPING_ENTRIES
+        expected_txpdo = TxPDO.MAPPING_ENTRIES
+
+        actual_rxpdo = master.read_assigned_pdo_mapping_entries(
+            slave_index,
+            0x1C12,
         )
+        actual_txpdo = master.read_assigned_pdo_mapping_entries(
+            slave_index,
+            0x1C13,
+        )
+
+        self.validate_pdo_mapping(
+            slave_index,
+            "RxPDO",
+            expected_rxpdo,
+            actual_rxpdo,
+        )
+        self.validate_pdo_mapping(
+            slave_index,
+            "TxPDO",
+            expected_txpdo,
+            actual_txpdo,
+        )
+
+        master.slaves[slave_index].rxpdo.select_mapping(actual_rxpdo)
+        master.slaves[slave_index].txpdo.select_mapping(actual_txpdo)
+        print(
+            f"Slave {slave_index}: validated CMMT PDO mapping from device",
+            flush=True,
+        )
+
+    def validate_pdo_mapping(self, slave_index, label, expected, actual):
+        expected = list(expected)
+        actual = list(actual)
+        if actual == expected:
+            return
+
+        raise RuntimeError(
+            f"CMMT {label} mapping mismatch on slave {slave_index}.\n"
+            f"Expected {label}:\n{self.format_pdo_entries(expected)}\n"
+            f"Actual {label}:\n{self.format_pdo_entries(actual)}\n"
+            "Configure the drive PDO mapping before starting Axis Server."
+        )
+
+    @staticmethod
+    def format_pdo_entries(entries):
+        if not entries:
+            return "  <empty>"
+        lines = []
+        total_bits = 0
+        for entry in entries:
+            entry = int(entry)
+            index = (entry >> 16) & 0xFFFF
+            subindex = (entry >> 8) & 0xFF
+            bit_length = entry & 0xFF
+            total_bits += bit_length
+            lines.append(
+                f"  0x{entry:08X} -> "
+                f"0x{index:04X}:{subindex:02X} {bit_length} bits"
+            )
+        lines.append(f"  total: {total_bits} bits / {total_bits // 8} bytes")
+        return "\n".join(lines)
 
     MAIN_GROUPS = {
         1: "Current",
@@ -445,19 +507,6 @@ class CMMTDeviceProfile:
             self.SOFTWARE_POSITION_LIMIT_INDEX,
             2,
             positive_limit,
-        )
-
-    def default_txpdo1_mapping(self):
-        return (
-            TxPDO.MAPPING_ENTRIES,
-            "Configured TxPDO1 mapping from Axis Server TxPDO layout",
-        )
-
-    def txpdo_setpoint_mapping(self):
-        return (
-            TxPDO.SETPOINT_REPLACE_ENTRIES,
-            "Configured TxPDO1 mapping from Axis Server TxPDO layout: "
-            "replaced 0x6064:00 actual position with 0x6062:00 setpoint position",
         )
 
     def configure_sync_parameters(

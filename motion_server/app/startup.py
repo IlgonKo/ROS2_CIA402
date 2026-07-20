@@ -13,23 +13,25 @@ from motion_server.control.axis_operations import (
     pv_reject_message,
 )
 from motion_server.app.runtime import AxisRuntime
-from device import available_device_names, get_device_profile
-from device.cmmt.virtual_servo import VirtualCiA402Servo
+from device import get_device_profile
 from motion_server.drive import DriveBinding, DriveManager
+from device.virtual_servo_drive import VirtualCiA402Servo
 from ethercat.mock_master import MockMaster
 from ethercat.mock_slave import MockSlave
 from ethercat.pysoem_master import PySOEMMaster
 from motion_server.control.axis import Axis
 from motion_server.control.motion_controller import MotionController
 
+MOCK_AXIS_TYPE_USER_UNITS = {
+    "linear": 0x0100,
+    "rotary": 0x4100,
+}
+
 
 def create_axis_runtime(args, motion_limits):
     sync_mode = parse_optional_sync_mode(args.sync_mode)
-    device_profile_names = parse_device_profile_names(args)
-    axis_slave_indices = parse_axis_slave_indices(
-        args,
-        len(device_profile_names),
-    )
+    device_profile_names = list(args.device_profile_names)
+    axis_slave_indices = list(args.axis_slave_indices)
     drive_bindings = [
         DriveBinding(axis_index=axis_index, slave_index=slave_index)
         for axis_index, slave_index in enumerate(axis_slave_indices)
@@ -43,8 +45,10 @@ def create_axis_runtime(args, motion_limits):
                 "mock backend supports only one-to-one axis/slave mapping"
             )
         slaves = []
+        mock_user_units = parse_mock_axis_user_units(args)
         for axis_index, limits in enumerate(motion_limits):
             servo = VirtualCiA402Servo(cycle_time=args.cycle_time)
+            servo.od.write(0x216E, mock_user_units[axis_index], 0x01)
             servo.set_motion_limits(
                 limits["max_velocity"],
                 limits["acceleration"],
@@ -52,6 +56,11 @@ def create_axis_runtime(args, motion_limits):
             )
             axis = Axis(f"A{axis_index}", servo)
             slaves.append(MockSlave(axis))
+            print(
+                "Mock axis user position unit: "
+                f"axis={axis_index} 0x216E:01=0x{mock_user_units[axis_index]:04X}",
+                flush=True,
+            )
 
         ethercat_master = MockMaster(
             slaves,
@@ -91,7 +100,6 @@ def create_axis_runtime(args, motion_limits):
         sync_mode=sync_mode,
         dc_enabled=args.dc_enabled,
         dc_sync0_shift_time=args.dc_sync0_shift_time,
-        txpdo_setpoint_entry=args.txpdo_setpoint_entry,
     )
     motion_controller = MotionController(
         args.axis_count,
@@ -107,43 +115,46 @@ def create_axis_runtime(args, motion_limits):
     return AxisRuntime(drive_manager, motion_controller)
 
 
-def parse_device_profile_names(args):
-    raw_value = str(getattr(args, "device_profiles", "")).strip()
-    names = (
-        [part.strip().lower() for part in raw_value.split(",")]
-        if raw_value
-        else [str(args.device).strip().lower()] * int(args.axis_count)
-    )
-    if not names or any(not name for name in names):
-        raise ValueError("--device-profiles contains an empty profile name")
-
-    available = set(available_device_names())
-    unsupported = [name for name in names if name not in available]
-    if unsupported:
-        raise ValueError(
-            "Unsupported device profiles: " + ", ".join(unsupported)
+def parse_mock_axis_user_units(args):
+    raw_units = str(getattr(args, "mock_axis_user_units", "")).strip()
+    if raw_units:
+        return parse_axis_values(
+            raw_units,
+            int(args.axis_count),
+            lambda value: int(value, 0),
+            "--mock-axis-user-units",
         )
-    return names
+
+    raw_types = str(getattr(args, "mock_axis_types", "")).strip()
+    if raw_types:
+        return parse_axis_values(
+            raw_types,
+            int(args.axis_count),
+            parse_mock_axis_type,
+            "--mock-axis-types",
+        )
+
+    return [0x4100 for _ in range(int(args.axis_count))]
 
 
-def parse_axis_slave_indices(args, device_count):
-    raw_value = str(getattr(args, "axis_slave_indices", "")).strip()
-    indices = (
-        [int(part.strip(), 0) for part in raw_value.split(",")]
-        if raw_value
-        else list(range(int(args.axis_count)))
-    )
-    if len(indices) != int(args.axis_count):
+def parse_axis_values(raw_value, axis_count_value, parser, option_name):
+    parts = [part.strip() for part in raw_value.split(",") if part.strip()]
+    if not parts:
+        raise ValueError(f"{option_name} does not contain any values")
+    if len(parts) == 1:
+        parts = parts * axis_count_value
+    if len(parts) != axis_count_value:
+        raise ValueError(f"{option_name} count must match motion axes in --bus")
+    return [parser(part) for part in parts]
+
+
+def parse_mock_axis_type(value):
+    key = str(value).strip().lower()
+    if key not in MOCK_AXIS_TYPE_USER_UNITS:
         raise ValueError(
-            "--axis-slave-indices count must match --axis-count"
+            f"Unsupported mock axis type {value!r}; expected linear or rotary"
         )
-    if len(indices) != len(set(indices)):
-        raise ValueError("--axis-slave-indices must be unique")
-    if any(index < 0 or index >= device_count for index in indices):
-        raise ValueError(
-            "--axis-slave-indices contains an index outside device profiles"
-        )
-    return indices
+    return MOCK_AXIS_TYPE_USER_UNITS[key]
 
 
 def parse_optional_sync_mode(raw_value):

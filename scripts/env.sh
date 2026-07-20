@@ -26,14 +26,14 @@ prepare_compose_env_file() {
       printf '%s' "${PYSOEM_DEVICE_ENV_FILE:-}"
     )"
     if [[ -z "${device_env_file}" ]]; then
-      local device
-      device="$(
+      local bus
+      bus="$(
         set -a
         # shellcheck disable=SC1090
         source "${base_env}"
-        printf '%s' "${PYSOEM_DEVICE:-}"
+        printf '%s' "${PYSOEM_BUS:-cmmt}"
       )"
-      if [[ "${device}" == "cmmt" ]]; then
+      if [[ ",${bus}," == *",cmmt,"* || ",${bus}," == *":cmmt,"* ]]; then
         device_env_file="device/cmmt/.env"
       fi
     fi
@@ -48,6 +48,33 @@ prepare_compose_env_file() {
         cat "${device_env_file}"
       else
         echo "Warning: device env file not found: ${device_env_file}" >&2
+      fi
+    fi
+
+    local backend
+    backend="$(
+      set -a
+      # shellcheck disable=SC1090
+      source "${base_env}"
+      printf '%s' "${AXIS_SERVER_BACKEND:-}"
+    )"
+    if [[ "${backend}" == "mock" ]]; then
+      local virtual_env_file
+      virtual_env_file="$(
+        set -a
+        # shellcheck disable=SC1090
+        source "${base_env}"
+        printf '%s' "${VIRTUAL_SERVO_DRIVE_ENV_FILE:-device/virtual_servo_drive/.env}"
+      )"
+      if [[ "${virtual_env_file}" != /* ]]; then
+        virtual_env_file="${project_root}/${virtual_env_file}"
+      fi
+      if [[ -f "${virtual_env_file}" ]]; then
+        echo ""
+        echo "# Virtual servo drive env: ${virtual_env_file}"
+        cat "${virtual_env_file}"
+      else
+        echo "Warning: virtual servo drive env file not found: ${virtual_env_file}" >&2
       fi
     fi
   } > "${combined_env}"

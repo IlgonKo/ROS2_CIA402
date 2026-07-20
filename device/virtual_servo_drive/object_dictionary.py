@@ -1,7 +1,7 @@
 from device.cmmt.object_dictionary import CMMT_OBJECTS
 
 
-class MockObjectDictionary:
+class VirtualObjectDictionary:
     def __init__(self):
         self.objects = {
             self._storage_key(index, subindex): obj.default

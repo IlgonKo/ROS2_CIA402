@@ -5,8 +5,7 @@ from pathlib import Path
 from device import available_device_names, get_device_profile
 
 
-def load_project_env_defaults():
-    env_path = Path(__file__).resolve().parents[1] / ".env"
+def load_env_defaults(env_path, override=False):
     if not env_path.is_file():
         return
 
@@ -15,10 +14,28 @@ def load_project_env_defaults():
         if not line or line.startswith("#") or "=" not in line:
             continue
         key, value = line.split("=", 1)
-        os.environ.setdefault(
-            key.strip(),
-            value.strip().strip('"').strip("'"),
+        key = key.strip()
+        value = value.strip().strip('"').strip("'")
+        if override:
+            os.environ[key] = value
+        else:
+            os.environ.setdefault(key, value)
+
+
+def load_project_env_defaults():
+    project_root = Path(__file__).resolve().parents[1]
+    load_env_defaults(project_root / ".env")
+
+    backend = os.environ.get("AXIS_SERVER_BACKEND", "pysoem").strip().lower()
+    if backend == "mock":
+        virtual_env_file = os.environ.get(
+            "VIRTUAL_SERVO_DRIVE_ENV_FILE",
+            "device/virtual_servo_drive/.env",
         )
+        virtual_env_path = Path(virtual_env_file)
+        if not virtual_env_path.is_absolute():
+            virtual_env_path = project_root / virtual_env_path
+        load_env_defaults(virtual_env_path, override=True)
 
 
 load_project_env_defaults()
@@ -82,7 +99,7 @@ CSP_COMMAND_STEP_THRESHOLD = float(
 CSP_COMMAND_STEP_ERROR_THRESHOLD = float(
     os.environ.get("PYSOEM_CSP_COMMAND_STEP_ERROR_THRESHOLD", "75.0")
 )
-DEVICE_PROFILE = get_device_profile(os.environ.get("PYSOEM_DEVICE", "cmmt"))
+DEVICE_PROFILE = get_device_profile("cmmt")
 PROFILE_POSITION_MODE = DEVICE_PROFILE.PROFILE_POSITION_MODE
 PROFILE_VELOCITY_MODE = DEVICE_PROFILE.PROFILE_VELOCITY_MODE
 JOG_MODE = DEVICE_PROFILE.JOG_MODE
@@ -122,12 +139,7 @@ MODE_RXPDO_FIELDS = {
     "homing": (),
     "jog": (),
 }
-TXPDO_SETPOINT_ENTRY_FIELDS = (
-    "setpoint_position",
-)
-
-
-def parse_args():
+def parse_args(argv=None):
     parser = argparse.ArgumentParser(
         description="TCP JSON-lines Axis Server for CiA402 axes."
     )
@@ -149,25 +161,29 @@ def parse_args():
         help="Device backend. pysoem drives real EtherCAT slaves; mock uses VirtualCiA402Servo.",
     )
     parser.add_argument(
-        "--device",
-        choices=available_device_names(),
-        default=DEVICE_PROFILE.name,
-        help="Default drive profile used when --device-profiles is empty.",
-    )
-    parser.add_argument(
-        "--device-profiles",
-        default=os.environ.get("PYSOEM_DEVICE_PROFILES", ""),
+        "--mock-axis-types",
+        default=os.environ.get("MOCK_AXIS_TYPES", ""),
         help=(
-            "Comma-separated EtherCAT slave profiles in bus order. "
-            "Empty repeats --device for each motion axis."
+            "Comma-separated virtual axis types for mock backend: "
+            "linear or rotary. A single value is repeated for all axes."
         ),
     )
     parser.add_argument(
-        "--axis-slave-indices",
-        default=os.environ.get("PYSOEM_AXIS_SLAVE_INDICES", ""),
+        "--mock-axis-user-units",
+        default=os.environ.get("MOCK_AXIS_USER_UNITS", ""),
         help=(
-            "Comma-separated EtherCAT slave indices for motion axes. "
-            "Empty uses 0..axis-count-1."
+            "Comma-separated mock 0x216E:01 user position units. "
+            "Overrides --mock-axis-types. Examples: 0x0100 linear m, "
+            "0x4100 rotary deg, 0x1000 rotary rad, 0xB400 rotary rev."
+        ),
+    )
+    parser.add_argument(
+        "--bus",
+        default=os.environ.get("PYSOEM_BUS", "cmmt"),
+        help=(
+            "Comma-separated EtherCAT bus layout. Entries without a prefix "
+            "are motion axes. Use io:<profile> or device:<profile> for "
+            "non-motion slaves, for example cmmt,cmmt,io:cpx_ap_i_ec."
         ),
     )
     parser.add_argument(
@@ -261,11 +277,6 @@ def parse_args():
         help="Maximum absolute host wake-up correction in seconds.",
     )
     parser.add_argument(
-        "--axis-count",
-        type=int,
-        default=int(os.environ.get("PYSOEM_AXIS_COUNT", "1")),
-    )
-    parser.add_argument(
         "--max-velocity",
         type=float,
         default=float(os.environ.get("PYSOEM_MAX_VELOCITY", "50.0")),
@@ -337,16 +348,6 @@ def parse_args():
         ),
     )
     parser.add_argument(
-        "--txpdo-setpoint-entry",
-        action="store_true",
-        default=os.environ.get("PYSOEM_TXPDO_SETPOINT_ENTRY", "0").strip() == "1",
-        help=(
-            "Use CMMT TxPDO setpoint entry layout. "
-            "0/default uses TxPDO.MAPPING_ENTRIES; 1 uses "
-            "TxPDO.SETPOINT_REPLACE_ENTRIES."
-        ),
-    )
-    parser.add_argument(
         "--csp-interpolation-mode",
         type=int,
         default=int(os.environ.get("PYSOEM_CSP_INTERPOLATION_MODE", "1")),
@@ -375,10 +376,68 @@ def parse_args():
         choices=sorted(MOTION_MODES),
         default=os.environ.get("PYSOEM_MOTION_MODE", "pp").lower(),
     )
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
+    bus_config = parse_bus_config(args.bus)
+    args.device_profile_names = bus_config["device_profile_names"]
+    args.axis_slave_indices = bus_config["axis_slave_indices"]
+    args.axis_count = len(args.axis_slave_indices)
+    if args.axis_count < 1:
+        parser.error("--bus must contain at least one motion axis")
     if args.csp_profile == "quintic" and args.jerk <= 0.0:
         parser.error("--csp-profile quintic requires --jerk > 0")
     return args
+
+
+def parse_bus_config(raw_bus):
+    raw_bus = str(raw_bus or "").strip()
+    if not raw_bus:
+        raise ValueError("PYSOEM_BUS must not be empty")
+
+    available = set(available_device_names())
+    device_profile_names = []
+    axis_slave_indices = []
+
+    for raw_entry in raw_bus.split(","):
+        entry = raw_entry.strip().lower()
+        if not entry:
+            continue
+
+        role = "axis"
+        profile_name = entry
+        if ":" in entry:
+            role, profile_name = [
+                part.strip()
+                for part in entry.split(":", 1)
+            ]
+
+        if role in {"axis", "drive"}:
+            is_motion_axis = True
+        elif role in {"io", "device", "slave"}:
+            is_motion_axis = False
+        else:
+            raise ValueError(
+                f"Unsupported PYSOEM_BUS role {role!r}; "
+                "use axis:<profile> or io:<profile>"
+            )
+
+        if profile_name not in available:
+            raise ValueError(
+                f"Unsupported PYSOEM_BUS profile {profile_name!r}. "
+                f"Supported profiles: {', '.join(available_device_names())}"
+            )
+
+        slave_index = len(device_profile_names)
+        device_profile_names.append(profile_name)
+        if is_motion_axis:
+            axis_slave_indices.append(slave_index)
+
+    if not device_profile_names:
+        raise ValueError("PYSOEM_BUS does not contain any devices")
+
+    return {
+        "device_profile_names": device_profile_names,
+        "axis_slave_indices": axis_slave_indices,
+    }
 
 
 def required_rxpdo_fields_for_mode(mode_name, csp_velocity_offset_enabled=False):
@@ -389,16 +448,8 @@ def required_rxpdo_fields_for_mode(mode_name, csp_velocity_offset_enabled=False)
     return tuple(dict.fromkeys(fields))
 
 
-def required_txpdo_fields_for_entry(setpoint_entry_enabled=False):
-    if setpoint_entry_enabled:
-        fields = [
-            field for field in COMMON_TXPDO_FIELDS
-            if field != "actual_position"
-        ]
-        fields.extend(TXPDO_SETPOINT_ENTRY_FIELDS)
-    else:
-        fields = list(COMMON_TXPDO_FIELDS)
-    return tuple(dict.fromkeys(fields))
+def required_txpdo_fields_for_entry():
+    return tuple(dict.fromkeys(COMMON_TXPDO_FIELDS))
 
 
 def require_pdo_fields_for_mode(runtime, mode_name, axis_index=None):
@@ -420,9 +471,7 @@ def require_pdo_fields_for_mode(runtime, mode_name, axis_index=None):
 
 
 def require_txpdo_fields(runtime):
-    txpdo_fields = required_txpdo_fields_for_entry(
-        getattr(runtime, "txpdo_setpoint_entry", False),
-    )
+    txpdo_fields = required_txpdo_fields_for_entry()
     for axis_index, slave in enumerate(runtime.slaves):
         require_pdo_fields(
             slave.txpdo,

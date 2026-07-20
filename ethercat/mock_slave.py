@@ -1,6 +1,6 @@
-from device.cmmt.mock_pdo_adapter import MockPdoAdapter
 from device.cmmt.rxpdo import RxPDO
 from device.cmmt.txpdo import TxPDO
+from device.virtual_servo_drive import VirtualPdoAdapter
 
 
 class MockSlave:
@@ -8,7 +8,7 @@ class MockSlave:
         self.axis = axis
         self.rxpdo = RxPDO()
         self.txpdo = TxPDO()
-        self.pdo_adapter = MockPdoAdapter(
+        self.pdo_adapter = VirtualPdoAdapter(
             self.axis,
             self.rxpdo,
             self.txpdo,

@@ -33,7 +33,6 @@ class PySOEMMaster:
         sync_mode=None,
         dc_enabled=False,
         dc_sync0_shift_time=0,
-        txpdo_setpoint_entry=False,
     ):
         self.interface_name = interface_name
         self.device_profiles = list(device_profiles)
@@ -46,7 +45,6 @@ class PySOEMMaster:
         if not self.dc_enabled and self.sync_mode is not None:
             self.sync_mode = 0
         self.dc_sync0_shift_time = int(dc_sync0_shift_time)
-        self.txpdo_setpoint_entry = bool(txpdo_setpoint_entry)
         self.sdo = SdoAccess(self)
 
         self.dc = DistributedClock()
@@ -88,8 +86,7 @@ class PySOEMMaster:
                 )
 
             self._request_pre_operational(pysoem, timeout_us)
-            self._configure_rxpdo_mapping()
-            self._configure_txpdo_mapping()
+            self._prepare_device_profiles()
             self._master.config_map()
             self._configure_distributed_clocks()
 
@@ -254,6 +251,8 @@ class PySOEMMaster:
     def _write_outputs(self):
         for index, slave in enumerate(self.slaves):
             payload = slave.pdo_codec.encode_rxpdo(slave.rxpdo)
+            if payload is None:
+                continue
             self._master.slaves[index].output = payload
 
     def _read_inputs(self):
@@ -271,11 +270,14 @@ class PySOEMMaster:
 
         if reached_state != pysoem.PREOP_STATE:
             raise RuntimeError(
-                "EtherCAT network did not reach PRE_OP before PDO remap. "
+                "EtherCAT network did not reach PRE_OP before process image preparation. "
                 f"Reached={reached_state}. Slaves={self.describe_slaves()}"
             )
 
-        print("EtherCAT network reached PRE_OP before PDO remap", flush=True)
+        print(
+            "EtherCAT network reached PRE_OP before process image preparation",
+            flush=True,
+        )
 
     def _request_safe_operational(self, pysoem, timeout_us):
         self._master.state = pysoem.SAFEOP_STATE
@@ -302,63 +304,36 @@ class PySOEMMaster:
             flush=True,
         )
 
-    def _configure_rxpdo_mapping(self):
+    def _prepare_device_profiles(self):
         for slave_index, slave in enumerate(self.slaves):
-            rxpdo1_mapping, log_message = (
-                slave.device_profile.default_rxpdo1_mapping()
-            )
-            self._write_rxpdo1_mapping(slave_index, rxpdo1_mapping)
-            print(
-                f"Slave {slave_index}: {log_message}",
-                flush=True,
-            )
-
-    def _write_rxpdo1_mapping(self, slave_index, rxpdo1_mapping):
-        self.sdo.write_uint8(slave_index, 0x1600, 0x00, 0)
-        for subindex, mapping_entry in enumerate(rxpdo1_mapping, start=1):
-            self.sdo.write_uint32(
+            slave.device_profile.prepare_process_image(
+                self,
                 slave_index,
-                0x1600,
-                subindex,
-                mapping_entry,
-            )
-        self.sdo.write_uint8(
-            slave_index,
-            0x1600,
-            0x00,
-            len(rxpdo1_mapping),
-        )
-        self.slaves[slave_index].rxpdo.select_mapping(rxpdo1_mapping)
-
-    def _configure_txpdo_mapping(self):
-        for slave_index, slave in enumerate(self.slaves):
-            txpdo1_mapping, log_message = (
-                slave.device_profile.txpdo_setpoint_mapping()
-                if self.txpdo_setpoint_entry
-                else slave.device_profile.default_txpdo1_mapping()
-            )
-            self._write_txpdo1_mapping(slave_index, txpdo1_mapping)
-            print(
-                f"Slave {slave_index}: {log_message}",
-                flush=True,
             )
 
-    def _write_txpdo1_mapping(self, slave_index, txpdo1_mapping):
-        self.sdo.write_uint8(slave_index, 0x1A00, 0x00, 0)
-        for subindex, mapping_entry in enumerate(txpdo1_mapping, start=1):
-            self.sdo.write_uint32(
-                slave_index,
-                0x1A00,
-                subindex,
-                mapping_entry,
-            )
-        self.sdo.write_uint8(
+    def read_assigned_pdo_indices(self, slave_index, assignment_index):
+        count = self.sdo.read_uint8(slave_index, assignment_index, 0)
+        return [
+            self.sdo.read_uint16(slave_index, assignment_index, subindex)
+            for subindex in range(1, count + 1)
+        ]
+
+    def read_pdo_mapping_entries(self, slave_index, pdo_index):
+        count = self.sdo.read_uint8(slave_index, pdo_index, 0)
+        return [
+            self.sdo.read_uint32(slave_index, pdo_index, subindex)
+            for subindex in range(1, count + 1)
+        ]
+
+    def read_assigned_pdo_mapping_entries(self, slave_index, assignment_index):
+        entries = []
+        assigned_pdos = self.read_assigned_pdo_indices(
             slave_index,
-            0x1A00,
-            0x00,
-            len(txpdo1_mapping),
+            assignment_index,
         )
-        self.slaves[slave_index].txpdo.select_mapping(txpdo1_mapping)
+        for pdo_index in assigned_pdos:
+            entries.extend(self.read_pdo_mapping_entries(slave_index, pdo_index))
+        return entries
 
     def _configure_sync_parameters(self):
         if not self.dc_enabled and self.sync_mode == 0:

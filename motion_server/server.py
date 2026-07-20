@@ -287,7 +287,7 @@ def main():
         return
 
     if args.axis_count < 1:
-        raise ValueError("--axis-count must be at least 1")
+        raise ValueError("PYSOEM_BUS must contain at least one motion axis")
 
     motion_limits = [
         {
@@ -475,7 +475,6 @@ def main():
                 f"dc_phase_offset_ns={args.dc_phase_offset} "
                 f"dc_phase_kp={args.dc_phase_kp} "
                 f"dc_phase_ki={args.dc_phase_ki} "
-                f"txpdo_setpoint_entry={args.txpdo_setpoint_entry} "
                 f"csp_interpolation_mode={args.csp_interpolation_mode} "
                 f"csp_velocity_offset={args.csp_velocity_offset} "
                 f"derived_velocity_alpha={args.derived_velocity_alpha} "

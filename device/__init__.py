@@ -1,8 +1,10 @@
 from device.cmmt.profile import CMMTDeviceProfile
+from device.cpx_ap_i_ec.profile import CPXApIEcDeviceProfile
 
 
 DEVICE_PROFILES = {
     "cmmt": CMMTDeviceProfile,
+    "cpx_ap_i_ec": CPXApIEcDeviceProfile,
 }
 
 

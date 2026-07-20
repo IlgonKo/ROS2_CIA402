@@ -42,8 +42,12 @@ function Import-AxisServerEnv {
 
     $deviceEnvFile = $merged["PYSOEM_DEVICE_ENV_FILE"]
     if ([string]::IsNullOrWhiteSpace($deviceEnvFile)) {
-        $device = $merged["PYSOEM_DEVICE"]
-        if ($device -eq "cmmt") {
+        $bus = $merged["PYSOEM_BUS"]
+        if ([string]::IsNullOrWhiteSpace($bus)) {
+            $bus = "cmmt"
+        }
+        $busEntries = @($bus.Split(",") | ForEach-Object { $_.Trim().ToLowerInvariant() })
+        if ($busEntries -contains "cmmt" -or ($busEntries | Where-Object { $_.EndsWith(":cmmt") }).Count -gt 0) {
             $deviceEnvFile = "device/cmmt/.env"
         }
     }
@@ -58,6 +62,23 @@ function Import-AxisServerEnv {
             }
         } else {
             Write-Warning "Device env file not found: $deviceEnvFile"
+        }
+    }
+
+    if ($merged["AXIS_SERVER_BACKEND"] -eq "mock") {
+        $virtualEnvFile = $merged["VIRTUAL_SERVO_DRIVE_ENV_FILE"]
+        if ([string]::IsNullOrWhiteSpace($virtualEnvFile)) {
+            $virtualEnvFile = "device/virtual_servo_drive/.env"
+        }
+        if (-not [System.IO.Path]::IsPathRooted($virtualEnvFile)) {
+            $virtualEnvFile = Join-Path $ProjectRoot $virtualEnvFile
+        }
+        if (Test-Path -LiteralPath $virtualEnvFile) {
+            foreach ($entry in (Read-DotEnvFile -Path $virtualEnvFile).GetEnumerator()) {
+                $merged[$entry.Key] = $entry.Value
+            }
+        } else {
+            Write-Warning "Virtual servo drive env file not found: $virtualEnvFile"
         }
     }
 

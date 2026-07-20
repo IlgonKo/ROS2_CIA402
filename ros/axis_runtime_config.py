@@ -51,6 +51,20 @@ def runtime_env():
     return values
 
 
+def axis_count_from_bus(bus):
+    count = 0
+    for raw_entry in str(bus or "").split(","):
+        entry = raw_entry.strip().lower()
+        if not entry:
+            continue
+        role = "axis"
+        if ":" in entry:
+            role = entry.split(":", 1)[0].strip()
+        if role in {"axis", "drive"}:
+            count += 1
+    return max(1, count)
+
+
 def get_axis_names():
     env = runtime_env()
     names = env.get("ROS2_CIA402_AXIS_NAMES")
@@ -61,7 +75,7 @@ def get_axis_names():
             if name.strip()
         ]
 
-    axis_count = int(env.get("PYSOEM_AXIS_COUNT", "3"))
+    axis_count = axis_count_from_bus(env.get("PYSOEM_BUS", "cmmt"))
     base_names = [
         config["name"]
         for config in DEFAULT_AXIS_CONFIGS

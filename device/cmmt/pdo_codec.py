@@ -1,6 +1,6 @@
 import struct
 
-from device.cmmt.object_dictionary import (
+from device.common_object_dictionary import (
     DATA_TYPE_FORMATS,
 )
 

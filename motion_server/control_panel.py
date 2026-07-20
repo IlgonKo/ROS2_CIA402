@@ -157,6 +157,20 @@ def default_axis_names(axis_count):
     ]
 
 
+def axis_count_from_bus(bus):
+    count = 0
+    for raw_entry in str(bus or "").split(","):
+        entry = raw_entry.strip().lower()
+        if not entry:
+            continue
+        role = "axis"
+        if ":" in entry:
+            role = entry.split(":", 1)[0].strip()
+        if role in {"axis", "drive"}:
+            count += 1
+    return max(1, count)
+
+
 def read_runtime_config():
     env_file = load_env_file(PROJECT_ROOT / ".env")
     host = os.environ.get(
@@ -169,10 +183,10 @@ def read_runtime_config():
             env_file.get("AXIS_SERVER_PORT", "15000"),
         )
     )
-    axis_count = int(
+    axis_count = axis_count_from_bus(
         os.environ.get(
-            "PYSOEM_AXIS_COUNT",
-            env_file.get("PYSOEM_AXIS_COUNT", "1"),
+            "PYSOEM_BUS",
+            env_file.get("PYSOEM_BUS", "cmmt"),
         )
     )
     axis_names_text = os.environ.get("PYSOEM_AXIS_NAMES", "")
@@ -2868,7 +2882,6 @@ class AxisServerControlPanel:
         target_positions = self._values(feedback, "target_positions", 0.0)
         actual_positions = self._values(feedback, "actual_positions", 0.0)
         actual_velocities = self._values(feedback, "actual_velocities", 0.0)
-        setpoint_positions = self._values(feedback, "setpoint_positions", 0.0)
         command_positions = self._values(feedback, "command_positions", 0.0)
         command_velocities = self._values(feedback, "command_velocities", 0.0)
         statuswords = self._values(feedback, "statuswords", 0)
@@ -2991,7 +3004,6 @@ class AxisServerControlPanel:
                     f"Actual Position {pos_unit}",
                     f"Target Position {pos_unit}",
                     f"CSP Command Position {pos_unit}",
-                    f"Drive Setpoint Position {pos_unit}",
                 ]
             )
             self.velocity_trace.set_series_names(
@@ -3002,7 +3014,6 @@ class AxisServerControlPanel:
                     self.position_count_to_unit(actual_positions[selected_axis], selected_axis),
                     self.position_count_to_unit(target_positions[selected_axis], selected_axis),
                     self.position_count_to_unit(command_positions[selected_axis], selected_axis),
-                    self.position_count_to_unit(setpoint_positions[selected_axis], selected_axis),
                 ]
             )
             self.velocity_trace.add_sample(

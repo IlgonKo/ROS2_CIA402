@@ -246,7 +246,6 @@ def log_velocity_anomalies(runtime, state, cycle_stats):
             f"ERR={velocity_error:.3f},"
             f"JUMP={velocity_jump:.3f},"
             f"AP={runtime.slaves[axis_index].txpdo.actual_position},"
-            f"SP={runtime.slaves[axis_index].txpdo.setpoint_position},"
             f"CP={generator.command_position:.3f},"
             f"TP={generator.target_position:.3f}"
         )
@@ -354,7 +353,6 @@ def log_status_if_due(runtime, state, last_status_log_time):
             f"CMD={state['target_positions'][axis_index]:.3f} "
             f"CSP_CV={runtime.trajectory_generators[axis_index].command_velocity:.3f} "
             f"CSP_CP={runtime.trajectory_generators[axis_index].command_position:.3f} "
-            f"SP={slave.txpdo.setpoint_position} "
             f"AP={slave.txpdo.actual_position} "
             f"AV={slave.txpdo.actual_velocity} "
             f"DV={state['derived_velocities'][axis_index]:.3f} "

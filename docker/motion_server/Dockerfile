@@ -19,4 +19,4 @@ RUN python3 -m pip install --no-cache-dir --break-system-packages pysoem
 
 WORKDIR /workspace
 
-CMD ["python3", "-B", "motion_server/server.py", "enp1s0", "--backend", "pysoem", "--axis-count", "1"]
+CMD ["python3", "-B", "motion_server/server.py", "enp1s0", "--backend", "pysoem", "--bus", "cmmt"]

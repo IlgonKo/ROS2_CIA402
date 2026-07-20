@@ -8,8 +8,24 @@ import pysoem
 
 
 DEFAULT_INTERFACE = os.environ.get("PYSOEM_INTERFACE", "enp1s0")
-DEFAULT_AXIS_COUNT = int(os.environ.get("PYSOEM_AXIS_COUNT", "1"))
 DEFAULT_CYCLE_TIME = float(os.environ.get("PYSOEM_CYCLE_TIME", "0.001"))
+
+
+def axis_count_from_bus(bus):
+    count = 0
+    for raw_entry in str(bus or "").split(","):
+        entry = raw_entry.strip().lower()
+        if not entry:
+            continue
+        role = "axis"
+        if ":" in entry:
+            role = entry.split(":", 1)[0].strip()
+        if role in {"axis", "drive"}:
+            count += 1
+    return max(1, count)
+
+
+DEFAULT_AXIS_COUNT = axis_count_from_bus(os.environ.get("PYSOEM_BUS", "cmmt"))
 
 
 def parse_args():
