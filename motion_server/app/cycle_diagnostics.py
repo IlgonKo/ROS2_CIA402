@@ -1,6 +1,7 @@
 import time
 
 from motion_server.config import (
+    AXIS_SERVER_STATUS_LOGS,
     CSP_COMMAND_STEP_LOGS,
     POSITION_FEEDBACK_LAG_LOG_PERIOD,
     POSITION_FEEDBACK_LAG_LOGS,
@@ -336,6 +337,8 @@ def log_csp_command_step_anomalies(runtime, state):
 
 
 def log_status_if_due(runtime, state, last_status_log_time):
+    if not AXIS_SERVER_STATUS_LOGS:
+        return last_status_log_time
     if STATUS_LOG_PERIOD <= 0.0:
         return last_status_log_time
 

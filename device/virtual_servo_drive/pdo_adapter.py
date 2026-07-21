@@ -17,8 +17,8 @@ class VirtualPdoAdapter:
     def axis_to_txpdo(self):
         self.txpdo.statusword = self.axis.get_statusword()
         self.txpdo.mode_of_operation_display = self.rxpdo.mode_of_operation
-        self.txpdo.actual_position = self.axis.get_actual_position()
-        self.txpdo.actual_velocity = self.axis.get_actual_velocity()
+        self.txpdo.actual_position = self.axis.get_position()
+        self.txpdo.actual_velocity = self.axis.get_velocity()
         if (
             self.txpdo.has_field("setpoint_position")
             and self.rxpdo.has_field("target_position")

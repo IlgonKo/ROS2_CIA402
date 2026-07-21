@@ -1,3 +1,4 @@
+from motion_server.config import HOMING_REFERENCED_MASK
 from motion_server.control.axis_units import (
     axis_motion_api_to_drive,
     axis_position_api_to_drive,
@@ -22,6 +23,14 @@ from motion_server.api import (
     require_uint32,
     selected_axes,
 )
+
+
+def unreferenced_axes(runtime, axes):
+    return [
+        axis_index
+        for axis_index in axes
+        if not int(runtime.slaves[axis_index].txpdo.statusword) & HOMING_REFERENCED_MASK
+    ]
 
 
 def command_position_axes(runtime, state, axes, positions, command_name, client=None):
@@ -193,6 +202,18 @@ def move_absolute(message, runtime, state, client):
     except Exception as exc:
         reject_command_message(client, command, str(exc))
         return
+
+    not_referenced = unreferenced_axes(runtime, axes)
+    if not_referenced:
+        message_text = (
+            "Absolute move requires referenced axes. "
+            f"unreferenced_axes={not_referenced} "
+            f"statuswords={[f'0x{runtime.slaves[index].txpdo.statusword:04X}' for index in not_referenced]}"
+        )
+        reject_command_message(client, command, message_text)
+        print(f"Ignored {command}: {message_text}", flush=True)
+        return
+
     command_position_axes(runtime, state, axes, positions, command, client)
 
 

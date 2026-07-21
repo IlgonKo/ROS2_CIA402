@@ -1,4 +1,5 @@
 from motion_server.api.messages import command_name, send_client_message
+from motion_server.config import status_log
 
 
 def authority_status_payload(client, state, message_type="authority/status"):
@@ -26,7 +27,7 @@ def acquire_authority(client, state):
             else "This connection already owns command authority."
         )
         send_client_message(client, payload)
-        print(f"Command authority granted to client {client['id']}", flush=True)
+        status_log(f"Command authority granted to client {client['id']}")
         return
 
     send_client_message(
@@ -42,9 +43,8 @@ def acquire_authority(client, state):
             "message": f"Command authority is already held by client {owner}.",
         },
     )
-    print(
+    status_log(
         f"Command authority denied to client {client['id']}; owner={owner}",
-        flush=True,
     )
 
 
@@ -54,7 +54,7 @@ def release_authority(client, state):
         state["command_authority_owner"] = None
         reason = None
         message = "Command authority released."
-        print(f"Command authority released by client {client['id']}", flush=True)
+        status_log(f"Command authority released by client {client['id']}")
     elif owner is None:
         reason = "authority_required"
         message = "This connection does not hold command authority."

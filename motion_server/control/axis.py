@@ -50,10 +50,10 @@ class Axis:
     def get_position_loop_gain(self):
         return self.servo.get_position_loop_gain()
 
-    def get_actual_position(self):
+    def get_position(self):
         return self.servo.get_position()
 
-    def get_actual_velocity(self):
+    def get_velocity(self):
         return self.servo.get_velocity()
     
     def get_target_position(self):

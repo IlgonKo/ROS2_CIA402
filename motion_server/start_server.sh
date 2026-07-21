@@ -30,6 +30,7 @@ CSP_VELOCITY_OFFSET="${PYSOEM_CSP_VELOCITY_OFFSET:-0}"
 DERIVED_VELOCITY_ALPHA="${PYSOEM_DERIVED_VELOCITY_ALPHA:-0.2}"
 MOTION_MODE="${PYSOEM_MOTION_MODE:-pp}"
 COMMAND_LOGS="${AXIS_SERVER_COMMAND_LOGS:-0}"
+STATUS_LOGS="${AXIS_SERVER_STATUS_LOGS:-0}"
 
 echo "Starting Axis Server"
 echo "Backend=${BACKEND}"
@@ -56,6 +57,7 @@ echo "CspVelocityOffset=${CSP_VELOCITY_OFFSET}"
 echo "DerivedVelocityAlpha=${DERIVED_VELOCITY_ALPHA}"
 echo "MotionMode=${MOTION_MODE}"
 echo "CommandLogs=${COMMAND_LOGS}"
+echo "StatusLogs=${STATUS_LOGS}"
 
 SERVER_CMD=(
   python3 -B /workspace/motion_server/server.py

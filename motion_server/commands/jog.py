@@ -1,4 +1,4 @@
-from motion_server.config import JOG_MODE, require_pdo_fields_for_mode
+from motion_server.config import JOG_MODE, require_pdo_fields_for_mode, status_log
 from motion_server.app.cycle import exchange
 from motion_server.control.axis_operations import (
     configure_motion_mode,
@@ -60,11 +60,10 @@ def start_jog(message, runtime, state, client):
     elif speed == "fast":
         controlword |= 1 << 12
     slave.rxpdo.controlword = controlword
-    print(
+    status_log(
         "Received axis/jog_start: "
         f"axis={axis_index} direction={public_direction} speed={speed} "
         f"controlword=0x{controlword:04X}",
-        flush=True,
     )
 
 
@@ -99,8 +98,7 @@ def stop_jog(message, runtime, state, client):
     finally:
         state["jog_previous_modes"][axis_index] = None
 
-    print(
+    status_log(
         "Received axis/jog_stop: "
         f"axis={axis_index} restored_mode={previous_mode.upper()}",
-        flush=True,
     )

@@ -3,12 +3,13 @@ import json
 from motion_server.commands.parameters import read_parameter
 from motion_server.commands.routes import COMMAND_ROUTER
 from motion_server.config import AXIS_SERVER_COMMAND_LOGS
-from motion_server.api.feedback import feedback_message
+from motion_server.api.feedback import axis_status_message, feedback_message
 from motion_server.api import (
     command_name,
     public_command_name,
     reject_command_message,
     send_client_message,
+    selected_single_axis,
 )
 from motion_server.api.authority import (
     acquire_authority,
@@ -109,10 +110,22 @@ def dispatch_message(message, runtime, state, client):
             send_client_message(client, authority_status_payload(client, state))
         return
 
-    if message_type in ("system/status", "axis/status"):
+    if message_type == "system/status":
         status = feedback_message(runtime, state, client["id"])
         status["type"] = message_type
         send_client_message(client, status)
+        return
+
+    if message_type == "axis/status":
+        try:
+            axis_index = selected_single_axis(message, runtime, message_type)
+        except Exception as exc:
+            reject_command_message(client, message_type, str(exc))
+            return
+        send_client_message(
+            client,
+            axis_status_message(runtime, state, axis_index, client["id"]),
+        )
         return
 
     if (

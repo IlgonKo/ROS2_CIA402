@@ -54,6 +54,10 @@ AXIS_SERVER_COMMAND_LOGS = os.environ.get(
     "AXIS_SERVER_COMMAND_LOGS",
     "0",
 ).strip() == "1"
+AXIS_SERVER_STATUS_LOGS = os.environ.get(
+    "AXIS_SERVER_STATUS_LOGS",
+    "0",
+).strip() == "1"
 CYCLE_STATS_LOGS = os.environ.get("PYSOEM_CYCLE_STATS_LOGS", "1").strip() == "1"
 CYCLE_STATS_PERIOD = float(os.environ.get("PYSOEM_CYCLE_STATS_PERIOD", "1.0"))
 TX_HISTORY_LENGTH = int(os.environ.get("PYSOEM_TX_HISTORY_LENGTH", "16"))
@@ -487,3 +491,9 @@ def require_pdo_fields(pdo, fields, context):
             f"{context} is missing required PDO field(s): "
             f"{', '.join(missing)}"
         )
+
+
+def status_log(*args, **kwargs):
+    if AXIS_SERVER_STATUS_LOGS:
+        kwargs.setdefault("flush", True)
+        print(*args, **kwargs)

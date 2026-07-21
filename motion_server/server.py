@@ -16,6 +16,7 @@ from motion_server.config import (
     CYCLE_STATS_PERIOD,
     FEEDBACK_PERIOD,
     parse_args,
+    status_log,
 )
 from motion_server.commands.homing import update_homing_state
 from motion_server.app.cycle import CycleStats, exchange, wait_until_cycle_time
@@ -188,9 +189,8 @@ def run_server_loop(server, runtime, state):
                     "last_feedback_time": 0.0,
                 }
                 clients.append(client)
-                print(
+                status_log(
                     f"Client connected: id={client['id']} addr={addr}",
-                    flush=True,
                 )
             except BlockingIOError:
                 break
@@ -243,7 +243,7 @@ def run_degraded_server_loop(server, runtime, state):
             }
             clients.append(client)
             next_client_id += 1
-            print(f"Client connected: id={client['id']} addr={addr}", flush=True)
+            status_log(f"Client connected: id={client['id']} addr={addr}")
 
         for client in list(clients):
             try:

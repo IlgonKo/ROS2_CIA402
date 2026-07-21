@@ -7,6 +7,7 @@ from motion_server.config import (
     HOMING_REFERENCED_MASK,
     HOMING_START_BIT,
     MOTION_MODES,
+    status_log,
 )
 from motion_server.app.cycle import exchange
 from motion_server.api.feedback import public_homing_state
@@ -87,12 +88,11 @@ def finish_homing(runtime, state, result, message):
     homing["active"] = False
     homing["state"] = result
     homing["message"] = message
-    print(
+    status_log(
         "Homing finished: "
         f"state={result} axes={axes} message={message} "
         f"modes={state['motion_modes']} "
         f"controlwords={[f'0x{runtime.slaves[index].rxpdo.controlword:04X}' for index in axes]}",
-        flush=True,
     )
 
 
@@ -126,6 +126,9 @@ def start_homing(message, runtime, state, client):
         state["motion_modes"][axis_index] = "homing"
     update_motion_mode_summary(state)
 
+    set_homing_start_bit(runtime, axis_indices, False)
+    exchange(runtime, cycles=2)
+
     initial_referenced = {
         axis_index: bool(
             runtime.slaves[axis_index].txpdo.statusword & HOMING_REFERENCED_MASK
@@ -137,9 +140,7 @@ def start_homing(message, runtime, state, client):
         for axis_index, referenced in initial_referenced.items()
     }
 
-    for axis_index in axis_indices:
-        slave = runtime.slaves[axis_index]
-        slave.rxpdo.controlword = int(slave.rxpdo.controlword) | HOMING_START_BIT
+    set_homing_start_bit(runtime, axis_indices, True)
     exchange(runtime, cycles=2)
 
     state["homing"] = {
@@ -154,13 +155,12 @@ def start_homing(message, runtime, state, client):
         "referenced_seen_low": referenced_seen_low,
     }
     send_homing_status(client, runtime, state)
-    print(
+    status_log(
         "Received axis/home: "
         f"axes={axis_indices} "
         f"original_modes={original_modes} "
         f"initial_referenced={initial_referenced} "
         f"controlwords={[f'0x{runtime.slaves[index].rxpdo.controlword:04X}' for index in axis_indices]}",
-        flush=True,
     )
 
 

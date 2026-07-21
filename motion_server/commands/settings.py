@@ -6,7 +6,12 @@ from motion_server.control.axis_units import (
     axis_position_drive_to_api,
     motion_limits_drive_to_api,
 )
-from motion_server.config import DEVICE_PROFILE, MOTION_MODES, require_pdo_fields_for_mode
+from motion_server.config import (
+    DEVICE_PROFILE,
+    MOTION_MODES,
+    require_pdo_fields_for_mode,
+    status_log,
+)
 from motion_server.control.axis_operations import (
     axis_count,
     configure_motion_mode,
@@ -251,10 +256,9 @@ def set_profile(message, runtime, state, client):
         reject_command_message(client, command, str(exc))
         return
 
-    print(
+    status_log(
         "Received axis/profile: "
         f"axes={axes} profile_settings={state['profile_settings']}",
-        flush=True,
     )
 
 
@@ -370,23 +374,21 @@ def set_software_position_limits(message, runtime, state, client):
                 negative_limit,
                 positive_limit,
             ]
-            print(
+            status_log(
                 "Axis software position limits write: "
                 f"axis={axis_index} "
                 f"api=({negative_limit_api}, {positive_limit_api}) "
                 f"drive=({negative_limit}, {positive_limit}) "
                 f"readback={readback_limits} "
                 f"metadata={axis_metadata(state, axis_index)}",
-                flush=True,
             )
     except Exception as exc:
         reject_command_message(client, command, str(exc))
         return
 
-    print(
+    status_log(
         "Received axis/software_position_limits: "
         f"axes={axes} limits={state['software_position_limits']}",
-        flush=True,
     )
 
 
@@ -466,11 +468,10 @@ def set_mode(message, runtime, state, client=None):
             failed.append((axis_index, exc))
             previous_code = mode_code(previous_mode)
             runtime.slaves[axis_index].rxpdo.mode_of_operation = previous_code
-            print(
+            status_log(
                 "Motion mode change failed "
                 f"axis={axis_index} requested={requested_mode.upper()} "
                 f"previous={previous_mode.upper()} error={exc}",
-                flush=True,
             )
             continue
 
@@ -490,8 +491,7 @@ def set_mode(message, runtime, state, client=None):
 
     update_motion_mode_summary(state)
     if changed_axes:
-        print(
+        status_log(
             f"Motion mode changed axes={changed_axes} "
             f"to {requested_mode.upper()} modes={state['motion_modes']}",
-            flush=True,
         )

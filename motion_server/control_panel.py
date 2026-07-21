@@ -50,6 +50,14 @@ LINEAR_USER_POSITION_UNITS = {
     0x0100: "m",
 }
 
+MODE_DISPLAY_NAMES = {
+    1: "pp",
+    3: "pv",
+    6: "homing",
+    8: "csp",
+    -3: "jog",
+}
+
 
 def user_position_unit_name(user_position_unit):
     if user_position_unit is None:
@@ -304,6 +312,7 @@ class AxisServerClient:
             self.sock_file = sock_file
             self.connected = True
             self.last_error = ""
+        self.request_system_status()
 
     def _read_loop(self):
         while not self.stop_event.is_set():
@@ -312,8 +321,12 @@ class AxisServerClient:
                 raise OSError("server closed connection")
 
             message = json.loads(line)
-            if message.get("type") == "feedback":
+            if message.get("type") in {"feedback", "system/status"}:
                 self._store_feedback(message)
+            elif message.get("type") == "axis/status":
+                self._merge_axis_status(message)
+            elif message.get("type") == "system/feedback":
+                self._merge_system_feedback(message)
             elif message.get("type") in {
                 "authority/acquire",
                 "authority/release",
@@ -329,6 +342,153 @@ class AxisServerClient:
             self.feedback = message
             for result in self.sdo_read_results:
                 self._apply_param_read_result(result)
+
+    def _merge_system_feedback(self, message):
+        with self.lock:
+            for key in (
+                "target_positions",
+                "actual_positions",
+                "actual_velocities",
+                "statuswords",
+                "mode_displays",
+                "command_authority",
+            ):
+                if key in message:
+                    self.feedback[key] = message[key]
+            if "statuswords" in message:
+                diagnostics = self.feedback.setdefault("diagnostics", [])
+                while len(diagnostics) < self.axis_count:
+                    diagnostics.append({})
+                for axis_index, statusword in enumerate(
+                    list(message["statuswords"])[:self.axis_count],
+                ):
+                    diagnostics[axis_index]["statusword"] = int(statusword)
+            if "mode_displays" in message:
+                diagnostics = self.feedback.setdefault("diagnostics", [])
+                while len(diagnostics) < self.axis_count:
+                    diagnostics.append({})
+                for axis_index, mode_display in enumerate(
+                    list(message["mode_displays"])[:self.axis_count],
+                ):
+                    diagnostics[axis_index]["mode_display"] = int(mode_display)
+
+    def _merge_axis_status(self, message):
+        axis_index = int(message.get("axis", -1))
+        if axis_index < 0 or axis_index >= self.axis_count:
+            return
+        with self.lock:
+            scalar_to_array = {
+                "target_position": "target_positions",
+                "actual_position": "actual_positions",
+                "actual_velocity": "actual_velocities",
+                "derived_velocity": "derived_velocities",
+                "command_position": "command_positions",
+                "command_velocity": "command_velocities",
+                "statusword": "statuswords",
+                "mode_display": "mode_displays",
+            }
+            for scalar_key, array_key in scalar_to_array.items():
+                if scalar_key not in message:
+                    continue
+                values = self.feedback.setdefault(
+                    array_key,
+                    [0.0 for _ in range(self.axis_count)],
+                )
+                while len(values) < self.axis_count:
+                    values.append(0.0)
+                values[axis_index] = message[scalar_key]
+
+            if "motion_mode" in message:
+                modes = self.feedback.setdefault(
+                    "motion_modes",
+                    ["pp" for _ in range(self.axis_count)],
+                )
+                while len(modes) < self.axis_count:
+                    modes.append("pp")
+                modes[axis_index] = str(message["motion_mode"]).lower()
+
+            for array_key, value in (
+                ("motion_limits", message.get("motion_limits")),
+                ("profile_settings", message.get("profile_settings")),
+            ):
+                if value is None:
+                    continue
+                self._set_axis_list_value(array_key, 4, axis_index, value)
+
+            if "software_position_limits" in message:
+                self._set_axis_list_value(
+                    "software_position_limits",
+                    2,
+                    axis_index,
+                    message["software_position_limits"],
+                )
+
+            if "axis_metadata" in message:
+                metadata = self.feedback.setdefault(
+                    "axis_metadata",
+                    [{} for _ in range(self.axis_count)],
+                )
+                while len(metadata) < self.axis_count:
+                    metadata.append({})
+                metadata[axis_index] = message["axis_metadata"]
+
+            if "user_position_unit" in message:
+                units = self.feedback.setdefault(
+                    "user_position_units",
+                    [None for _ in range(self.axis_count)],
+                )
+                while len(units) < self.axis_count:
+                    units.append(None)
+                units[axis_index] = message["user_position_unit"]
+
+            if "converting_unit_exponents" in message:
+                exponents = self.feedback.setdefault(
+                    "converting_unit_exponents",
+                    [None for _ in range(self.axis_count)],
+                )
+                while len(exponents) < self.axis_count:
+                    exponents.append(None)
+                exponents[axis_index] = message["converting_unit_exponents"]
+
+            if "axis_position_counts_per_unit" in message:
+                counts_per_unit = self.feedback.setdefault(
+                    "axis_position_counts_per_unit",
+                    [self.feedback.get("position_counts_per_unit", 1.0)
+                     for _ in range(self.axis_count)],
+                )
+                while len(counts_per_unit) < self.axis_count:
+                    counts_per_unit.append(
+                        self.feedback.get("position_counts_per_unit", 1.0),
+                    )
+                counts_per_unit[axis_index] = message["axis_position_counts_per_unit"]
+
+            for key in (
+                "drive_initialized",
+                "initialization_error",
+                "server_mode",
+                "capabilities",
+                "command_authority",
+                "position_counts_per_unit",
+            ):
+                if key in message:
+                    self.feedback[key] = message[key]
+
+            if "diagnostics" in message:
+                diagnostics = self.feedback.setdefault("diagnostics", [])
+                while len(diagnostics) < self.axis_count:
+                    diagnostics.append({})
+                diagnostics[axis_index] = message["diagnostics"]
+
+    def _set_axis_list_value(self, key, fields_per_axis, axis_index, values):
+        flat = self.feedback.setdefault(
+            key,
+            [0.0 for _ in range(self.axis_count * fields_per_axis)],
+        )
+        required = self.axis_count * fields_per_axis
+        while len(flat) < required:
+            flat.append(0.0)
+        for field_index, value in enumerate(list(values)[:fields_per_axis]):
+            flat[axis_index * fields_per_axis + field_index] = value
 
     def _store_notice(self, message):
         with self.lock:
@@ -522,12 +682,20 @@ class AxisServerClient:
                 diagnosis_result,
             )
 
-    def send_json(self, message):
+    def send_json(self, message, refresh_status=False):
         payload = (json.dumps(message) + "\n").encode("utf-8")
         with self.lock:
             if self.sock is None:
                 raise ConnectionError("Axis server is not connected")
             self.sock.sendall(payload)
+            if refresh_status:
+                status_payload = (json.dumps({"cmd": "system/status"}) + "\n").encode(
+                    "utf-8",
+                )
+                self.sock.sendall(status_payload)
+
+    def request_system_status(self):
+        self.send_json({"cmd": "system/status"})
 
     def send_axis_move_absolute(self, axis_index, position, profile_velocity=None):
         message = {
@@ -600,7 +768,7 @@ class AxisServerClient:
             message["profile_deceleration"] = float(profile_settings[2])
             if len(profile_settings) > 3 and profile_settings[3] is not None:
                 message["profile_jerk"] = float(profile_settings[3])
-        self.send_json(message)
+        self.send_json(message, refresh_status=True)
 
     def send_axis_motion_limits(self, axis_index, axis_limits):
         self.send_json(
@@ -611,7 +779,8 @@ class AxisServerClient:
                 "negative_velocity_limit": float(axis_limits[1]),
                 "max_acceleration": float(axis_limits[2]),
                 "max_deceleration": float(axis_limits[3]),
-            }
+            },
+            refresh_status=True,
         )
 
     def send_axis_software_position_limits(
@@ -626,7 +795,8 @@ class AxisServerClient:
                 "axis": int(axis_index),
                 "negative_limit": float(negative_limit),
                 "positive_limit": float(positive_limit),
-            }
+            },
+            refresh_status=True,
         )
 
     def send_motion_mode(self, mode, axis_index):
@@ -635,7 +805,8 @@ class AxisServerClient:
                 "cmd": "axis/mode",
                 "axis": int(axis_index),
                 "mode": str(mode).lower(),
-            }
+            },
+            refresh_status=True,
         )
 
     def send_controlword(self, controlword, axis_index):
@@ -750,6 +921,15 @@ class AxisServerClient:
                 "data_type": str(data_type),
                 "value": value,
             }
+        )
+
+    def send_param_save(self, axis_index):
+        self.send_json(
+            {
+                "cmd": "axis/param_save",
+                "axis": int(axis_index),
+            },
+            refresh_status=False,
         )
 
 
@@ -1594,6 +1774,11 @@ class AxisServerControlPanel:
             text="Write",
             command=self.diagnosis_write,
         ).pack(side="left", padx=4)
+        ttk.Button(
+            diagnosis_buttons,
+            text="Parameter Save",
+            command=self.diagnosis_parameter_save,
+        ).pack(side="left", padx=4)
         ttk.Label(
             diagnosis_buttons,
             textvariable=self.diagnosis_unit_var,
@@ -1978,17 +2163,9 @@ class AxisServerControlPanel:
         if profile_settings is None:
             return
         axis_index = self.selected_axis()
-        if self.try_send(
+        self.try_send(
             lambda: self.client.send_profile_settings(axis_index, profile_settings)
-        ):
-            reads = [
-                (axis_index, "0x6083", "0x00", "uint32"),
-                (axis_index, "0x6084", "0x00", "uint32"),
-            ]
-            if self.latest_motion_modes[axis_index] != "pv":
-                reads.insert(0, (axis_index, "0x6081", "0x00", "uint32"))
-                reads.append((axis_index, "0x60A4", "0x01", "uint32"))
-            self.queue_panel_sdo_reads(reads)
+        )
         if self.latest_motion_modes[axis_index] == "pv":
             dirty_vars = self.profile_vars[1:3]
         else:
@@ -2001,15 +2178,9 @@ class AxisServerControlPanel:
         if axis_limits is None:
             return
         axis_index = self.selected_axis()
-        if self.try_send(
+        self.try_send(
             lambda: self.client.send_axis_motion_limits(axis_index, axis_limits)
-        ):
-            self.queue_panel_sdo_reads([
-                (axis_index, "0x607F", "0x00", "uint32"),
-                (axis_index, "0x2183", "0x0C", "float32"),
-                (axis_index, "0x60C5", "0x00", "uint32"),
-                (axis_index, "0x60C6", "0x00", "uint32"),
-            ])
+        )
         for var in self.limit_vars:
             self.dirty_vars.discard(id(var))
 
@@ -2019,17 +2190,13 @@ class AxisServerControlPanel:
             return
 
         axis_index = self.selected_axis()
-        if self.try_send(
+        self.try_send(
             lambda: self.client.send_axis_software_position_limits(
                 axis_index,
                 software_limits_mm[0],
                 software_limits_mm[1],
             )
-        ):
-            self.queue_panel_sdo_reads([
-                (axis_index, "0x607D", "0x01", "int32"),
-                (axis_index, "0x607D", "0x02", "int32"),
-            ])
+        )
         for var in self.software_limit_vars:
             self.dirty_vars.discard(id(var))
 
@@ -2157,6 +2324,11 @@ class AxisServerControlPanel:
             self.queue_panel_sdo_reads([
                 (axis_index, index, subindex, data_type),
             ])
+
+    def diagnosis_parameter_save(self):
+        axis_index = self.selected_axis()
+        self.diagnosis_result_var.set("Waiting for parameter save response...")
+        self.try_send(lambda: self.client.send_param_save(axis_index))
 
     def axis_stop(self):
         self.stop_repeat()
@@ -2836,9 +3008,6 @@ class AxisServerControlPanel:
                 self.reset_panel_sdo_read_queue()
             return
 
-        if not self.panel_sdo_read_connected:
-            self.start_panel_sdo_read_queue()
-
         if not self.panel_sdo_read_queue:
             return
 
@@ -2894,6 +3063,16 @@ class AxisServerControlPanel:
         ]
         while len(motion_modes) < self.axis_count:
             motion_modes.append(motion_mode)
+        mode_displays = self._values(feedback, "mode_displays", None)
+        for axis_index, mode_display in enumerate(mode_displays[:self.axis_count]):
+            if mode_display is None:
+                continue
+            try:
+                display_mode = MODE_DISPLAY_NAMES.get(int(mode_display))
+            except (TypeError, ValueError):
+                display_mode = None
+            if display_mode is not None:
+                motion_modes[axis_index] = display_mode
         position_counts_per_unit = float(
             feedback.get(
                 "position_counts_per_unit",

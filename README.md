@@ -2,6 +2,11 @@
 
 This project has two execution paths.
 
+Motion Server documentation:
+
+- [Motion Server software architecture](docs/motion_server_architecture.md)
+- [Motion Server Basic mode API manual](docs/motion_server_api_basic.md)
+
 ## Mock path
 
 The mock path uses the same Axis Server TCP API as the real drive path, but

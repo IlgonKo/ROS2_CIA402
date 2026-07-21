@@ -9,8 +9,6 @@ from motion_server.control.axis_operations import (
     reject_if_any_axis_disabled,
 )
 from motion_server.control.setpoint_output import (
-    command_csp_positions,
-    command_profile_positions,
     command_profile_velocities,
 )
 from motion_server.api import (
@@ -20,6 +18,14 @@ from motion_server.api import (
     send_client_message,
 )
 from motion_server.app.state import inactive_trajectory_state
+from motion_server.config import status_log
+
+HALT_BIT = 1 << 8
+
+
+def request_axis_halt(runtime, axis_index):
+    slave = runtime.slaves[axis_index]
+    slave.rxpdo.controlword = int(slave.rxpdo.controlword) | HALT_BIT
 
 
 def stop_system(message, runtime, state):
@@ -41,7 +47,7 @@ def stop_system(message, runtime, state):
         if axis_index not in enabled_axes:
             continue
         if motion_mode == "pp":
-            command_profile_positions(runtime, positions, [axis_index])
+            request_axis_halt(runtime, axis_index)
         elif motion_mode == "pv":
             command_profile_velocities(
                 runtime,
@@ -52,12 +58,11 @@ def stop_system(message, runtime, state):
                 None,
             )
         elif motion_mode == "csp":
-            command_csp_positions(runtime, positions, [axis_index])
+            request_axis_halt(runtime, axis_index)
 
-    print(
+    status_log(
         "Received system/stop: "
         f"mode={mode} hold_positions={positions}",
-        flush=True,
     )
 
 
@@ -90,7 +95,7 @@ def stop_axes(message, runtime, state, client):
             continue
         motion_mode = state["motion_modes"][axis_index]
         if motion_mode == "pp":
-            command_profile_positions(runtime, positions, [axis_index])
+            request_axis_halt(runtime, axis_index)
         elif motion_mode == "pv":
             command_profile_velocities(
                 runtime,
@@ -101,15 +106,14 @@ def stop_axes(message, runtime, state, client):
                 client,
             )
         elif motion_mode == "csp":
-            command_csp_positions(runtime, positions, [axis_index])
+            request_axis_halt(runtime, axis_index)
         elif motion_mode == "jog":
             runtime.slaves[axis_index].rxpdo.controlword = 0x000F
 
 
 def reset_faults(runtime, state, axis_indices=None):
-    print(
+    status_log(
         "Received fault reset: pulsing fault reset bit, then switching on",
-        flush=True,
     )
     if axis_indices is None:
         axis_indices = list(range(axis_count(runtime)))
@@ -141,12 +145,11 @@ def reset_faults(runtime, state, axis_indices=None):
         runtime.slaves[axis_index].rxpdo.controlword = 0x0007
     exchange(runtime, cycles=5)
 
-    print(
+    status_log(
         "Fault reset complete. "
         f"axes={axis_indices} "
         f"statuswords={[f'0x{runtime.slaves[index].txpdo.statusword:04X}' for index in axis_indices]} "
         f"controlwords={[f'0x{runtime.slaves[index].rxpdo.controlword:04X}' for index in axis_indices]}",
-        flush=True,
     )
 
 
@@ -170,11 +173,10 @@ def enable(message, runtime, state, client):
     for axis_index in axes:
         runtime.slaves[axis_index].rxpdo.controlword = 0x000F
     exchange(runtime, cycles=3)
-    print(
+    status_log(
         "Received axis/enable: "
         f"axes={axes} "
         f"statuswords={[f'0x{runtime.slaves[index].txpdo.statusword:04X}' for index in axes]}",
-        flush=True,
     )
     send_client_message(client, feedback_message(runtime, state, client["id"]))
 
@@ -200,11 +202,10 @@ def disable(message, runtime, state, client):
         runtime.slaves[axis_index].rxpdo.controlword = 0x0007
     runtime.set_target_positions(state["target_positions"])
     exchange(runtime, cycles=3)
-    print(
+    status_log(
         "Received axis/disable: "
         f"axes={axes} "
         f"statuswords={[f'0x{runtime.slaves[index].txpdo.statusword:04X}' for index in axes]}",
-        flush=True,
     )
     send_client_message(client, feedback_message(runtime, state, client["id"]))
 
@@ -246,7 +247,6 @@ def set_controlword(message, runtime, state):
             hold_axis_at_actual_position(runtime, state, axis_index)
         runtime.set_target_positions(state["target_positions"])
 
-    print(
+    status_log(
         f"Manual controlword applied to {target_text}: 0x{controlword:04X}",
-        flush=True,
     )
