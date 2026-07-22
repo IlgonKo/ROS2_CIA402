@@ -120,8 +120,11 @@ class DriveManager:
     def devices(self):
         return self.ethercat_master.slaves
 
-    def connect(self):
-        self.ethercat_master.connect()
+    def connect(self, target_state=None):
+        self.ethercat_master.connect(target_state=target_state)
+
+    def enter_operational(self):
+        self.ethercat_master.enter_operational()
 
     def close(self):
         self.ethercat_master.close()

@@ -39,6 +39,7 @@ class CMMTDeviceProfile:
     CONVERTING_UNIT_VELOCITY_SUBINDEX = 0x02
     CONVERTING_UNIT_ACCELERATION_SUBINDEX = 0x03
     CONVERTING_UNIT_JERK_SUBINDEX = 0x04
+    DEFAULT_CONVERTING_UNIT_EXPONENTS = [6, 3, 3, 3]
     SOFTWARE_POSITION_LIMIT_INDEX = 0x607D
     MAX_PROFILE_VELOCITY_INDEX = 0x607F
     NEGATIVE_VELOCITY_LIMIT_INDEX = 0x2183
@@ -268,28 +269,32 @@ class CMMTDeviceProfile:
         )
 
     def read_converting_unit_exponents(self, master, axis_index):
-        return [
-            int(master.sdo.read_int8(
-                axis_index,
-                self.CONVERTING_UNIT_INDEX,
-                self.CONVERTING_UNIT_POSITION_SUBINDEX,
-            )),
-            int(master.sdo.read_int8(
-                axis_index,
-                self.CONVERTING_UNIT_INDEX,
-                self.CONVERTING_UNIT_VELOCITY_SUBINDEX,
-            )),
-            int(master.sdo.read_int8(
-                axis_index,
-                self.CONVERTING_UNIT_INDEX,
-                self.CONVERTING_UNIT_ACCELERATION_SUBINDEX,
-            )),
-            int(master.sdo.read_int8(
-                axis_index,
-                self.CONVERTING_UNIT_INDEX,
-                self.CONVERTING_UNIT_JERK_SUBINDEX,
-            )),
+        subindices = [
+            self.CONVERTING_UNIT_POSITION_SUBINDEX,
+            self.CONVERTING_UNIT_VELOCITY_SUBINDEX,
+            self.CONVERTING_UNIT_ACCELERATION_SUBINDEX,
+            self.CONVERTING_UNIT_JERK_SUBINDEX,
         ]
+        values = []
+        for value_index, subindex in enumerate(subindices):
+            try:
+                value = int(master.sdo.read_int8(
+                    axis_index,
+                    self.CONVERTING_UNIT_INDEX,
+                    subindex,
+                ))
+            except Exception as exc:
+                value = self.DEFAULT_CONVERTING_UNIT_EXPONENTS[value_index]
+                print(
+                    "CMMT converting unit exponent read failed; "
+                    "using default. "
+                    f"axis={axis_index} "
+                    f"object=0x{self.CONVERTING_UNIT_INDEX:04X}:{subindex:02X} "
+                    f"default={value} error={exc}",
+                    flush=True,
+                )
+            values.append(value)
+        return values
 
     def format_error_code(self, error_code):
         if not isinstance(error_code, int):

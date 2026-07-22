@@ -74,8 +74,11 @@ class AxisRuntime:
             return getattr(self.ethercat_master, name)
         raise AttributeError(name)
 
-    def connect(self):
-        self.drive_manager.connect()
+    def connect(self, target_state=None):
+        self.drive_manager.connect(target_state=target_state)
+
+    def enter_operational(self):
+        self.drive_manager.enter_operational()
 
     def close(self):
         self.drive_manager.close()

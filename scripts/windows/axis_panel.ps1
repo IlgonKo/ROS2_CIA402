@@ -6,23 +6,25 @@ param(
 
 $ProjectRoot = Resolve-Path (Join-Path $PSScriptRoot "..\..")
 . (Join-Path $PSScriptRoot "env.ps1")
-$AxisEnv = Import-AxisServerEnv -ProjectRoot $ProjectRoot
+$PanelConfigRoot = Join-Path $ProjectRoot "axis_control_panel"
+$PanelEnvPath = Join-Path $PanelConfigRoot ".env"
+$PanelEnv = Read-DotEnvFile -Path $PanelEnvPath
 
 if ([string]::IsNullOrWhiteSpace($HostName)) {
-    $HostName = Get-AxisServerEnvValue -EnvValues $AxisEnv -Name "AXIS_SERVER_HOST" -Default "127.0.0.1"
+    $HostName = Get-AxisServerEnvValue -EnvValues $PanelEnv -Name "MOTION_SERVER_HOST" -Default "127.0.0.1"
 }
 if ($Port -le 0) {
-    $Port = [int](Get-AxisServerEnvValue -EnvValues $AxisEnv -Name "AXIS_SERVER_PORT" -Default "15000")
+    $Port = [int](Get-AxisServerEnvValue -EnvValues $PanelEnv -Name "MOTION_SERVER_PORT" -Default "15000")
 }
-$env:AXIS_SERVER_HOST = $HostName
-$env:AXIS_SERVER_PORT = [string]$Port
+$env:MOTION_SERVER_HOST = $HostName
+$env:MOTION_SERVER_PORT = [string]$Port
+$env:AXIS_CONTROL_PANEL_CONFIG_ROOT = $PanelConfigRoot
 $env:PYTHONPATH = "$ProjectRoot;$env:PYTHONPATH"
-$Bus = Get-AxisServerEnvValue -EnvValues $AxisEnv -Name "PYSOEM_BUS" -Default "cmmt"
 
 Write-Host "Starting Axis Control Panel"
 Write-Host "Host=$HostName"
 Write-Host "Port=$Port"
-Write-Host "Bus=$Bus"
+Write-Host "Config=$PanelEnvPath"
 Write-Host "PYTHONPATH=$env:PYTHONPATH"
 
-& $Python -B (Join-Path $ProjectRoot "motion_server\control_panel.py")
+& $Python -B (Join-Path $ProjectRoot "axis_control_panel\control_panel.py")

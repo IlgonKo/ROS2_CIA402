@@ -11,8 +11,11 @@ from tkinter import messagebox
 from tkinter import ttk
 
 
-PROJECT_ROOT = Path(
-    os.environ.get("AXIS_SERVER_PROJECT_ROOT", Path(__file__).resolve().parents[1])
+PANEL_CONFIG_ROOT = Path(
+    os.environ.get(
+        "AXIS_CONTROL_PANEL_CONFIG_ROOT",
+        Path(__file__).resolve().parent,
+    )
 ).resolve()
 GUI_PERIOD_MS = 50
 RECONNECT_PERIOD = 1.0
@@ -20,6 +23,8 @@ HISTORY_SIZE = 500
 REPEAT_TOLERANCE = 10.0
 PANEL_SDO_READ_DELAY = 1.0
 PANEL_SDO_READ_PERIOD = 0.1
+PANEL_CONFIG_FILE = PANEL_CONFIG_ROOT / "config.txt"
+PANEL_ENV_FILE = PANEL_CONFIG_ROOT / ".env"
 STATUSWORD_BITS = [
     (0, "Ready"),
     (1, "Switched"),
@@ -157,6 +162,12 @@ def load_env_file(path):
     return values
 
 
+def load_panel_config():
+    if PANEL_CONFIG_FILE.exists():
+        return load_env_file(PANEL_CONFIG_FILE)
+    return load_env_file(PANEL_ENV_FILE)
+
+
 def default_axis_names(axis_count):
     base_names = ["X", "Y", "Z", "U", "V", "W"]
     return [
@@ -165,52 +176,86 @@ def default_axis_names(axis_count):
     ]
 
 
-def axis_count_from_bus(bus):
-    count = 0
-    for raw_entry in str(bus or "").split(","):
-        entry = raw_entry.strip().lower()
-        if not entry:
-            continue
-        role = "axis"
-        if ":" in entry:
-            role = entry.split(":", 1)[0].strip()
-        if role in {"axis", "drive"}:
-            count += 1
-    return max(1, count)
+def parse_axis_names(text):
+    return [
+        name.strip()
+        for name in str(text or "").split(",")
+        if name.strip()
+    ]
+
+
+def axis_count_from_status(message):
+    for key in (
+        "axis_metadata",
+        "target_positions",
+        "actual_positions",
+        "actual_velocities",
+        "statuswords",
+        "mode_displays",
+        "motion_modes",
+        "user_position_units",
+    ):
+        value = message.get(key)
+        if isinstance(value, list) and value:
+            return len(value)
+    return 0
+
+
+def request_initial_system_status(host, port, timeout=2.0):
+    try:
+        with socket.create_connection((host, int(port)), timeout=timeout) as sock:
+            sock.settimeout(timeout)
+            sock_file = sock.makefile("rwb")
+            sock_file.write(json.dumps({"cmd": "system/status"}).encode("utf-8") + b"\n")
+            sock_file.flush()
+
+            deadline = time.monotonic() + timeout
+            while time.monotonic() < deadline:
+                line = sock_file.readline()
+                if not line:
+                    break
+                message = json.loads(line.decode("utf-8"))
+                if message.get("type") == "system/status":
+                    return message
+    except (OSError, ValueError, json.JSONDecodeError):
+        return {}
+
+    return {}
 
 
 def read_runtime_config():
-    env_file = load_env_file(PROJECT_ROOT / ".env")
+    env_file = load_panel_config()
     host = os.environ.get(
-        "AXIS_SERVER_HOST",
-        env_file.get("AXIS_SERVER_HOST", "127.0.0.1"),
+        "MOTION_SERVER_HOST",
+        env_file.get("MOTION_SERVER_HOST", "127.0.0.1"),
     )
     port = int(
         os.environ.get(
-            "AXIS_SERVER_PORT",
-            env_file.get("AXIS_SERVER_PORT", "15000"),
+            "MOTION_SERVER_PORT",
+            env_file.get("MOTION_SERVER_PORT", "15000"),
         )
     )
-    axis_count = axis_count_from_bus(
+    status = request_initial_system_status(host, port)
+    axis_count = axis_count_from_status(status) or 1
+    axis_names = parse_axis_names(
         os.environ.get(
-            "PYSOEM_BUS",
-            env_file.get("PYSOEM_BUS", "cmmt"),
+            "AXIS_CONTROL_PANEL_AXIS_NAMES",
+            env_file.get("AXIS_CONTROL_PANEL_AXIS_NAMES", ""),
         )
     )
-    axis_names_text = os.environ.get("PYSOEM_AXIS_NAMES", "")
-    if axis_names_text:
-        axis_names = [
-            name.strip()
-            for name in axis_names_text.split(",")
-            if name.strip()
-        ]
-    else:
+    auto_sdo_reads = str(
+        os.environ.get(
+            "AXIS_PANEL_AUTO_SDO_READS",
+            env_file.get("AXIS_PANEL_AUTO_SDO_READS", "0"),
+        )
+    ).strip() == "1"
+    if not axis_names:
         axis_names = default_axis_names(axis_count)
 
     if len(axis_names) < axis_count:
         axis_names.extend(default_axis_names(axis_count)[len(axis_names):])
 
-    return host, port, axis_names[:axis_count]
+    return host, port, axis_names[:axis_count], auto_sdo_reads
 
 
 class AxisServerClient:
@@ -1084,10 +1129,11 @@ class TraceCanvas:
 
 
 class AxisServerControlPanel:
-    def __init__(self, client, axis_names):
+    def __init__(self, client, axis_names, auto_sdo_reads=False):
         self.client = client
         self.axis_names = axis_names
         self.axis_count = len(axis_names)
+        self.auto_sdo_reads = bool(auto_sdo_reads)
         self.root = tk.Tk()
         self.root.title("Axis Server Control Panel")
         self.root.geometry("1180x820")
@@ -2983,6 +3029,10 @@ class AxisServerControlPanel:
         self.panel_sdo_read_connected = False
 
     def start_panel_sdo_read_queue(self):
+        if not self.auto_sdo_reads:
+            self.reset_panel_sdo_read_queue()
+            return
+
         self.panel_sdo_read_queue = []
         for axis_index in range(self.axis_count):
             self.panel_sdo_read_queue.extend([
@@ -3566,10 +3616,10 @@ class AxisServerControlPanel:
 
 
 def main():
-    host, port, axis_names = read_runtime_config()
+    host, port, axis_names, auto_sdo_reads = read_runtime_config()
     client = AxisServerClient(host, port, len(axis_names))
     client.start()
-    gui = AxisServerControlPanel(client, axis_names)
+    gui = AxisServerControlPanel(client, axis_names, auto_sdo_reads)
     gui.run()
 
 

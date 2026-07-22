@@ -56,7 +56,7 @@ prepare_compose_env_file() {
       set -a
       # shellcheck disable=SC1090
       source "${base_env}"
-      printf '%s' "${AXIS_SERVER_BACKEND:-}"
+      printf '%s' "${MOTION_SERVER_BACKEND:-${AXIS_SERVER_BACKEND:-}}"
     )"
     if [[ "${backend}" == "mock" ]]; then
       local virtual_env_file

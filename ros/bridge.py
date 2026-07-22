@@ -44,13 +44,13 @@ class Cia402CommandBridgeNode(Node):
         self.axis_count = get_axis_count()
         self.axis_names = get_axis_names()
         self.host = os.environ.get(
-            "AXIS_SERVER_HOST",
-            DEFAULT_HOST,
+            "MOTION_SERVER_HOST",
+            os.environ.get("AXIS_SERVER_HOST", DEFAULT_HOST),
         )
         self.port = int(
             os.environ.get(
-                "AXIS_SERVER_PORT",
-                DEFAULT_PORT,
+                "MOTION_SERVER_PORT",
+                os.environ.get("AXIS_SERVER_PORT", DEFAULT_PORT),
             )
         )
         self.auto_request_authority = (

@@ -22,22 +22,32 @@ dist\ROS2_CIA402
 ```text
 dist\ROS2_CIA402
   motion_server.exe
-  axis_control_panel.exe
-  .env.example
-  device\cmmt\.env.example
-  device\cpx_ap_i_ec\.env.example
+  config.txt
+  config.example.txt
+  device\cmmt\config.txt
+  device\cmmt\config.example.txt
+  device\cpx_ap_i_ec\config.example.txt
+  device\virtual_servo_drive\config.txt
+  device\virtual_servo_drive\config.example.txt
+  Manual\Motion_Server_User_Manual_*.*
   Reference\cmmt_error_catalog.json
+  Tools\axis_control_panel\axis_control_panel.exe
+  Tools\axis_control_panel\config.txt
+  Tools\axis_control_panel\config.example.txt
   Tools\list_ethercat_nics.ps1
   Tools\npcap-1.88.exe
 ```
 
-Local `.env` files are intentionally not copied by the build script. Copy or
-create these files manually when running against real hardware:
+Local `.env` files can be copied by the build script as Windows `config.txt`
+files for this PC. For a clean redistributable package, create or edit these
+files manually:
 
 ```text
-dist\ROS2_CIA402\.env
-dist\ROS2_CIA402\device\cmmt\.env
-dist\ROS2_CIA402\device\cpx_ap_i_ec\.env
+dist\ROS2_CIA402\config.txt
+dist\ROS2_CIA402\device\cmmt\config.txt
+dist\ROS2_CIA402\device\cpx_ap_i_ec\config.txt
+dist\ROS2_CIA402\device\virtual_servo_drive\config.txt
+dist\ROS2_CIA402\Tools\axis_control_panel\config.txt
 ```
 
 ## Run With Mock Axes
@@ -45,7 +55,7 @@ dist\ROS2_CIA402\device\cpx_ap_i_ec\.env
 ```powershell
 cd dist\ROS2_CIA402
 .\motion_server.exe --backend mock --bus cmmt,cmmt,cmmt --server-mode basic --port 15000
-.\axis_control_panel.exe
+.\Tools\axis_control_panel\axis_control_panel.exe
 ```
 
 ## Run With Real EtherCAT Hardware
@@ -65,17 +75,17 @@ To list Windows Npcap adapter names:
 powershell -ExecutionPolicy Bypass -File .\Tools\list_ethercat_nics.ps1
 ```
 
-Set the real adapter name and device settings in `.env`, then run:
+Set the real adapter name and device settings in `config.txt`, then run:
 
 ```powershell
 cd dist\ROS2_CIA402
 .\motion_server.exe
-.\axis_control_panel.exe
+.\Tools\axis_control_panel\axis_control_panel.exe
 ```
 
 ## API Unit Policy
 
-The Axis Server public API uses:
+The Motion Server public API uses:
 
 - linear position: `mm`
 - rotary position: `deg`

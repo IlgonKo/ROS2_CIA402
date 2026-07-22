@@ -6,7 +6,10 @@ import sys
 import time
 
 PROJECT_ROOT = Path(
-    os.environ.get("AXIS_SERVER_PROJECT_ROOT", Path(__file__).resolve().parents[1])
+    os.environ.get(
+        "MOTION_SERVER_PROJECT_ROOT",
+        os.environ.get("AXIS_SERVER_PROJECT_ROOT", Path(__file__).resolve().parents[1]),
+    )
 ).resolve()
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
@@ -36,8 +39,7 @@ from motion_server.drive.diagnostics import default_diagnostics
 from motion_server.app.startup import (
     create_axis_runtime,
     initialize_drive,
-    read_axis_converting_unit_exponents,
-    read_axis_user_position_units,
+    read_startup_axis_sdo,
 )
 from motion_server.commands.trajectory import (
     update_active as update_active_trajectory,
@@ -303,10 +305,11 @@ def main():
     try:
         drive_initialized = False
         try:
-            initialize_drive(
+            startup_sdo = initialize_drive(
                 runtime,
                 args.motion_mode,
                 args.csp_interpolation_mode,
+                read_startup_axis_sdo,
             )
             drive_initialized = True
         except Exception as exc:
@@ -347,30 +350,18 @@ def main():
                 args.axis_count,
                 "Panel SDO read pending",
             )
-            software_position_limits = [
+            default_software_position_limits = [
                 [-1000000, 1000000]
                 for _ in range(args.axis_count)
             ]
-            profile_settings = [
-                [
-                    args.max_velocity,
-                    args.acceleration,
-                    args.deceleration,
-                    args.pp_jerk,
-                ]
-                for _ in range(args.axis_count)
-            ]
-            read_motion_limits_state = [
-                [
-                    args.max_velocity,
-                    -abs(args.max_velocity),
-                    args.acceleration,
-                    args.deceleration,
-                ]
-                for _ in range(args.axis_count)
-            ]
-            user_position_units = read_axis_user_position_units(runtime)
-            converting_unit_exponents = read_axis_converting_unit_exponents(runtime)
+            software_position_limits = startup_sdo.get(
+                "software_position_limits",
+                None,
+            ) or default_software_position_limits
+            startup_profile_settings = startup_sdo.get("profile_settings", None)
+            startup_motion_limits = startup_sdo.get("motion_limits", None)
+            user_position_units = startup_sdo.get("user_position_units")
+            converting_unit_exponents = startup_sdo.get("converting_unit_exponents")
             unit_state = {
                 "drive_manager": runtime.drive_manager,
                 "position_counts_per_unit": (
@@ -393,7 +384,7 @@ def main():
             for axis_index, scale in enumerate(axis_position_scales):
                 if hasattr(runtime, "set_axis_csp_counts_per_unit"):
                     runtime.set_axis_csp_counts_per_unit(axis_index, scale)
-            profile_settings = [
+            default_profile_settings = [
                 [
                     axis_motion_api_to_drive(unit_state, axis_index, args.max_velocity),
                     axis_motion_api_to_drive(
@@ -417,7 +408,13 @@ def main():
                 ]
                 for axis_index in range(args.axis_count)
             ]
-            read_motion_limits_state = [
+            profile_settings = [
+                values if values is not None else default_profile_settings[axis_index]
+                for axis_index, values in enumerate(
+                    startup_profile_settings or default_profile_settings
+                )
+            ]
+            default_motion_limits_state = [
                 [
                     axis_motion_api_to_drive(unit_state, axis_index, args.max_velocity),
                     axis_motion_api_to_drive(
@@ -439,6 +436,12 @@ def main():
                     ),
                 ]
                 for axis_index in range(args.axis_count)
+            ]
+            read_motion_limits_state = [
+                values if values is not None else default_motion_limits_state[axis_index]
+                for axis_index, values in enumerate(
+                    startup_motion_limits or default_motion_limits_state
+                )
             ]
             for axis_index, axis_profile_settings in enumerate(profile_settings):
                 slave = runtime.slaves[axis_index]

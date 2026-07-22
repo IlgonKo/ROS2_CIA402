@@ -134,7 +134,7 @@ def parse_mock_axis_user_units(args):
             "--mock-axis-types",
         )
 
-    return [0x4100 for _ in range(int(args.axis_count))]
+    return [MOCK_AXIS_TYPE_USER_UNITS["linear"] for _ in range(int(args.axis_count))]
 
 
 def parse_axis_values(raw_value, axis_count_value, parser, option_name):
@@ -151,9 +151,12 @@ def parse_axis_values(raw_value, axis_count_value, parser, option_name):
 def parse_mock_axis_type(value):
     key = str(value).strip().lower()
     if key not in MOCK_AXIS_TYPE_USER_UNITS:
-        raise ValueError(
-            f"Unsupported mock axis type {value!r}; expected linear or rotary"
+        print(
+            "Unsupported mock axis type; using linear fallback. "
+            f"value={value!r} expected=linear|rotary",
+            flush=True,
         )
+        key = "linear"
     return MOCK_AXIS_TYPE_USER_UNITS[key]
 
 
@@ -241,12 +244,78 @@ def read_axis_converting_unit_exponents(runtime):
     return exponents
 
 
-def initialize_drive(runtime, motion_mode, csp_interpolation_mode):
-    runtime.connect()
+def read_startup_axis_sdo(runtime):
+    return {
+        "user_position_units": read_axis_user_position_units(runtime),
+        "converting_unit_exponents": read_axis_converting_unit_exponents(runtime),
+        "software_position_limits": read_axis_software_position_limits(runtime),
+        "profile_settings": read_axis_profile_settings(runtime),
+        "motion_limits": read_axis_motion_limits(runtime),
+    }
+
+
+def read_axis_software_position_limits(runtime):
+    limits = []
+    for axis_index in range(axis_count(runtime)):
+        try:
+            values = DEVICE_PROFILE.read_software_position_limits(runtime, axis_index)
+        except Exception as exc:
+            print(
+                "Axis software position limit read failed: "
+                f"axis={axis_index} object=0x607D:01-02 error={exc}",
+                flush=True,
+            )
+            values = [-1000000, 1000000]
+        limits.append(values)
+    return limits
+
+
+def read_axis_profile_settings(runtime):
+    settings = []
+    for axis_index in range(axis_count(runtime)):
+        try:
+            values = DEVICE_PROFILE.read_profile_settings(runtime, axis_index)
+        except Exception as exc:
+            print(
+                "Axis profile setting read failed: "
+                f"axis={axis_index} objects=0x6081/0x6083/0x6084/0x60A4 error={exc}",
+                flush=True,
+            )
+            values = None
+        settings.append(values)
+    return settings
+
+
+def read_axis_motion_limits(runtime):
+    limits = []
+    for axis_index in range(axis_count(runtime)):
+        try:
+            values = DEVICE_PROFILE.read_motion_limits(runtime, axis_index)
+        except Exception as exc:
+            print(
+                "Axis motion limit read failed: "
+                f"axis={axis_index} objects=0x607F/0x2183/0x60C5/0x60C6 error={exc}",
+                flush=True,
+            )
+            values = None
+        limits.append(values)
+    return limits
+
+
+def initialize_drive(runtime, motion_mode, csp_interpolation_mode, startup_sdo_reader=None):
+    staged_startup = hasattr(runtime, "enter_operational")
+    startup_sdo = None
+    runtime.connect(target_state="preop" if staged_startup else None)
     require_txpdo_fields(runtime)
+    if startup_sdo_reader is not None:
+        startup_sdo = startup_sdo_reader(runtime)
     write_csp_interpolation_modes(runtime, csp_interpolation_mode)
     if motion_mode == "pv":
-        user_position_units = read_axis_user_position_units(runtime)
+        user_position_units = (
+            startup_sdo.get("user_position_units")
+            if startup_sdo is not None
+            else read_axis_user_position_units(runtime)
+        )
         blocked_axes = [
             axis_index
             for axis_index, user_position_unit in enumerate(user_position_units)
@@ -263,7 +332,11 @@ def initialize_drive(runtime, motion_mode, csp_interpolation_mode):
                     blocked_axes,
                 )
             )
-    configure_motion_mode(runtime, motion_mode)
+    if staged_startup:
+        configure_motion_mode_without_exchange(runtime, motion_mode)
+        runtime.enter_operational()
+    else:
+        configure_motion_mode(runtime, motion_mode)
 
     exchange(runtime, cycles=10)
     runtime.sync_trajectory_to_actual_positions()
@@ -290,6 +363,15 @@ def initialize_drive(runtime, motion_mode, csp_interpolation_mode):
                 f"Statuswords={statuswords}; continuing startup.",
                 flush=True,
             )
+    return startup_sdo
+
+
+def configure_motion_mode_without_exchange(runtime, mode_name):
+    require_pdo_fields_for_mode(runtime, mode_name)
+    code = DEVICE_PROFILE.mode_code(mode_name)
+    runtime.set_mode_of_operation_all(code)
+    for axis_index in range(axis_count(runtime)):
+        DEVICE_PROFILE.configure_mode_code(runtime, axis_index, code)
 
 
 def write_csp_interpolation_modes(runtime, csp_interpolation_mode):

@@ -22,11 +22,32 @@ def load_env_defaults(env_path, override=False):
             os.environ.setdefault(key, value)
 
 
+def env_value(name, default="", legacy_name=None):
+    value = os.environ.get(name)
+    if value is not None:
+        return value
+    if legacy_name:
+        legacy_value = os.environ.get(legacy_name)
+        if legacy_value is not None:
+            return legacy_value
+    return default
+
+
 def load_project_env_defaults():
-    project_root = Path(__file__).resolve().parents[1]
+    project_root = Path(
+        env_value(
+            "MOTION_SERVER_PROJECT_ROOT",
+            Path(__file__).resolve().parents[1],
+            "AXIS_SERVER_PROJECT_ROOT",
+        )
+    ).resolve()
     load_env_defaults(project_root / ".env")
 
-    backend = os.environ.get("AXIS_SERVER_BACKEND", "pysoem").strip().lower()
+    backend = env_value(
+        "MOTION_SERVER_BACKEND",
+        "pysoem",
+        "AXIS_SERVER_BACKEND",
+    ).strip().lower()
     if backend == "mock":
         virtual_env_file = os.environ.get(
             "VIRTUAL_SERVO_DRIVE_ENV_FILE",
@@ -41,8 +62,12 @@ def load_project_env_defaults():
 load_project_env_defaults()
 
 
-AXIS_SERVER_MODES = ("basic", "advanced")
-AXIS_SERVER_MODE = os.environ.get("AXIS_SERVER_MODE", "basic").strip().lower()
+MOTION_SERVER_MODES = ("basic", "advanced")
+MOTION_SERVER_MODE = env_value(
+    "MOTION_SERVER_MODE",
+    "basic",
+    "AXIS_SERVER_MODE",
+).strip().lower()
 DEFAULT_CYCLE_TIME = float(os.environ.get("PYSOEM_CYCLE_TIME", "0.01"))
 DEFAULT_SPIN_WAIT_TIME = float(os.environ.get("PYSOEM_SPIN_WAIT_TIME", "0.00015"))
 DERIVED_VELOCITY_ALPHA = float(
@@ -50,13 +75,15 @@ DERIVED_VELOCITY_ALPHA = float(
 )
 FEEDBACK_PERIOD = 0.05
 STATUS_LOG_PERIOD = float(os.environ.get("PYSOEM_STATUS_LOG_PERIOD", "1.0"))
-AXIS_SERVER_COMMAND_LOGS = os.environ.get(
+AXIS_SERVER_COMMAND_LOGS = env_value(
+    "MOTION_SERVER_COMMAND_LOGS",
+    "0",
     "AXIS_SERVER_COMMAND_LOGS",
-    "0",
 ).strip() == "1"
-AXIS_SERVER_STATUS_LOGS = os.environ.get(
-    "AXIS_SERVER_STATUS_LOGS",
+AXIS_SERVER_STATUS_LOGS = env_value(
+    "MOTION_SERVER_STATUS_LOGS",
     "0",
+    "AXIS_SERVER_STATUS_LOGS",
 ).strip() == "1"
 CYCLE_STATS_LOGS = os.environ.get("PYSOEM_CYCLE_STATS_LOGS", "1").strip() == "1"
 CYCLE_STATS_PERIOD = float(os.environ.get("PYSOEM_CYCLE_STATS_PERIOD", "1.0"))
@@ -161,7 +188,11 @@ def parse_args(argv=None):
     parser.add_argument(
         "--backend",
         choices=["mock", "pysoem"],
-        default=os.environ.get("AXIS_SERVER_BACKEND", "pysoem").lower(),
+        default=env_value(
+            "MOTION_SERVER_BACKEND",
+            "pysoem",
+            "AXIS_SERVER_BACKEND",
+        ).lower(),
         help="Device backend. pysoem drives real EtherCAT slaves; mock uses VirtualCiA402Servo.",
     )
     parser.add_argument(
@@ -192,15 +223,19 @@ def parse_args(argv=None):
     )
     parser.add_argument(
         "--server-mode",
-        choices=AXIS_SERVER_MODES,
-        default=AXIS_SERVER_MODE,
+        choices=MOTION_SERVER_MODES,
+        default=MOTION_SERVER_MODE,
         help=(
-            "Axis Server feature mode. basic exposes point/profile motion and "
+            "Motion Server feature mode. basic exposes point/profile motion and "
             "parameter APIs; advanced enables cyclic trajectory commands."
         ),
     )
     parser.add_argument("--host", default="0.0.0.0")
-    parser.add_argument("--port", type=int, default=15000)
+    parser.add_argument(
+        "--port",
+        type=int,
+        default=int(env_value("MOTION_SERVER_PORT", "15000", "AXIS_SERVER_PORT")),
+    )
     parser.add_argument(
         "--cycle-time",
         type=float,

@@ -31,7 +31,10 @@ class MockMaster:
         for _ in self.slaves:
             self.working_counter.add_slave()
 
-    def connect(self):
+    def connect(self, target_state=None):
+        self._connected = True
+
+    def enter_operational(self):
         self._connected = True
 
     def close(self):

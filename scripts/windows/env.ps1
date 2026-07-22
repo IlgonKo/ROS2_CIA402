@@ -65,7 +65,11 @@ function Import-AxisServerEnv {
         }
     }
 
-    if ($merged["AXIS_SERVER_BACKEND"] -eq "mock") {
+    $backend = $merged["MOTION_SERVER_BACKEND"]
+    if ([string]::IsNullOrWhiteSpace($backend)) {
+        $backend = $merged["AXIS_SERVER_BACKEND"]
+    }
+    if ($backend -eq "mock") {
         $virtualEnvFile = $merged["VIRTUAL_SERVO_DRIVE_ENV_FILE"]
         if ([string]::IsNullOrWhiteSpace($virtualEnvFile)) {
             $virtualEnvFile = "device/virtual_servo_drive/.env"

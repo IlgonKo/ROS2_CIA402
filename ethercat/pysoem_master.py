@@ -61,6 +61,8 @@ class PySOEMMaster:
         self._processdata_prepared = False
         self._pysoem = None
         self._master = None
+        self._emergency_callbacks = []
+        self.emergency_messages = []
 
         self.slaves = [
             PySOEMPdoSlave(device_profile)
@@ -84,14 +86,14 @@ class PySOEMMaster:
                     f"Expected {self.slave_count} EtherCAT slaves, "
                     f"found {discovered_slaves}."
                 )
+            self._register_emergency_callbacks()
 
             self._request_pre_operational(pysoem, timeout_us)
             self._prepare_device_profiles()
             self._master.config_map()
             self._configure_distributed_clocks()
 
-            if target_state is None:
-                target_state = pysoem.OP_STATE
+            target_state = self._resolve_target_state(pysoem, target_state)
 
             if target_state in (pysoem.SAFEOP_STATE, pysoem.OP_STATE):
                 self._configure_sync_parameters()
@@ -121,6 +123,34 @@ class PySOEMMaster:
             except Exception:
                 pass
             raise
+
+    def enter_operational(self, timeout_us=50000):
+        self._require_connected()
+        pysoem = self._load_pysoem()
+        self._configure_sync_parameters()
+        self._configure_dc_sync0()
+        self._request_safe_operational(pysoem, timeout_us)
+        self._prime_outputs()
+        self._request_operational(pysoem, timeout_us)
+
+    def _resolve_target_state(self, pysoem, target_state):
+        if target_state is None:
+            return pysoem.OP_STATE
+        if isinstance(target_state, str):
+            states = {
+                "init": pysoem.INIT_STATE,
+                "preop": pysoem.PREOP_STATE,
+                "pre_op": pysoem.PREOP_STATE,
+                "safeop": pysoem.SAFEOP_STATE,
+                "safe_op": pysoem.SAFEOP_STATE,
+                "op": pysoem.OP_STATE,
+                "operational": pysoem.OP_STATE,
+            }
+            normalized = target_state.strip().lower()
+            if normalized not in states:
+                raise ValueError(f"Unsupported EtherCAT target state: {target_state}")
+            return states[normalized]
+        return int(target_state)
 
     def describe_slaves(self):
         if self._master is None:
@@ -182,6 +212,7 @@ class PySOEMMaster:
         master = self._master
         self._master = None
         self._reset_processdata_state()
+        self._emergency_callbacks = []
         if master is not None:
             master.close()
 
@@ -194,6 +225,23 @@ class PySOEMMaster:
         return self._master.slaves[slave_index].sdo_read(
             index, subindex, size=size
         )
+
+    def _register_emergency_callbacks(self):
+        self._emergency_callbacks = []
+        self.emergency_messages = []
+        for slave_index, slave in enumerate(self._master.slaves):
+            if not hasattr(slave, "add_emergency_callback"):
+                continue
+
+            def emergency_callback(emergency, slave_index=slave_index):
+                self.emergency_messages.append({
+                    "slave": slave_index,
+                    "message": str(emergency),
+                    "repr": repr(emergency),
+                })
+
+            slave.add_emergency_callback(emergency_callback)
+            self._emergency_callbacks.append(emergency_callback)
 
     def prepare_processdata(self):
         self._require_connected()
