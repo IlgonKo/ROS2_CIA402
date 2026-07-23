@@ -55,7 +55,7 @@ class Axis:
 
     def get_velocity(self):
         return self.servo.get_velocity()
-    
+
     def get_target_position(self):
         return self.servo.get_target_position()
 

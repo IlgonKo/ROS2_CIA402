@@ -14,13 +14,13 @@ powershell -ExecutionPolicy Bypass -File scripts\windows\build_exe.ps1
 The package is created at:
 
 ```text
-dist\ROS2_CIA402
+dist\Motion Server
 ```
 
 ## Package Layout
 
 ```text
-dist\ROS2_CIA402
+dist\Motion Server
   motion_server.exe
   config.txt
   config.example.txt
@@ -29,6 +29,7 @@ dist\ROS2_CIA402
   device\cpx_ap_i_ec\config.example.txt
   device\virtual_servo_drive\config.txt
   device\virtual_servo_drive\config.example.txt
+  Manual\Motion_Server_Installation_Manual_*.*
   Manual\Motion_Server_User_Manual_*.*
   Reference\cmmt_error_catalog.json
   Tools\axis_control_panel\axis_control_panel.exe
@@ -43,17 +44,17 @@ files for this PC. For a clean redistributable package, create or edit these
 files manually:
 
 ```text
-dist\ROS2_CIA402\config.txt
-dist\ROS2_CIA402\device\cmmt\config.txt
-dist\ROS2_CIA402\device\cpx_ap_i_ec\config.txt
-dist\ROS2_CIA402\device\virtual_servo_drive\config.txt
-dist\ROS2_CIA402\Tools\axis_control_panel\config.txt
+dist\Motion Server\config.txt
+dist\Motion Server\device\cmmt\config.txt
+dist\Motion Server\device\cpx_ap_i_ec\config.txt
+dist\Motion Server\device\virtual_servo_drive\config.txt
+dist\Motion Server\Tools\axis_control_panel\config.txt
 ```
 
 ## Run With Mock Axes
 
 ```powershell
-cd dist\ROS2_CIA402
+cd "dist\Motion Server"
 .\motion_server.exe --backend mock --bus cmmt,cmmt,cmmt --server-mode basic --port 15000
 .\Tools\axis_control_panel\axis_control_panel.exe
 ```
@@ -78,7 +79,7 @@ powershell -ExecutionPolicy Bypass -File .\Tools\list_ethercat_nics.ps1
 Set the real adapter name and device settings in `config.txt`, then run:
 
 ```powershell
-cd dist\ROS2_CIA402
+cd "dist\Motion Server"
 .\motion_server.exe
 .\Tools\axis_control_panel\axis_control_panel.exe
 ```

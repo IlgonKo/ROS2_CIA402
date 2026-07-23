@@ -15,7 +15,7 @@ class TxPDO:
         padding(8),
     ]
     MAPPING_ENTRIES = pdo_mapping_entries(MAPPING_ITEMS)
- 
+
     def __init__(self):
         self.mapping = self.objects_from_mapping_entries(
             self.MAPPING_ENTRIES

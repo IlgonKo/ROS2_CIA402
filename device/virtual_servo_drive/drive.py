@@ -3,7 +3,7 @@ from device.virtual_servo_drive.object_dictionary import VirtualObjectDictionary
 from device.cia402 import CiA402StateMachine
 
 
-class VirtualCiA402Servo(ServoInterface): 
+class VirtualCiA402Servo(ServoInterface):
     def __init__(self, cycle_time=0.001):
         self.cycle_time = cycle_time
 
@@ -12,7 +12,7 @@ class VirtualCiA402Servo(ServoInterface):
 
         self.actual_position = 0.0
         self.actual_velocity = 0.0
-        
+
         self.kp = 5.0
         self.target_reached = False
         self.window_counter = 0
@@ -32,13 +32,13 @@ class VirtualCiA402Servo(ServoInterface):
 
     # ---------------------------------
     # Servo Interface
-    # ---------------------------------     
+    # ---------------------------------
     def set_controlword(self, controlword):
-        self.od.write(0x6040, int(controlword))      
+        self.od.write(0x6040, int(controlword))
 
     def get_statusword(self):
-        return self.od.read(0x6041)   
-    
+        return self.od.read(0x6041)
+
     def update(self):
         self.process_cycle()
 
@@ -52,7 +52,7 @@ class VirtualCiA402Servo(ServoInterface):
                 self.homing_error = False
         self.od.write(0x6060,next_mode)
 
-    def set_target_position(self, position):        
+    def set_target_position(self, position):
         if self._position_command_requires_reference() and not self.homing_referenced:
             return
 
@@ -600,9 +600,9 @@ class VirtualCiA402Servo(ServoInterface):
         max_vel = min(profile_vel, max_profile_vel) if max_profile_vel > 0 else profile_vel
         accel = self.od.read(0x6083)
         decel = self.od.read(0x6084)
-        
+
         error = target - self.actual_position
-        
+
         desired_velocity = self._position_rate_to_velocity(self.kp * error)
         desired_velocity = max(
             min(desired_velocity, max_vel),
@@ -629,7 +629,7 @@ class VirtualCiA402Servo(ServoInterface):
             self._velocity_to_position_rate(self.actual_velocity)
             * self.cycle_time
         )
-        
+
         self.od.write(0x6064, self.actual_position)
 
         self.od.write(0x606C, self.actual_velocity)

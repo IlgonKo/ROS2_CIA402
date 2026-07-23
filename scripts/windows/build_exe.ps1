@@ -9,7 +9,7 @@ $ErrorActionPreference = "Stop"
 
 $ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 $ProjectRoot = Resolve-Path (Join-Path $ScriptDir "..\..")
-$PackageRoot = Join-Path $ProjectRoot "dist\ROS2_CIA402"
+$PackageRoot = Join-Path $ProjectRoot "dist\Motion Server"
 $ToolsRoot = Join-Path $PackageRoot "Tools"
 $PanelToolRoot = Join-Path $ToolsRoot "axis_control_panel"
 $ManualRoot = Join-Path $PackageRoot "Manual"
@@ -97,7 +97,7 @@ try {
     Copy-WindowsConfig "device\virtual_servo_drive\.env.example" (Join-Path $PackageRoot "device\virtual_servo_drive\config.example.txt")
     Copy-WindowsConfig "axis_control_panel\.env.example" (Join-Path $PanelToolRoot "config.example.txt")
     Copy-Item -Force "Reference\cmmt_error_catalog.json" (Join-Path $PackageRoot "Reference\cmmt_error_catalog.json")
-    $manualFiles = Get-ChildItem -Path "Reference" -File -Filter "Motion_Server_User_Manual*"
+    $manualFiles = Get-ChildItem -Path "docs" -File -Filter "Motion_Server_*_Manual*"
     foreach ($manualFile in $manualFiles) {
         Copy-Item -Force $manualFile.FullName (Join-Path $ManualRoot $manualFile.Name)
     }

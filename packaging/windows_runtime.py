@@ -72,21 +72,22 @@ def load_axis_env(root):
         )
         values.update(read_dotenv(virtual_env_path))
 
-    device_env_file = values.get("PYSOEM_DEVICE_ENV_FILE", "")
+    device_config_root = values.get("PYSOEM_DEVICE_CONFIG_ROOT", "device")
+    device_config_root_path = Path(device_config_root)
+    if not device_config_root_path.is_absolute():
+        device_config_root_path = root / device_config_root_path
     bus = values.get("PYSOEM_BUS", "cmmt")
-    bus_entries = [entry.strip().lower() for entry in bus.split(",")]
-    has_cmmt = "cmmt" in bus_entries or any(
-        entry.endswith(":cmmt") for entry in bus_entries
-    )
-    if not device_env_file and has_cmmt:
-        device_env_file = (
-            "device/cmmt/config.txt"
-            if root_config_exists
-            else "device/cmmt/.env"
-        )
-
-    if device_env_file:
-        device_env_path = resolve_config_file(root, device_env_file, "")
+    loaded_profiles = set()
+    for raw_entry in bus.split(","):
+        entry = raw_entry.strip().lower()
+        if not entry:
+            continue
+        profile = entry.split(":", 1)[1].strip() if ":" in entry else entry
+        if profile in loaded_profiles:
+            continue
+        loaded_profiles.add(profile)
+        device_config_name = "config.txt" if root_config_exists else ".env"
+        device_env_path = device_config_root_path / profile / device_config_name
         values.update(read_dotenv(device_env_path))
 
     for key, value in values.items():

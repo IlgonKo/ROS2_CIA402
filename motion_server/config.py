@@ -33,6 +33,32 @@ def env_value(name, default="", legacy_name=None):
     return default
 
 
+def bus_profile_names(raw_bus):
+    profiles = []
+    for raw_entry in str(raw_bus or "").split(","):
+        entry = raw_entry.strip().lower()
+        if not entry:
+            continue
+        if ":" in entry:
+            _role, entry = [
+                part.strip()
+                for part in entry.split(":", 1)
+            ]
+        if entry and entry not in profiles:
+            profiles.append(entry)
+    return profiles
+
+
+def load_bus_device_env_defaults(project_root):
+    config_root = Path(os.environ.get("PYSOEM_DEVICE_CONFIG_ROOT", "device"))
+    if not config_root.is_absolute():
+        config_root = project_root / config_root
+
+    for profile_name in bus_profile_names(os.environ.get("PYSOEM_BUS", "cmmt")):
+        device_env_path = config_root / profile_name / ".env"
+        load_env_defaults(device_env_path)
+
+
 def load_project_env_defaults():
     project_root = Path(
         env_value(
@@ -42,6 +68,7 @@ def load_project_env_defaults():
         )
     ).resolve()
     load_env_defaults(project_root / ".env")
+    load_bus_device_env_defaults(project_root)
 
     backend = env_value(
         "MOTION_SERVER_BACKEND",
@@ -70,10 +97,8 @@ MOTION_SERVER_MODE = env_value(
 ).strip().lower()
 DEFAULT_CYCLE_TIME = float(os.environ.get("PYSOEM_CYCLE_TIME", "0.01"))
 DEFAULT_SPIN_WAIT_TIME = float(os.environ.get("PYSOEM_SPIN_WAIT_TIME", "0.00015"))
-DERIVED_VELOCITY_ALPHA = float(
-    os.environ.get("PYSOEM_DERIVED_VELOCITY_ALPHA", "0.2")
-)
-FEEDBACK_PERIOD = 0.05
+DERIVED_VELOCITY_ALPHA = float(os.environ.get("PYSOEM_DERIVED_VELOCITY_ALPHA", "0.2"))
+FEEDBACK_PERIOD = float(os.environ.get("MOTION_SERVER_FEEDBACK_PERIOD", "0.05"))
 STATUS_LOG_PERIOD = float(os.environ.get("PYSOEM_STATUS_LOG_PERIOD", "1.0"))
 AXIS_SERVER_COMMAND_LOGS = env_value(
     "MOTION_SERVER_COMMAND_LOGS",

@@ -40,22 +40,32 @@ function Import-AxisServerEnv {
         $merged[$entry.Key] = $entry.Value
     }
 
-    $deviceEnvFile = $merged["PYSOEM_DEVICE_ENV_FILE"]
-    if ([string]::IsNullOrWhiteSpace($deviceEnvFile)) {
-        $bus = $merged["PYSOEM_BUS"]
-        if ([string]::IsNullOrWhiteSpace($bus)) {
-            $bus = "cmmt"
-        }
-        $busEntries = @($bus.Split(",") | ForEach-Object { $_.Trim().ToLowerInvariant() })
-        if ($busEntries -contains "cmmt" -or ($busEntries | Where-Object { $_.EndsWith(":cmmt") }).Count -gt 0) {
-            $deviceEnvFile = "device/cmmt/.env"
-        }
+    $deviceConfigRoot = $merged["PYSOEM_DEVICE_CONFIG_ROOT"]
+    if ([string]::IsNullOrWhiteSpace($deviceConfigRoot)) {
+        $deviceConfigRoot = "device"
     }
-
-    if (-not [string]::IsNullOrWhiteSpace($deviceEnvFile)) {
-        if (-not [System.IO.Path]::IsPathRooted($deviceEnvFile)) {
-            $deviceEnvFile = Join-Path $ProjectRoot $deviceEnvFile
+    if (-not [System.IO.Path]::IsPathRooted($deviceConfigRoot)) {
+        $deviceConfigRoot = Join-Path $ProjectRoot $deviceConfigRoot
+    }
+    $bus = $merged["PYSOEM_BUS"]
+    if ([string]::IsNullOrWhiteSpace($bus)) {
+        $bus = "cmmt"
+    }
+    $loadedProfiles = @{}
+    foreach ($busEntry in @($bus.Split(","))) {
+        $entry = $busEntry.Trim().ToLowerInvariant()
+        if ([string]::IsNullOrWhiteSpace($entry)) {
+            continue
         }
+        $profile = $entry
+        if ($entry.Contains(":")) {
+            $profile = $entry.Split(":", 2)[1].Trim()
+        }
+        if ($loadedProfiles.ContainsKey($profile)) {
+            continue
+        }
+        $loadedProfiles[$profile] = $true
+        $deviceEnvFile = Join-Path (Join-Path $deviceConfigRoot $profile) ".env"
         if (Test-Path -LiteralPath $deviceEnvFile) {
             foreach ($entry in (Read-DotEnvFile -Path $deviceEnvFile).GetEnumerator()) {
                 $merged[$entry.Key] = $entry.Value

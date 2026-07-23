@@ -1,7 +1,7 @@
 from abc import ABC
 from abc import abstractmethod
 
-class ServoInterface(ABC):    
+class ServoInterface(ABC):
     @abstractmethod
     def set_controlword(self, controlword):
         pass
