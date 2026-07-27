@@ -8,7 +8,6 @@ from axis_control_panel.client import (
     request_initial_system_status,
 )
 
-
 PANEL_CONFIG_ROOT = Path(
     os.environ.get(
         "AXIS_CONTROL_PANEL_CONFIG_ROOT",
@@ -17,7 +16,6 @@ PANEL_CONFIG_ROOT = Path(
 ).resolve()
 PANEL_CONFIG_FILE = PANEL_CONFIG_ROOT / "config.txt"
 PANEL_ENV_FILE = PANEL_CONFIG_ROOT / ".env"
-
 
 def load_env_file(path):
     values = {}
@@ -34,12 +32,10 @@ def load_env_file(path):
 
     return values
 
-
 def load_panel_config():
     if PANEL_CONFIG_FILE.exists():
         return load_env_file(PANEL_CONFIG_FILE)
     return load_env_file(PANEL_ENV_FILE)
-
 
 def default_axis_names(axis_count):
     base_names = ["X", "Y", "Z", "U", "V", "W"]
@@ -48,14 +44,12 @@ def default_axis_names(axis_count):
         for index in range(axis_count)
     ]
 
-
 def parse_axis_names(text):
     return [
         name.strip()
         for name in str(text or "").split(",")
         if name.strip()
     ]
-
 
 def read_runtime_config():
     env_file = load_panel_config()

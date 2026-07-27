@@ -1,5 +1,4 @@
 """Motion Server connection helpers for Axis Control Panel."""
-
 from tkinter import messagebox
 
 
