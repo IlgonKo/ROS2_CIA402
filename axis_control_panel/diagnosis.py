@@ -48,6 +48,39 @@ class DiagnosisMixin:
         self.diagnosis_result_var.set("Waiting for parameter save response...")
         self.try_send(lambda: self.client.send_param_save(axis_index))
 
+    def axis_restart(self):
+        axis_index = self.selected_axis()
+        confirmed = messagebox.askyesno(
+            "Restart Selected Axis",
+            f"Restart Axis {axis_index} device?",
+        )
+        if not confirmed:
+            return
+        self.stop_tab_motion()
+        self.diagnosis_result_var.set("Waiting for axis restart response...")
+        self.try_send(lambda: self.client.send_axis_restart(axis_index))
+
+    def server_reset(self):
+        self.stop_tab_motion()
+        self.diagnosis_result_var.set("Waiting for server reset response...")
+        self.try_send(self.client.send_server_reset)
+
+    def bus_reconnect(self):
+        self.stop_tab_motion()
+        self.diagnosis_result_var.set("Waiting for bus reconnect response...")
+        self.try_send(self.client.send_bus_reconnect)
+
+    def server_restart(self):
+        confirmed = messagebox.askyesno(
+            "Restart Motion Server",
+            "Restart Motion Server process?",
+        )
+        if not confirmed:
+            return
+        self.stop_tab_motion()
+        self.diagnosis_result_var.set("Waiting for server restart response...")
+        self.try_send(self.client.send_server_restart)
+
     def read_diagnosis_request(self, include_value):
         data_type = self.diagnosis_type_var.get().strip().lower()
         if data_type not in {

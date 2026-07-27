@@ -307,6 +307,7 @@ def initialize_drive(runtime, motion_mode, csp_interpolation_mode, startup_sdo_r
     startup_sdo = None
     runtime.connect(target_state="preop" if staged_startup else None)
     require_txpdo_fields(runtime)
+    clear_axis_restart_commands(runtime)
     if startup_sdo_reader is not None:
         startup_sdo = startup_sdo_reader(runtime)
     write_csp_interpolation_modes(runtime, csp_interpolation_mode)
@@ -364,6 +365,26 @@ def initialize_drive(runtime, motion_mode, csp_interpolation_mode, startup_sdo_r
                 flush=True,
             )
     return startup_sdo
+
+
+def clear_axis_restart_commands(runtime):
+    if not hasattr(DEVICE_PROFILE, "clear_axis_restart_command"):
+        return
+
+    for axis_index in range(axis_count(runtime)):
+        try:
+            result = DEVICE_PROFILE.clear_axis_restart_command(runtime, axis_index)
+            print(
+                "Axis restart command cleared: "
+                f"axis={axis_index} result={result}",
+                flush=True,
+            )
+        except Exception as exc:
+            print(
+                "Axis restart command clear failed; continuing. "
+                f"axis={axis_index} error={exc}",
+                flush=True,
+            )
 
 
 def configure_motion_mode_without_exchange(runtime, mode_name):

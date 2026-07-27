@@ -2,7 +2,7 @@ from motion_server.api.messages import command_name, send_client_message
 from motion_server.config import status_log
 
 
-def authority_status_payload(client, state, message_type="authority/status"):
+def authority_status_payload(client, state, message_type="system/authority/status"):
     owner = state.get("command_authority_owner")
     owned_by_this_client = owner is not None and owner == client["id"]
     return {
@@ -19,7 +19,7 @@ def acquire_authority(client, state):
     owner = state.get("command_authority_owner")
     if owner is None or owner == client["id"]:
         state["command_authority_owner"] = client["id"]
-        payload = authority_status_payload(client, state, "authority/acquire")
+        payload = authority_status_payload(client, state, "system/authority/request")
         payload["granted"] = True
         payload["message"] = (
             "Command authority granted."
@@ -33,7 +33,7 @@ def acquire_authority(client, state):
     send_client_message(
         client,
         {
-            "type": "authority/acquire",
+            "type": "system/authority/request",
             "ok": False,
             "granted": False,
             "reason": "authority_busy",
@@ -65,7 +65,7 @@ def release_authority(client, state):
     send_client_message(
         client,
         {
-            "type": "authority/release",
+            "type": "system/authority/release",
             "ok": owner == client["id"],
             "granted": False,
             "reason": reason,

@@ -50,11 +50,14 @@ class CMMTDeviceProfile:
     MAX_ACCELERATION_INDEX = 0x60C5
     MAX_DECELERATION_INDEX = 0x60C6
     SYNC_PARAMETER_INDEX = 0x212E
+    DEVICE_RESET_INDEX = 0x2000
+    DEVICE_RESET_COMMAND_SUBINDEX = 0x01
     PARAMETER_SAVE_INDEX = 0x2005
     PARAMETER_SAVE_COMMAND_SUBINDEX = 0x01
     PARAMETER_SAVE_STATUS_SUBINDEX = 0x02
     PARAMETER_SAVE_SELECTION_SUBINDEX = 0x03
     PARAMETER_SAVE_RETURN_CODE_SUBINDEX = 0x04
+    PARAMETER_SAVE_RETURN_VALUE_SUBINDEX = 0x05
 
     MOTION_MODES = {
         "pp": PROFILE_POSITION_MODE,
@@ -545,35 +548,74 @@ class CMMTDeviceProfile:
         return True
 
     def save_parameters(self, master, axis_index):
-        master.sdo.write_uint32(
+        master.sdo.write_uint16(
             axis_index,
             self.PARAMETER_SAVE_INDEX,
             self.PARAMETER_SAVE_SELECTION_SUBINDEX,
             1,
         )
-        master.sdo.write_uint32(
-            axis_index,
-            self.PARAMETER_SAVE_INDEX,
-            self.PARAMETER_SAVE_COMMAND_SUBINDEX,
-            1,
-        )
-        status = master.sdo.read_uint32(
-            axis_index,
-            self.PARAMETER_SAVE_INDEX,
-            self.PARAMETER_SAVE_STATUS_SUBINDEX,
-        )
-        return_code = master.sdo.read_uint32(
-            axis_index,
-            self.PARAMETER_SAVE_INDEX,
-            self.PARAMETER_SAVE_RETURN_CODE_SUBINDEX,
-        )
-        master.sdo.write_uint32(
-            axis_index,
-            self.PARAMETER_SAVE_INDEX,
-            self.PARAMETER_SAVE_COMMAND_SUBINDEX,
-            0,
-        )
+        try:
+            master.sdo.write_uint8(
+                axis_index,
+                self.PARAMETER_SAVE_INDEX,
+                self.PARAMETER_SAVE_COMMAND_SUBINDEX,
+                1,
+            )
+            status = master.sdo.read_uint8(
+                axis_index,
+                self.PARAMETER_SAVE_INDEX,
+                self.PARAMETER_SAVE_STATUS_SUBINDEX,
+            )
+            return_code = master.sdo.read_uint16(
+                axis_index,
+                self.PARAMETER_SAVE_INDEX,
+                self.PARAMETER_SAVE_RETURN_CODE_SUBINDEX,
+            )
+            return_value = master.sdo.read_uint16(
+                axis_index,
+                self.PARAMETER_SAVE_INDEX,
+                self.PARAMETER_SAVE_RETURN_VALUE_SUBINDEX,
+            )
+        finally:
+            master.sdo.write_uint8(
+                axis_index,
+                self.PARAMETER_SAVE_INDEX,
+                self.PARAMETER_SAVE_COMMAND_SUBINDEX,
+                0,
+            )
         return {
             "status": int(status),
             "return_code": int(return_code),
+            "return_value": int(return_value),
+        }
+
+    def restart_axis(self, master, axis_index):
+        self.clear_axis_restart_command(master, axis_index)
+        master.sdo.write_uint8(
+            axis_index,
+            self.DEVICE_RESET_INDEX,
+            self.DEVICE_RESET_COMMAND_SUBINDEX,
+            1,
+        )
+        return {
+            "object": (
+                f"0x{self.DEVICE_RESET_INDEX:04X}:"
+                f"{self.DEVICE_RESET_COMMAND_SUBINDEX:02X}"
+            ),
+            "command": 1,
+        }
+
+    def clear_axis_restart_command(self, master, axis_index):
+        master.sdo.write_uint8(
+            axis_index,
+            self.DEVICE_RESET_INDEX,
+            self.DEVICE_RESET_COMMAND_SUBINDEX,
+            0,
+        )
+        return {
+            "object": (
+                f"0x{self.DEVICE_RESET_INDEX:04X}:"
+                f"{self.DEVICE_RESET_COMMAND_SUBINDEX:02X}"
+            ),
+            "command": 0,
         }

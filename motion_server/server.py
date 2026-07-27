@@ -71,6 +71,27 @@ from ethercat.pysoem_master import PySOEMMaster
 
 # Server Loops
 
+
+class ServerResetRequested(Exception):
+    pass
+
+
+class ServerRestartRequested(Exception):
+    pass
+
+
+def requested_server_action(state):
+    if state.get("server_restart_requested"):
+        return "restart"
+    if state.get("bus_reconnect_requested"):
+        requested_at = state.get("bus_reconnect_requested_at", None)
+        if requested_at is not None and time.monotonic() < float(requested_at):
+            return None
+        return "bus_reconnect"
+    if state.get("server_reset_requested"):
+        return "reset"
+    return None
+
 def run_server_loop(server, runtime, state):
     server.setblocking(False)
     clients = []
@@ -212,6 +233,10 @@ def run_server_loop(server, runtime, state):
                 close_client(client, state)
                 clients.remove(client)
 
+        action = requested_server_action(state)
+        if action is not None:
+            return action
+
         last_status_log_time = log_status_if_due(
             runtime,
             state,
@@ -262,6 +287,10 @@ def run_degraded_server_loop(server, runtime, state):
                 close_client(client, state)
                 clients.remove(client)
 
+        action = requested_server_action(state)
+        if action is not None:
+            return action
+
         last_status_log_time = log_status_if_due(
             runtime,
             state,
@@ -282,7 +311,11 @@ def list_adapters():
         print()
 
 
-def main():
+def restart_current_process():
+    os.execv(sys.executable, [sys.executable, *sys.argv])
+
+
+def run_main_once():
     args = parse_args()
     if args.list_adapters:
         list_adapters()
@@ -515,12 +548,39 @@ def main():
                 flush=True,
             )
             if drive_initialized:
-                run_server_loop(server, runtime, state)
+                action = run_server_loop(server, runtime, state)
             else:
-                run_degraded_server_loop(server, runtime, state)
+                action = run_degraded_server_loop(server, runtime, state)
+
+            if action == "restart":
+                raise ServerRestartRequested
+            if action == "reset":
+                raise ServerResetRequested
+            if action == "bus_reconnect":
+                raise ServerResetRequested
 
     finally:
         runtime.close()
+
+
+def main():
+    while True:
+        try:
+            run_main_once()
+            return
+        except ServerResetRequested:
+            print(
+                "Motion Server runtime reinitialization requested; "
+                "reinitializing runtime and bus.",
+                flush=True,
+            )
+            continue
+        except ServerRestartRequested:
+            print(
+                "Motion Server restart requested; restarting process.",
+                flush=True,
+            )
+            restart_current_process()
 
 
 if __name__ == "__main__":

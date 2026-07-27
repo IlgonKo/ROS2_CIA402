@@ -159,7 +159,7 @@ AXIS_PANEL_AUTO_SDO_READS=0
 
 - Panel과 Motion Server가 같은 PC면 `MOTION_SERVER_HOST=127.0.0.1`
 - 다른 PC의 Motion Server에 접속하면 해당 PC IP 입력
-- 축 수는 Panel이 Motion Server의 `system/status` API로 자동 파악
+- 축 수는 Panel이 Motion Server의 `system/axes/status` API로 자동 파악
 - `AXIS_PANEL_AUTO_SDO_READS=0` 권장
 
 ### Windows 실행 방법

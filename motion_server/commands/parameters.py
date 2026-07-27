@@ -34,6 +34,8 @@ def sdo_response_type(message, default_type):
 
 def parse_sdo_request(message, runtime):
     data_type = str(message.get("data_type", "uint32")).strip().lower()
+    if "axes" in message or "axis" not in message:
+        raise ValueError("Parameter commands require axis and do not accept axes")
     axis_index = parse_int(message.get("axis", 0))
     index = parse_int(message.get("index"), 0)
     subindex = parse_int(message.get("subindex", 0))
@@ -60,7 +62,7 @@ def selected_single_axis(message, runtime, command):
 
 
 def read_parameter(message, runtime, client):
-    response_type = sdo_response_type(message, "axis/param_read")
+    response_type = sdo_response_type(message, "system/axis/param_read")
     try:
         axis_index, index, subindex, data_type = parse_sdo_request(message, runtime)
         reader_name = SDO_READERS.get(data_type)

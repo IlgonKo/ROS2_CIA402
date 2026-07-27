@@ -116,6 +116,10 @@ class MockMaster:
         slave = self.slaves[slave_index]
         if index == 0x6040:
             return slave.rxpdo.controlword
+        if index == 0x2000 and subindex == 0x01:
+            return getattr(slave, "_mock_device_reset_command", 0)
+        if index == 0x2005:
+            return self._read_mock_parameter_save(slave_index, subindex)
         if index == 0x6041:
             return slave.txpdo.statusword
         if index == 0x6060:
@@ -183,7 +187,13 @@ class MockMaster:
 
     def _write_object(self, slave_index, index, value, subindex=0):
         slave = self.slaves[slave_index]
-        if index == 0x6040:
+        if index == 0x2000 and subindex == 0x01:
+            slave._mock_device_reset_command = int(value)
+            if int(value) == 1:
+                self._restart_mock_axis(slave_index)
+        elif index == 0x2005:
+            self._write_mock_parameter_save(slave_index, subindex, value)
+        elif index == 0x6040:
             slave.rxpdo.controlword = int(value)
         elif index == 0x6060:
             slave.rxpdo.mode_of_operation = int(value)
@@ -247,3 +257,46 @@ class MockMaster:
             slave.axis.servo.od.write(0x60C6, value)
         else:
             raise KeyError(f"Unsupported mock SDO write 0x{index:04X}")
+
+    def _restart_mock_axis(self, slave_index):
+        slave = self.slaves[slave_index]
+        current_position = float(slave.txpdo.actual_position)
+        slave.rxpdo.reset_values()
+        slave.txpdo.reset_values()
+        slave.rxpdo.target_position = current_position
+        slave.txpdo.actual_position = current_position
+        slave.txpdo.statusword = 0x0027
+        slave.txpdo.mode_of_operation_display = slave.rxpdo.mode_of_operation
+
+    def _read_mock_parameter_save(self, slave_index, subindex):
+        slave = self.slaves[slave_index]
+        state = getattr(slave, "_mock_parameter_save", {})
+        if subindex == 0x01:
+            return state.get("command", 0)
+        if subindex == 0x02:
+            return state.get("status", 0)
+        if subindex == 0x03:
+            return state.get("selection", 1)
+        if subindex == 0x04:
+            return state.get("return_code", 0)
+        if subindex == 0x05:
+            return state.get("return_value", 1)
+        raise KeyError(f"Unsupported mock SDO read 0x2005:{subindex:02X}")
+
+    def _write_mock_parameter_save(self, slave_index, subindex, value):
+        slave = self.slaves[slave_index]
+        state = getattr(slave, "_mock_parameter_save", None)
+        if state is None:
+            state = {}
+            slave._mock_parameter_save = state
+        if subindex == 0x01:
+            state["command"] = int(value)
+            if int(value) == 1:
+                state["status"] = 0
+                state["return_code"] = 0
+                state["return_value"] = 1
+            return
+        if subindex == 0x03:
+            state["selection"] = int(value)
+            return
+        raise KeyError(f"Unsupported mock SDO write 0x2005:{subindex:02X}")

@@ -149,11 +149,11 @@ Motion Server API 단위는 사용자 관점 단위로 정규화한다.
 Motion Server는 다중 TCP 클라이언트를 허용한다. 단, motion command 충돌을 막기 위해 쓰기 명령에는 command authority가 필요하다.
 
 ```text
-authority/acquire
+system/authority/request
   -> owner가 없으면 현재 client가 owner
   -> 다른 client가 owner이면 거부
 
-authority/release
+system/authority/release
   -> owner인 client만 반납 가능
 
 client disconnect
@@ -172,7 +172,7 @@ axis/*         특정 축 대상
 authority/*    command authority 대상
 ```
 
-현재 Basic mode 기준 주기 feedback은 전체 시스템 값이므로 `system/feedback`을 사용한다. 특정 축의 full snapshot은 `axis/status`를 사용한다.
+현재 Basic mode 기준 주기 feedback은 전체 시스템 값이므로 `system/feedback`을 사용한다. 특정 축의 full snapshot은 `system/axis/status`를 사용한다.
 
 ## Logging
 
@@ -205,6 +205,6 @@ Advanced mode 전용 기능:
 
 - CSP mode 노출
 - trajectory command
-- debug controlword
+- system/axis/manualCW
 
 사용자 API 문서는 Basic mode 기준으로 별도 문서에 정리한다.

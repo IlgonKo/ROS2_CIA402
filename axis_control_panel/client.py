@@ -36,7 +36,7 @@ def request_initial_system_status(host, port, timeout=2.0):
         with socket.create_connection((host, int(port)), timeout=timeout) as sock:
             sock.settimeout(timeout)
             sock_file = sock.makefile("rwb")
-            sock_file.write(json.dumps({"cmd": "system/status"}).encode("utf-8") + b"\n")
+            sock_file.write(json.dumps({"cmd": "system/axes/status"}).encode("utf-8") + b"\n")
             sock_file.flush()
 
             deadline = time.monotonic() + timeout
@@ -45,7 +45,7 @@ def request_initial_system_status(host, port, timeout=2.0):
                 if not line:
                     break
                 message = json.loads(line.decode("utf-8"))
-                if message.get("type") == "system/status":
+                if message.get("type") == "system/axes/status":
                     return message
     except (OSError, ValueError, json.JSONDecodeError):
         return {}
@@ -142,20 +142,28 @@ class AxisServerClient:
                 raise OSError("server closed connection")
 
             message = json.loads(line)
-            if message.get("type") in {"feedback", "system/status"}:
+            if message.get("type") == "system/axes/status":
                 self._store_feedback(message)
-            elif message.get("type") == "axis/status":
+            elif message.get("type") == "system/axis/status":
                 self._merge_axis_status(message)
             elif message.get("type") == "system/feedback":
                 self._merge_system_feedback(message)
             elif message.get("type") in {
-                "authority/acquire",
-                "authority/release",
-                "authority/status",
+                "system/authority/request",
+                "system/authority/release",
+                "system/authority/status",
                 "command_rejected",
             }:
                 self._store_notice(message)
-            elif message.get("type") in {"axis/param_read", "axis/param_write"}:
+            elif message.get("type") in {
+                "system/axis/param_read",
+                "system/axis/param_write",
+                "system/axis/param_save",
+                "system/axis/restart",
+                "system/server/reset",
+                "system/server/restart",
+                "system/bus/reconnect",
+            }:
                 self._store_diagnosis_result(message)
 
     def _store_feedback(self, message):
@@ -176,9 +184,9 @@ class AxisServerClient:
         with self.lock:
             self.last_notice = str(message.get("message", ""))
             if message.get("type") in {
-                "authority/acquire",
-                "authority/release",
-                "authority/status",
+                "system/authority/request",
+                "system/authority/release",
+                "system/authority/status",
             }:
                 self.feedback["command_authority"] = {
                     "owner": message.get("owner"),
@@ -201,7 +209,7 @@ class AxisServerClient:
     def _store_diagnosis_result(self, message):
         with self.lock:
             self.last_diagnosis_result = json.dumps(message, ensure_ascii=False)
-            if message.get("type") == "axis/param_read" and message.get("ok"):
+            if message.get("type") == "system/axis/param_read" and message.get("ok"):
                 self.sdo_read_results.append(dict(message))
                 self._apply_param_read_result(message)
 
@@ -371,17 +379,17 @@ class AxisServerClient:
                 raise ConnectionError("Axis server is not connected")
             self.sock.sendall(payload)
             if refresh_status:
-                status_payload = (json.dumps({"cmd": "system/status"}) + "\n").encode(
+                status_payload = (json.dumps({"cmd": "system/axes/status"}) + "\n").encode(
                     "utf-8",
                 )
                 self.sock.sendall(status_payload)
 
     def request_system_status(self):
-        self.send_json({"cmd": "system/status"})
+        self.send_json({"cmd": "system/axes/status"})
 
     def send_axis_move_absolute(self, axis_index, position, profile_velocity=None):
         message = {
-            "cmd": "axis/move_abs",
+            "cmd": "system/axis/move_abs",
             "axis": int(axis_index),
             "position": float(position),
         }
@@ -391,7 +399,7 @@ class AxisServerClient:
 
     def send_axes_move_absolute(self, axes, positions, profile_velocities=None):
         message = {
-            "cmd": "axis/move_abs",
+            "cmd": "system/axes/move_abs",
             "axes": [int(axis_index) for axis_index in axes],
             "positions": [float(position) for position in positions],
         }
@@ -405,7 +413,7 @@ class AxisServerClient:
     def send_axis_move_velocity(self, axis_index, velocity):
         self.send_json(
             {
-                "cmd": "axis/move_vel",
+                "cmd": "system/axis/move_vel",
                 "axis": int(axis_index),
                 "velocity": float(velocity),
             }
@@ -414,7 +422,7 @@ class AxisServerClient:
     def send_axes_move_velocity(self, axes, velocities):
         self.send_json(
             {
-                "cmd": "axis/move_vel",
+                "cmd": "system/axes/move_vel",
                 "axes": [int(axis_index) for axis_index in axes],
                 "velocities": [float(velocity) for velocity in velocities],
             }
@@ -423,7 +431,7 @@ class AxisServerClient:
     def send_axis_enable(self, axis_index):
         self.send_json(
             {
-                "cmd": "axis/enable",
+                "cmd": "system/axis/enable",
                 "axis": int(axis_index),
             }
         )
@@ -431,14 +439,14 @@ class AxisServerClient:
     def send_axis_disable(self, axis_index):
         self.send_json(
             {
-                "cmd": "axis/disable",
+                "cmd": "system/axis/disable",
                 "axis": int(axis_index),
             }
         )
 
     def send_profile_settings(self, axis_index, profile_settings):
         message = {
-            "cmd": "axis/profile",
+            "cmd": "system/axis/profile",
             "axis": int(axis_index),
         }
         if len(profile_settings) == 2:
@@ -455,7 +463,7 @@ class AxisServerClient:
     def send_axis_motion_limits(self, axis_index, axis_limits):
         self.send_json(
             {
-                "cmd": "axis/motion_limits",
+                "cmd": "system/axis/motion_limits",
                 "axis": int(axis_index),
                 "positive_velocity_limit": float(axis_limits[0]),
                 "negative_velocity_limit": float(axis_limits[1]),
@@ -473,7 +481,7 @@ class AxisServerClient:
     ):
         self.send_json(
             {
-                "cmd": "axis/software_position_limits",
+                "cmd": "system/axis/software_position_limits",
                 "axis": int(axis_index),
                 "negative_limit": float(negative_limit),
                 "positive_limit": float(positive_limit),
@@ -484,7 +492,7 @@ class AxisServerClient:
     def send_motion_mode(self, mode, axis_index):
         self.send_json(
             {
-                "cmd": "axis/mode",
+                "cmd": "system/axis/mode",
                 "axis": int(axis_index),
                 "mode": str(mode).lower(),
             },
@@ -494,7 +502,7 @@ class AxisServerClient:
     def send_controlword(self, controlword, axis_index):
         self.send_json(
             {
-                "cmd": "debug/controlword",
+                "cmd": "system/axis/manualCW",
                 "axis": int(axis_index),
                 "controlword": int(controlword),
             }
@@ -502,7 +510,7 @@ class AxisServerClient:
 
     def send_axis_move_relative(self, axis_index, distance, profile_velocity=None):
         message = {
-            "cmd": "axis/move_rel",
+            "cmd": "system/axis/move_rel",
             "axis": int(axis_index),
             "distance": float(distance),
         }
@@ -513,7 +521,7 @@ class AxisServerClient:
     def send_jog_start(self, axis_index, direction, speed="slow"):
         self.send_json(
             {
-                "cmd": "axis/jog_start",
+                "cmd": "system/axis/jog_start",
                 "axis": int(axis_index),
                 "direction": str(direction),
                 "speed": str(speed),
@@ -523,7 +531,7 @@ class AxisServerClient:
     def send_jog_stop(self, axis_index):
         self.send_json(
             {
-                "cmd": "axis/jog_stop",
+                "cmd": "system/axis/jog_stop",
                 "axis": int(axis_index),
             }
         )
@@ -531,7 +539,7 @@ class AxisServerClient:
     def send_axis_stop(self, axis_index):
         self.send_json(
             {
-                "cmd": "axis/stop",
+                "cmd": "system/axis/stop",
                 "axis": int(axis_index),
             }
         )
@@ -539,7 +547,7 @@ class AxisServerClient:
     def send_axes_stop(self, axes):
         self.send_json(
             {
-                "cmd": "axis/stop",
+                "cmd": "system/axes/stop",
                 "axes": [int(axis_index) for axis_index in axes],
             }
         )
@@ -547,23 +555,27 @@ class AxisServerClient:
     def send_homing_start(self, axis_index):
         self.send_json(
             {
-                "cmd": "axis/home",
+                "cmd": "system/axis/home",
                 "axis": int(axis_index),
             }
         )
 
     def send_axes_homing_start(self, axes):
-        self.send_json(
-            {
-                "cmd": "axis/home",
-                "axes": [int(axis_index) for axis_index in axes],
-            }
-        )
+        for axis_index in axes:
+            self.send_homing_start(axis_index)
 
     def send_axis_reset(self, axis_index):
         self.send_json(
             {
-                "cmd": "axis/reset",
+                "cmd": "system/axis/reset",
+                "axis": int(axis_index),
+            }
+        )
+
+    def send_axis_restart(self, axis_index):
+        self.send_json(
+            {
+                "cmd": "system/axis/restart",
                 "axis": int(axis_index),
             }
         )
@@ -571,21 +583,21 @@ class AxisServerClient:
     def send_axes_reset(self, axes):
         self.send_json(
             {
-                "cmd": "axis/reset",
+                "cmd": "system/axes/reset",
                 "axes": [int(axis_index) for axis_index in axes],
             }
         )
 
     def request_command_authority(self):
-        self.send_json({"cmd": "authority/acquire"})
+        self.send_json({"cmd": "system/authority/request"})
 
     def release_command_authority(self):
-        self.send_json({"cmd": "authority/release"})
+        self.send_json({"cmd": "system/authority/release"})
 
     def send_param_read(self, axis_index, index, subindex, data_type):
         self.send_json(
             {
-                "cmd": "axis/param_read",
+                "cmd": "system/axis/param_read",
                 "axis": int(axis_index),
                 "index": str(index),
                 "subindex": str(subindex),
@@ -596,7 +608,7 @@ class AxisServerClient:
     def send_param_write(self, axis_index, index, subindex, data_type, value):
         self.send_json(
             {
-                "cmd": "axis/param_write",
+                "cmd": "system/axis/param_write",
                 "axis": int(axis_index),
                 "index": str(index),
                 "subindex": str(subindex),
@@ -608,8 +620,17 @@ class AxisServerClient:
     def send_param_save(self, axis_index):
         self.send_json(
             {
-                "cmd": "axis/param_save",
+                "cmd": "system/axis/param_save",
                 "axis": int(axis_index),
             },
             refresh_status=False,
         )
+
+    def send_server_reset(self):
+        self.send_json({"cmd": "system/server/reset"})
+
+    def send_server_restart(self):
+        self.send_json({"cmd": "system/server/restart"})
+
+    def send_bus_reconnect(self):
+        self.send_json({"cmd": "system/bus/reconnect"})

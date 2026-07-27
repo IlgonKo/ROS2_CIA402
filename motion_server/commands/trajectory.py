@@ -6,7 +6,7 @@ from motion_server.control.trajectory_logging import (
     log_trajectory_debug,
     log_trajectory_snapshot,
 )
-from motion_server.api.feedback import feedback_message
+from motion_server.api.responses import axes_status_message
 from motion_server.control.axis_operations import (
     actual_positions,
     axis_count,
@@ -18,6 +18,7 @@ from motion_server.control.axis_operations import (
 )
 from motion_server.control.setpoint_output import command_csp_positions
 from motion_server.api import public_command_name, send_client_message
+from motion_server.api.selection import selected_axes
 from motion_server.app.state import inactive_trajectory_state
 from motion_server.control.trajectory_verifier import (
     axis_timed_points,
@@ -102,7 +103,7 @@ def move(
     if not points:
         reject_trajectory(
             state,
-            "trajectory/move requires at least one point",
+            "system/axes/trajectory requires at least one point",
             inactive_trajectory_state,
         )
         return
@@ -226,7 +227,13 @@ def stop(message, runtime, state, client):
         return
 
     state["trajectory"] = inactive_trajectory_state("stopped")
-    axes = list(range(axis_count(runtime)))
+    try:
+        axes = selected_axes(message, runtime, command)
+    except Exception as exc:
+        state["trajectory"] = inactive_trajectory_state("stop_rejected")
+        state["trajectory"]["message"] = str(exc)
+        print(f"Ignored {command}: {exc}", flush=True)
+        return
     if reject_if_any_axis_disabled(runtime, axes, client, command):
         state["trajectory"] = inactive_trajectory_state("stop_rejected")
         state["trajectory"]["message"] = "Axis operation is disabled."
@@ -246,8 +253,7 @@ def stop(message, runtime, state, client):
 
 
 def status(message, runtime, state, client):
-    response = feedback_message(runtime, state, client["id"])
-    response["type"] = "trajectory/status"
+    response = axes_status_message(runtime, state, client["id"])
     send_client_message(client, response)
 
 

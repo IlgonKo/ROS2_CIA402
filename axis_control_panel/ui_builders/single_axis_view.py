@@ -461,6 +461,11 @@ class SingleAxisViewBuilderMixin:
             text="Parameter Save",
             command=self.diagnosis_parameter_save,
         ).pack(side="left", padx=4)
+        ttk.Button(
+            diagnosis_buttons,
+            text="Axis Restart",
+            command=self.axis_restart,
+        ).pack(side="left", padx=4)
         ttk.Label(
             diagnosis_buttons,
             textvariable=self.diagnosis_unit_var,

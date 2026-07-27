@@ -36,6 +36,21 @@ class PanelLayoutMixin:
             textvariable=self.command_authority_button_var,
             command=self.toggle_command_authority,
         ).pack(side="left", padx=(14, 4))
+        ttk.Button(
+            header,
+            text="Bus Reconnect",
+            command=self.bus_reconnect,
+        ).pack(side="left", padx=(8, 4))
+        ttk.Button(
+            header,
+            text="Server Reset",
+            command=self.server_reset,
+        ).pack(side="left", padx=4)
+        ttk.Button(
+            header,
+            text="Server Restart",
+            command=self.server_restart,
+        ).pack(side="left", padx=4)
         ttk.Label(header, textvariable=self.command_authority_var).pack(
             side="left",
             padx=4,

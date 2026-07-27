@@ -3,7 +3,12 @@ import json
 from motion_server.commands.parameters import read_parameter
 from motion_server.commands.routes import COMMAND_ROUTER
 from motion_server.config import AXIS_SERVER_COMMAND_LOGS
-from motion_server.api.feedback import axis_status_message, feedback_message
+from motion_server.api.responses import (
+    axis_status_message,
+    bus_status_message,
+    axes_status_message,
+    server_status_message,
+)
 from motion_server.api import (
     command_name,
     public_command_name,
@@ -23,49 +28,72 @@ from motion_server.app.state import inactive_trajectory_state
 
 
 COMMAND_MESSAGE_TYPES = {
-    "system/stop",
-    "system/reset",
-    "axis/enable",
-    "axis/disable",
-    "axis/reset",
-    "axis/home",
-    "axis/stop",
-    "axis/move_abs",
-    "axis/move_rel",
-    "axis/move_vel",
-    "axis/jog_start",
-    "axis/jog_stop",
-    "axis/profile",
-    "axis/motion_limits",
-    "axis/software_position_limits",
-    "axis/mode",
-    "axis/param_write",
-    "axis/param_save",
-    "debug/controlword",
-    "trajectory/move",
-    "trajectory/stop",
+    "system/server/reset",
+    "system/server/restart",
+    "system/bus/reconnect",
+    "system/bus/rescan",
+    "system/axis/enable",
+    "system/axis/disable",
+    "system/axis/reset",
+    "system/axis/restart",
+    "system/axis/home",
+    "system/axis/stop",
+    "system/axis/move_abs",
+    "system/axis/move_rel",
+    "system/axis/move_vel",
+    "system/axis/jog_start",
+    "system/axis/jog_stop",
+    "system/axis/profile",
+    "system/axis/motion_limits",
+    "system/axis/software_position_limits",
+    "system/axis/mode",
+    "system/axis/manualCW",
+    "system/axis/param_write",
+    "system/axis/param_save",
+    "system/axes/enable",
+    "system/axes/disable",
+    "system/axes/reset",
+    "system/axes/stop",
+    "system/axes/move_abs",
+    "system/axes/move_rel",
+    "system/axes/move_vel",
+    "system/axes/trajectory",
+    "system/axes/trajectory_stop",
+    "system/io/read",
+    "system/io/write",
+    "system/io/set_output",
+    "system/io/reset",
+    "system/io/restart",
+    "system/io/param_write",
+    "system/io/param_save",
 }
 
 AUTHORITY_MESSAGE_TYPES = {
-    "authority/acquire",
-    "authority/release",
-    "authority/status",
+    "system/authority/request",
+    "system/authority/release",
+    "system/authority/status",
 }
 
 ADVANCED_MESSAGE_TYPES = {
-    "debug/controlword",
-    "trajectory/move",
-    "trajectory/stop",
+    "system/axis/manualCW",
+    "system/axes/trajectory",
+    "system/axes/trajectory_stop",
 }
 
-ADVANCED_STATUS_MESSAGE_TYPES = {
-    "trajectory/status",
+ADVANCED_STATUS_MESSAGE_TYPES = set()
+
+INITIALIZATION_ERROR_ALLOWED_COMMANDS = {
+    "system/bus/reconnect",
+    "system/server/reset",
+    "system/server/restart",
 }
 
 STATUS_MESSAGE_TYPES = {
-    "system/status",
-    "axis/status",
-    "trajectory/status",
+    "system/server/status",
+    "system/bus/status",
+    "system/axis/status",
+    "system/axes/status",
+    "system/io/status",
 }
 
 
@@ -102,21 +130,40 @@ def dispatch_message(message, runtime, state, client):
     message_type = public_command_name(message)
 
     if message_type in AUTHORITY_MESSAGE_TYPES:
-        if message_type == "authority/acquire":
+        if message_type == "system/authority/request":
             acquire_authority(client, state)
-        elif message_type == "authority/release":
+        elif message_type == "system/authority/release":
             release_authority(client, state)
-        elif message_type == "authority/status":
+        elif message_type == "system/authority/status":
             send_client_message(client, authority_status_payload(client, state))
         return
 
-    if message_type == "system/status":
-        status = feedback_message(runtime, state, client["id"])
+    if message_type == "system/server/status":
+        send_client_message(client, server_status_message(runtime, state))
+        return
+
+    if message_type == "system/bus/status":
+        send_client_message(client, bus_status_message(runtime, state))
+        return
+
+    if message_type == "system/axes/status":
+        status = axes_status_message(runtime, state, client["id"])
         status["type"] = message_type
         send_client_message(client, status)
         return
 
-    if message_type == "axis/status":
+    if message_type == "system/io/status":
+        reject_command_message(client, message_type, f"{message_type} is not implemented yet.")
+        return
+
+    if message_type == "system/axis/status":
+        if "axes" in message or "axis" not in message:
+            reject_command_message(
+                client,
+                message_type,
+                f"{message_type} requires axis and does not accept axes.",
+            )
+            return
         try:
             axis_index = selected_single_axis(message, runtime, message_type)
         except Exception as exc:
@@ -132,7 +179,7 @@ def dispatch_message(message, runtime, state, client):
         message_type in ADVANCED_STATUS_MESSAGE_TYPES
         and not is_advanced_mode(state)
     ):
-        status = feedback_message(runtime, state, client["id"])
+        status = axes_status_message(runtime, state, client["id"])
         status["type"] = message_type
         status["trajectory"] = inactive_trajectory_state("advanced_only")
         status["trajectory"]["message"] = (
@@ -141,8 +188,12 @@ def dispatch_message(message, runtime, state, client):
         send_client_message(client, status)
         return
 
-    if message_type == "axis/param_read":
+    if message_type == "system/axis/param_read":
         read_parameter(message, runtime, client)
+        return
+
+    if message_type == "system/io/param_read":
+        reject_command_message(client, message_type, f"{message_type} is not implemented yet.")
         return
 
     if (
@@ -162,6 +213,7 @@ def dispatch_message(message, runtime, state, client):
     if (
         message_type in COMMAND_MESSAGE_TYPES
         and not state.get("drive_initialized", True)
+        and message_type not in INITIALIZATION_ERROR_ALLOWED_COMMANDS
     ):
         reject_command_when_not_initialized(client, message, state)
         return

@@ -10,7 +10,7 @@ from motion_server.config import (
     status_log,
 )
 from motion_server.app.cycle import exchange
-from motion_server.api.feedback import public_homing_state
+from motion_server.api.serializers import public_homing_state
 from motion_server.control.axis_operations import (
     axis_count,
     configure_mode_code,
@@ -97,13 +97,14 @@ def finish_homing(runtime, state, result, message):
 
 
 def start_homing(message, runtime, state, client):
+    command = str(message.get("cmd", "system/axis/home")).strip()
     try:
-        axis_indices = parse_axis_indices(message, runtime, "axis/home")
+        axis_indices = parse_axis_indices(message, runtime, command)
     except (TypeError, ValueError) as exc:
         state["homing"] = inactive_homing_state("rejected")
         state["homing"]["message"] = str(exc)
         send_homing_status(client, runtime, state)
-        print(f"Ignored axis/home: {exc}", flush=True)
+        print(f"Ignored {command}: {exc}", flush=True)
         return
     disabled_axes = disabled_operation_axes(runtime, axis_indices)
     if disabled_axes:
@@ -114,7 +115,7 @@ def start_homing(message, runtime, state, client):
         state["homing"] = inactive_homing_state("rejected")
         state["homing"]["message"] = message_text
         send_homing_status(client, runtime, state)
-        print(f"Ignored axis/home: {message_text}", flush=True)
+        print(f"Ignored {command}: {message_text}", flush=True)
         return
 
     original_modes = {
@@ -156,7 +157,7 @@ def start_homing(message, runtime, state, client):
     }
     send_homing_status(client, runtime, state)
     status_log(
-        "Received axis/home: "
+        f"Received {command}: "
         f"axes={axis_indices} "
         f"original_modes={original_modes} "
         f"initial_referenced={initial_referenced} "

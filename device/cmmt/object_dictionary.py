@@ -13,6 +13,42 @@ from device.common_object_dictionary import (
 
 
 CMMT_VENDOR_OBJECTS = {
+    od_key(0x2000, 0x01): ObjectDictionaryEntry(
+        0x2000,
+        0x01,
+        "Reset device control",
+        "uint8",
+    ),
+    od_key(0x2005, 0x01): ObjectDictionaryEntry(
+        0x2005,
+        0x01,
+        "Save parameter set control",
+        "uint8",
+    ),
+    od_key(0x2005, 0x02): ObjectDictionaryEntry(
+        0x2005,
+        0x02,
+        "Save parameter set status",
+        "uint8",
+    ),
+    od_key(0x2005, 0x03): ObjectDictionaryEntry(
+        0x2005,
+        0x03,
+        "Save parameter set selection",
+        "uint16",
+    ),
+    od_key(0x2005, 0x04): ObjectDictionaryEntry(
+        0x2005,
+        0x04,
+        "Save parameter set return code",
+        "uint16",
+    ),
+    od_key(0x2005, 0x05): ObjectDictionaryEntry(
+        0x2005,
+        0x05,
+        "Save parameter set return value",
+        "uint16",
+    ),
     od_key(0x1C32, 0x01): ObjectDictionaryEntry(
         0x1C32,
         0x01,
