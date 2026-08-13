@@ -113,8 +113,8 @@ Motion Server\device\cmmt\config.txt
 MOTION_SERVER_BACKEND=pysoem
 MOTION_SERVER_MODE=basic
 PYSOEM_INTERFACE=\Device\NPF_{...}
-PYSOEM_BUS=cmmt
-PYSOEM_DEVICE_CONFIG_ROOT=device
+MOTION_SERVER_BUS=cmmt
+MOTION_SERVER_DEVICE_CONFIG_ROOT=device
 MOTION_SERVER_PORT=15000
 PYSOEM_CYCLE_TIME=0.01
 MOTION_SERVER_FEEDBACK_PERIOD=0.05
@@ -131,14 +131,14 @@ MOTION_SERVER_FEEDBACK_PERIOD=0.05
   - Windows Npcap adapter 이름
   - 예: `\Device\NPF_{906A65C9-C606-4B1F-8384-2625829A4D18}`
   - `{}` 안의 GUID만 쓰는 것이 아니라 전체 `\Device\NPF_{...}` 형식 사용
-- `PYSOEM_BUS`
+- `MOTION_SERVER_BUS`
   - EtherCAT slave profile 순서
   - 예: `cmmt`
   - 예: `cmmt,cmmt`
   - I/O 포함 예: `cmmt,cmmt,io:cpx_ap_i_ec`
-- `PYSOEM_DEVICE_CONFIG_ROOT`
+- `MOTION_SERVER_DEVICE_CONFIG_ROOT`
   - 기본값 `device`
-  - Motion Server가 `PYSOEM_BUS`에 등장한 profile을 보고 `device/<profile>/config.txt`를 자동 로드
+  - Motion Server가 `MOTION_SERVER_BUS`에 등장한 profile을 보고 `device/<profile>/config.txt`를 자동 로드
 - `MOTION_SERVER_PORT`
   - TCP server port
 - `PYSOEM_CYCLE_TIME`
@@ -186,7 +186,7 @@ Mock/virtual servo 예:
 
 ```text
 MOTION_SERVER_BACKEND=mock
-PYSOEM_BUS=cmmt,cmmt,cmmt
+MOTION_SERVER_BUS=cmmt,cmmt,cmmt
 ```
 
 실제 EtherCAT 예:
@@ -194,7 +194,7 @@ PYSOEM_BUS=cmmt,cmmt,cmmt
 ```text
 MOTION_SERVER_BACKEND=pysoem
 PYSOEM_INTERFACE=\Device\NPF_{...}
-PYSOEM_BUS=cmmt
+MOTION_SERVER_BUS=cmmt
 ```
 
 ## Linux Docker 버전
@@ -275,8 +275,8 @@ cp device/cpx_ap_i_ec/.env.example device/cpx_ap_i_ec/.env
 MOTION_SERVER_BACKEND=pysoem
 MOTION_SERVER_MODE=basic
 PYSOEM_INTERFACE=enp1s0
-PYSOEM_BUS=cmmt
-PYSOEM_DEVICE_CONFIG_ROOT=device
+MOTION_SERVER_BUS=cmmt
+MOTION_SERVER_DEVICE_CONFIG_ROOT=device
 MOTION_SERVER_PORT=15000
 PYSOEM_CYCLE_TIME=0.01
 MOTION_SERVER_FEEDBACK_PERIOD=0.05
@@ -287,10 +287,10 @@ MOTION_SERVER_FEEDBACK_PERIOD=0.05
 - `PYSOEM_INTERFACE`
   - Linux NIC 이름
   - 예: `enp1s0`
-- `PYSOEM_BUS`
+- `MOTION_SERVER_BUS`
   - 실제 EtherCAT slave 순서와 일치해야 함
-- `PYSOEM_DEVICE_CONFIG_ROOT=device`
-  - `PYSOEM_BUS` profile별 `.env` 자동 로드
+- `MOTION_SERVER_DEVICE_CONFIG_ROOT=device`
+  - `MOTION_SERVER_BUS` profile별 `.env` 자동 로드
 - `MOTION_SERVER_MODE=basic`
   - 설치 매뉴얼 기준
 
@@ -398,15 +398,15 @@ device/cmmt/.env
 
 ```text
 PYSOEM_SYNC_MODE=0
-PYSOEM_MAX_VELOCITY=50.0
-PYSOEM_ACCELERATION=50.0
-PYSOEM_DECELERATION=50.0
-PYSOEM_JERK=100000.0
-PYSOEM_PP_JERK=100000
-PYSOEM_MOTION_MODE=pp
+MOTION_SERVER_MAX_VELOCITY=50.0
+MOTION_SERVER_ACCELERATION=50.0
+MOTION_SERVER_DECELERATION=50.0
+MOTION_SERVER_JERK=100000.0
+MOTION_SERVER_PP_JERK=100000
+MOTION_SERVER_MOTION_MODE=pp
 ```
 
-Basic mode 기준에서는 `PYSOEM_MOTION_MODE=pp`를 권장한다.
+Basic mode 기준에서는 `MOTION_SERVER_MOTION_MODE=pp`를 권장한다.
 
 ## Troubleshooting 포함 요청
 

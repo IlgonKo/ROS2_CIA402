@@ -4,10 +4,12 @@ from motion_server.api.serializers import (
     public_axis_trajectory_state,
     public_homing_state,
     public_trajectory_state,
+    io_device_snapshot,
     motion_limits_api_values,
     profile_settings_api_values,
     software_position_limits_api_values,
 )
+from motion_server.api.selection import io_devices
 from motion_server.control.axis_units import (
     axis_motion_drive_to_api,
     axis_position_drive_to_api,
@@ -17,7 +19,7 @@ from motion_server.control.axis_units import (
 
 
 def system_feedback_message(runtime, state, client_id=None):
-    return {
+    message = {
         "type": "system/feedback",
         "target_positions": [
             axis_position_drive_to_api(state, axis_index, value)
@@ -48,6 +50,15 @@ def system_feedback_message(runtime, state, client_id=None):
             "available": state.get("command_authority_owner") is None,
         },
     }
+    devices = io_devices(runtime)
+    if devices:
+        message["io"] = {
+            "devices": [
+                io_device_snapshot(device, include_raw=False)
+                for device in devices
+            ],
+        }
+    return message
 
 
 def server_status_message(runtime, state):
@@ -83,6 +94,20 @@ def bus_status_message(runtime, state):
         "mode_displays": [
             int(slave.txpdo.mode_of_operation_display)
             for slave in runtime.slaves
+        ],
+    }
+
+
+def io_status_message(runtime, state, include_raw=False):
+    return {
+        "type": "system/io/status",
+        "ok": True,
+        "drive_initialized": bool(state.get("drive_initialized", True)),
+        "initialization_error": state.get("initialization_error", ""),
+        "io_count": len(io_devices(runtime)),
+        "devices": [
+            io_device_snapshot(device, include_raw=include_raw)
+            for device in io_devices(runtime)
         ],
     }
 

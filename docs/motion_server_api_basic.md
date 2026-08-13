@@ -127,7 +127,7 @@ available             owner가 없는 free 상태인지 여부
 
 ### system/feedback
 
-서버가 주기적으로 송신하는 전체 runtime feedback event다.
+서버가 주기적으로 송신하는 전체 runtime feedback event다. I/O 장치가 설정되어 있으면 `io.devices`에 현재 process image 상태도 포함된다.
 
 ```json
 {
@@ -137,6 +137,20 @@ available             owner가 없는 free 상태인지 여부
   "actual_velocities": [0.0],
   "statuswords": [33831],
   "mode_displays": [1],
+  "io": {
+    "devices": [
+      {
+        "id": "io0",
+        "slave_index": 6,
+        "profile": "cpx_ap_i_ec",
+        "digital_inputs": [false, true],
+        "digital_outputs": [true, false],
+        "analog_inputs": [],
+        "analog_outputs": [],
+        "modules": []
+      }
+    ]
+  },
   "command_authority": {}
 }
 ```
@@ -417,18 +431,44 @@ Trajectory 명령은 Advanced mode 전용이다.
 
 ## IO Commands
 
-I/O namespace는 CPX-AP-I 같은 I/O 장치를 위한 영역이다. 현재 Basic mode 구현에서는 API 이름만 예약되어 있으며, 미구현 명령은 `not implemented` 응답을 반환한다.
+I/O namespace는 CPX-AP-I 같은 I/O 장치를 위한 영역이다.
+주기 모니터링은 `system/feedback`의 `io` 블록을 사용한다.
+`system/io/status`와 `system/io/input_read`는 panel 초기화, 수동 refresh, full snapshot 요청처럼 단발성 조회가 필요할 때 사용한다.
+`output_write`는 출력 process image를 변경한다.
 
 ```text
 system/io/status
-system/io/read
-system/io/write
-system/io/set_output
+system/io/input_read
+system/io/output_write
 system/io/reset
 system/io/restart
 system/io/param_read
 system/io/param_write
 system/io/param_save
+```
+
+I/O SDO parameter access는 `axis`가 아니라 `io` selector를 사용한다.
+`io`는 `MOTION_SERVER_BUS`에서 선언한 I/O id 또는 I/O index다.
+
+```json
+{
+  "cmd": "system/io/param_read",
+  "io": "io0",
+  "index": "0x1000",
+  "subindex": "0x00",
+  "data_type": "uint32"
+}
+```
+
+```json
+{
+  "cmd": "system/io/param_write",
+  "io": "io0",
+  "index": "0x8000",
+  "subindex": "0x01",
+  "data_type": "uint16",
+  "value": "1"
+}
 ```
 
 ## Server and Bus Management

@@ -19,13 +19,13 @@ def format_axis_diagnostics(diagnostics_list):
     )
 
 
-def read_drive_diagnostics(runtime, axis_index, device_profile):
+def read_axis_diagnostics(runtime, axis_index, device_profile):
     return device_profile.read_diagnostics(runtime, axis_index)
 
 
 def read_all_diagnostics(runtime, device_profile):
     return [
-        read_drive_diagnostics(runtime, axis_index, device_profile)
+        read_axis_diagnostics(runtime, axis_index, device_profile)
         for axis_index in range(len(runtime.slaves))
     ]
 
@@ -34,7 +34,7 @@ def diagnostics_summary(runtime, axis_indices, device_profile):
     summaries = []
     for axis_index in axis_indices:
         try:
-            diagnostics = read_drive_diagnostics(
+            diagnostics = read_axis_diagnostics(
                 runtime,
                 axis_index,
                 device_profile,

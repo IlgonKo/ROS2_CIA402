@@ -1,4 +1,5 @@
-from device.cpx_ap_i_ec.config import load_cpx_config
+from device.cpx_ap_i_ec.ap_module_idents import configure_ap_module_idents
+from device.cpx_ap_i_ec.io_config import load_cpx_io_config
 from device.cpx_ap_i_ec.pdo import CPXRxPDO, CPXTxPDO
 from device.cpx_ap_i_ec.pdo_codec import CPXPdoCodec
 
@@ -10,8 +11,9 @@ class CPXApIEcDeviceProfile:
     is_motion_axis = False
     pdo_codec = CPXPdoCodec
 
-    def __init__(self):
-        self.config = load_cpx_config()
+    def __init__(self, io_id=None):
+        self.io_id = io_id
+        self.config = load_cpx_io_config(io_id)
 
     def create_rxpdo(self):
         return CPXRxPDO(self.config)
@@ -26,6 +28,7 @@ class CPXApIEcDeviceProfile:
     ):
         rxpdo = master.slaves[slave_index].rxpdo
         txpdo = master.slaves[slave_index].txpdo
+        configure_ap_module_idents(master, slave_index, self.config)
         device_output_bytes = self.process_image_bytes(
             master,
             slave_index,
@@ -54,6 +57,7 @@ class CPXApIEcDeviceProfile:
         print(
             "Slave "
             f"{slave_index}: CPX-AP-I-EC process image "
+            f"io_id={self.config.io_id} "
             f"outputs={rxpdo.mapping_size()} bytes "
             f"inputs={txpdo.mapping_size()} bytes "
             f"DI={self.config.digital_inputs} AI={self.config.analog_inputs} "
@@ -87,7 +91,7 @@ class CPXApIEcDeviceProfile:
                 f"CPX {label} size mismatch on slave {slave_index}. "
                 f"Configured={configured_bytes} bytes, "
                 f"device PDO={device_bytes} bytes. "
-                "Check device/cpx_ap_i_ec/.env I/O counts."
+                f"Check MOTION_SERVER_IO_{self.config.io_id}_MODULES."
             )
         resize(configured_bytes)
 

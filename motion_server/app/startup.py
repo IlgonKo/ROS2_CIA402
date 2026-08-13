@@ -14,7 +14,7 @@ from motion_server.control.axis_operations import (
 )
 from motion_server.app.runtime import AxisRuntime
 from device import get_device_profile
-from motion_server.drive import DriveBinding, DriveManager
+from motion_server.device_manager import AxisBinding, DeviceManager
 from device.virtual_servo_drive import VirtualCiA402Servo
 from ethercat.mock_master import MockMaster
 from ethercat.mock_slave import MockSlave
@@ -32,8 +32,8 @@ def create_axis_runtime(args, motion_limits):
     sync_mode = parse_optional_sync_mode(args.sync_mode)
     device_profile_names = list(args.device_profile_names)
     axis_slave_indices = list(args.axis_slave_indices)
-    drive_bindings = [
-        DriveBinding(axis_index=axis_index, slave_index=slave_index)
+    axis_bindings = [
+        AxisBinding(axis_index=axis_index, slave_index=slave_index)
         for axis_index, slave_index in enumerate(axis_slave_indices)
     ]
 
@@ -84,8 +84,8 @@ def create_axis_runtime(args, motion_limits):
                 limits["deceleration"],
                 limits["jerk"],
             )
-        drive_manager = DriveManager(ethercat_master, drive_bindings)
-        runtime = AxisRuntime(drive_manager, motion_controller)
+        device_manager = DeviceManager(ethercat_master, axis_bindings)
+        runtime = AxisRuntime(device_manager, motion_controller)
         require_pdo_fields_for_mode(runtime, args.motion_mode)
         require_txpdo_fields(runtime)
         return runtime
@@ -93,8 +93,8 @@ def create_axis_runtime(args, motion_limits):
     ethercat_master = PySOEMMaster(
         interface_name=args.interface,
         device_profiles=[
-            get_device_profile(name)
-            for name in device_profile_names
+            get_device_profile_for_slave(name, slave_index, args.io_devices)
+            for slave_index, name in enumerate(device_profile_names)
         ],
         cycle_time=args.cycle_time,
         sync_mode=sync_mode,
@@ -111,8 +111,15 @@ def create_axis_runtime(args, motion_limits):
         csp_command_step_error_threshold=args.csp_command_step_error_threshold,
         csp_profile=args.csp_profile,
     )
-    drive_manager = DriveManager(ethercat_master, drive_bindings)
-    return AxisRuntime(drive_manager, motion_controller)
+    device_manager = DeviceManager(ethercat_master, axis_bindings)
+    return AxisRuntime(device_manager, motion_controller)
+
+
+def get_device_profile_for_slave(profile_name, slave_index, io_devices):
+    for io_device in io_devices:
+        if int(io_device["slave_index"]) == int(slave_index):
+            return get_device_profile(profile_name, io_id=io_device["id"])
+    return get_device_profile(profile_name)
 
 
 def parse_mock_axis_user_units(args):
@@ -214,7 +221,7 @@ def read_axis_user_position_units(runtime):
         print(
             "Axis user position unit: "
             f"axis={axis_index} 0x216E:01=0x{value:04X} "
-            f"unit={runtime.drive_manager.user_position_unit_name(value)}",
+            f"unit={runtime.device_manager.axes.user_position_unit_name(value)}",
             flush=True,
         )
     return units
@@ -321,13 +328,13 @@ def initialize_drive(runtime, motion_mode, csp_interpolation_mode, startup_sdo_r
             axis_index
             for axis_index, user_position_unit in enumerate(user_position_units)
             if user_position_unit is None
-            or not runtime.drive_manager.pv_allowed(axis_index)
+            or not runtime.device_manager.axes.pv_allowed(axis_index)
         ]
         if blocked_axes:
             raise ValueError(
                 pv_reject_message(
                     {
-                        "drive_manager": runtime.drive_manager,
+                        "axis_devices": runtime.device_manager.axes,
                         "user_position_units": user_position_units,
                     },
                     blocked_axes,

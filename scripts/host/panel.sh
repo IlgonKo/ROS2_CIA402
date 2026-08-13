@@ -37,7 +37,7 @@ cd "${PROJECT_ROOT}"
 
 if [[ ! -f "${ENV_FILE}" ]]; then
   echo "Missing ${ENV_FILE}"
-  echo "Create it from .env.example, then edit MOTION_SERVER_BACKEND and PYSOEM_BUS."
+  echo "Create it from .env.example, then edit MOTION_SERVER_BACKEND and MOTION_SERVER_BUS."
   echo "  cp .env.example .env"
   exit 1
 fi

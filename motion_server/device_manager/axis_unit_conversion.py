@@ -9,7 +9,7 @@ LINEAR_USER_POSITION_UNITS = {
 }
 
 
-class DriveUnitConverter:
+class AxisUnitConverter:
     def __init__(self, axis_count):
         self.axis_count = int(axis_count)
         self.configure()
@@ -60,7 +60,10 @@ class DriveUnitConverter:
         axis_index = int(axis_index)
         unit = self.user_position_units[axis_index]
         if self.motion_kind(unit) in ("linear", "rotary"):
-            scale = max(self.scale_from_exponent(self._unit_exponents(axis_index)[0]), 1e-12)
+            scale = max(
+                self.scale_from_exponent(self._unit_exponents(axis_index)[0]),
+                1e-12,
+            )
             return self.api_to_user_unit_factor(unit) / scale
         return self.position_counts_per_unit
 
@@ -72,15 +75,33 @@ class DriveUnitConverter:
 
     def motion_drive_to_api(self, axis_index, value, kind="velocity"):
         unit = self.user_position_units[int(axis_index)]
-        return float(value) * self._motion_scale(axis_index, kind) / self.api_to_user_unit_factor(unit)
+        return (
+            float(value)
+            * self._motion_scale(axis_index, kind)
+            / self.api_to_user_unit_factor(unit)
+        )
 
     def motion_api_to_drive(self, axis_index, value, kind="velocity"):
         unit = self.user_position_units[int(axis_index)]
-        return float(value) * self.api_to_user_unit_factor(unit) / self._motion_scale(axis_index, kind)
+        return (
+            float(value)
+            * self.api_to_user_unit_factor(unit)
+            / self._motion_scale(axis_index, kind)
+        )
 
     def _motion_scale(self, axis_index, kind):
-        exponent_index = {"velocity": 1, "acceleration": 2, "deceleration": 2, "jerk": 3}.get(kind, 1)
-        return max(self.scale_from_exponent(self._unit_exponents(axis_index)[exponent_index]), 1e-12)
+        exponent_index = {
+            "velocity": 1,
+            "acceleration": 2,
+            "deceleration": 2,
+            "jerk": 3,
+        }.get(kind, 1)
+        return max(
+            self.scale_from_exponent(
+                self._unit_exponents(axis_index)[exponent_index]
+            ),
+            1e-12,
+        )
 
     def _unit_exponents(self, axis_index):
         values = self.converting_unit_exponents[int(axis_index)]
@@ -89,7 +110,7 @@ class DriveUnitConverter:
     def _axis_values(self, values, default):
         result = [default for _ in range(self.axis_count)] if values is None else list(values)
         if len(result) != self.axis_count:
-            raise ValueError("unit configuration count must match drive count")
+            raise ValueError("unit configuration count must match axis count")
         return result
 
     @staticmethod
@@ -97,7 +118,11 @@ class DriveUnitConverter:
         if unit is None:
             return "unknown"
         unit = int(unit)
-        return PV_USER_POSITION_UNITS.get(unit) or LINEAR_USER_POSITION_UNITS.get(unit) or f"0x{unit:04X}"
+        return (
+            PV_USER_POSITION_UNITS.get(unit)
+            or LINEAR_USER_POSITION_UNITS.get(unit)
+            or f"0x{unit:04X}"
+        )
 
     @staticmethod
     def motion_kind(unit):
@@ -113,7 +138,11 @@ class DriveUnitConverter:
     @classmethod
     def api_position_unit_name(cls, unit):
         kind = cls.motion_kind(unit)
-        return "deg" if kind == "rotary" else "mm" if kind == "linear" else cls.unit_name(unit)
+        if kind == "rotary":
+            return "deg"
+        if kind == "linear":
+            return "mm"
+        return cls.unit_name(unit)
 
     @staticmethod
     def pv_allowed(unit):

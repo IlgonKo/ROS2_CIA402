@@ -1,6 +1,6 @@
 """Build panel update data from Motion Server feedback messages."""
 
-from axis_control_panel.units import build_axis_metadata
+from control_panel.axis_control_panel.units import build_axis_metadata
 
 
 def initial_feedback(axis_count):

@@ -33,6 +33,30 @@ def env_value(name, default="", legacy_name=None):
     return default
 
 
+def env_bool(name, default="0", legacy_name=None):
+    return env_value(name, default, legacy_name).strip() == "1"
+
+
+def env_float(name, default, legacy_name=None):
+    return float(env_value(name, default, legacy_name))
+
+
+def env_int(name, default, legacy_name=None):
+    return int(env_value(name, default, legacy_name))
+
+
+def bus_env_value():
+    return env_value("MOTION_SERVER_BUS", "cmmt", "PYSOEM_BUS")
+
+
+def device_config_root_env_value():
+    return env_value(
+        "MOTION_SERVER_DEVICE_CONFIG_ROOT",
+        "device",
+        "PYSOEM_DEVICE_CONFIG_ROOT",
+    )
+
+
 def bus_profile_names(raw_bus):
     profiles = []
     for raw_entry in str(raw_bus or "").split(","):
@@ -40,21 +64,19 @@ def bus_profile_names(raw_bus):
         if not entry:
             continue
         if ":" in entry:
-            _role, entry = [
-                part.strip()
-                for part in entry.split(":", 1)
-            ]
+            parts = [part.strip() for part in entry.split(":")]
+            entry = parts[1] if len(parts) > 1 else ""
         if entry and entry not in profiles:
             profiles.append(entry)
     return profiles
 
 
 def load_bus_device_env_defaults(project_root):
-    config_root = Path(os.environ.get("PYSOEM_DEVICE_CONFIG_ROOT", "device"))
+    config_root = Path(device_config_root_env_value())
     if not config_root.is_absolute():
         config_root = project_root / config_root
 
-    for profile_name in bus_profile_names(os.environ.get("PYSOEM_BUS", "cmmt")):
+    for profile_name in bus_profile_names(bus_env_value()):
         device_env_path = config_root / profile_name / ".env"
         load_env_defaults(device_env_path)
 
@@ -97,12 +119,20 @@ MOTION_SERVER_MODE = env_value(
 ).strip().lower()
 DEFAULT_CYCLE_TIME = float(os.environ.get("PYSOEM_CYCLE_TIME", "0.01"))
 DEFAULT_SPIN_WAIT_TIME = float(os.environ.get("PYSOEM_SPIN_WAIT_TIME", "0.00015"))
-DERIVED_VELOCITY_ALPHA = float(os.environ.get("PYSOEM_DERIVED_VELOCITY_ALPHA", "0.2"))
+DERIVED_VELOCITY_ALPHA = env_float(
+    "MOTION_SERVER_DERIVED_VELOCITY_ALPHA",
+    "0.2",
+    "PYSOEM_DERIVED_VELOCITY_ALPHA",
+)
 FEEDBACK_PERIOD = float(os.environ.get("MOTION_SERVER_FEEDBACK_PERIOD", "0.05"))
 AXIS_RESTART_DISABLE_SETTLE_TIME = float(
     os.environ.get("MOTION_SERVER_AXIS_RESTART_DISABLE_SETTLE_TIME", "1.0")
 )
-STATUS_LOG_PERIOD = float(os.environ.get("PYSOEM_STATUS_LOG_PERIOD", "1.0"))
+STATUS_LOG_PERIOD = env_float(
+    "MOTION_SERVER_STATUS_LOG_PERIOD",
+    "1.0",
+    "PYSOEM_STATUS_LOG_PERIOD",
+)
 AXIS_SERVER_COMMAND_LOGS = env_value(
     "MOTION_SERVER_COMMAND_LOGS",
     "0",
@@ -113,50 +143,79 @@ AXIS_SERVER_STATUS_LOGS = env_value(
     "0",
     "AXIS_SERVER_STATUS_LOGS",
 ).strip() == "1"
-CYCLE_STATS_LOGS = os.environ.get("PYSOEM_CYCLE_STATS_LOGS", "1").strip() == "1"
-CYCLE_STATS_PERIOD = float(os.environ.get("PYSOEM_CYCLE_STATS_PERIOD", "1.0"))
-TX_HISTORY_LENGTH = int(os.environ.get("PYSOEM_TX_HISTORY_LENGTH", "16"))
-TRAJECTORY_DEBUG_LOGS = os.environ.get(
+CYCLE_STATS_LOGS = env_bool(
+    "MOTION_SERVER_CYCLE_STATS_LOGS",
+    "1",
+    "PYSOEM_CYCLE_STATS_LOGS",
+)
+CYCLE_STATS_PERIOD = env_float(
+    "MOTION_SERVER_CYCLE_STATS_PERIOD",
+    "1.0",
+    "PYSOEM_CYCLE_STATS_PERIOD",
+)
+TX_HISTORY_LENGTH = env_int(
+    "MOTION_SERVER_TX_HISTORY_LENGTH",
+    "16",
+    "PYSOEM_TX_HISTORY_LENGTH",
+)
+TRAJECTORY_DEBUG_LOGS = env_value(
+    "MOTION_SERVER_TRAJECTORY_DEBUG_LOGS",
+    "0",
     "PYSOEM_TRAJECTORY_DEBUG_LOGS",
-    "0",
 ).strip() == "1"
-TRAJECTORY_SNAPSHOT_LOGS = os.environ.get(
-    "PYSOEM_TRAJECTORY_SNAPSHOT_LOGS",
+TRAJECTORY_SNAPSHOT_LOGS = env_value(
+    "MOTION_SERVER_TRAJECTORY_SNAPSHOT_LOGS",
     "0",
+    "PYSOEM_TRAJECTORY_SNAPSHOT_LOGS",
 ).strip() == "1"
 ROS_BRIDGE_COMMAND_LOGS = os.environ.get(
     "ROS_BRIDGE_COMMAND_LOGS",
     "0",
 ).strip() == "1"
-VELOCITY_ANOMALY_LOGS = os.environ.get(
+VELOCITY_ANOMALY_LOGS = env_value(
+    "MOTION_SERVER_VELOCITY_ANOMALY_LOGS",
+    "0",
     "PYSOEM_VELOCITY_ANOMALY_LOGS",
-    "0",
 ).strip() == "1"
-CSP_COMMAND_STEP_LOGS = os.environ.get(
+CSP_COMMAND_STEP_LOGS = env_value(
+    "MOTION_SERVER_CSP_COMMAND_STEP_LOGS",
+    "0",
     "PYSOEM_CSP_COMMAND_STEP_LOGS",
-    "0",
 ).strip() == "1"
-VELOCITY_ANOMALY_THRESHOLD = float(
-    os.environ.get("PYSOEM_VELOCITY_ANOMALY_THRESHOLD", "15.0")
+VELOCITY_ANOMALY_THRESHOLD = env_float(
+    "MOTION_SERVER_VELOCITY_ANOMALY_THRESHOLD",
+    "15.0",
+    "PYSOEM_VELOCITY_ANOMALY_THRESHOLD",
 )
-VELOCITY_JUMP_THRESHOLD = float(
-    os.environ.get("PYSOEM_VELOCITY_JUMP_THRESHOLD", "15.0")
+VELOCITY_JUMP_THRESHOLD = env_float(
+    "MOTION_SERVER_VELOCITY_JUMP_THRESHOLD",
+    "15.0",
+    "PYSOEM_VELOCITY_JUMP_THRESHOLD",
 )
-VELOCITY_ANOMALY_LOG_PERIOD = float(
-    os.environ.get("PYSOEM_VELOCITY_ANOMALY_LOG_PERIOD", "0.05")
+VELOCITY_ANOMALY_LOG_PERIOD = env_float(
+    "MOTION_SERVER_VELOCITY_ANOMALY_LOG_PERIOD",
+    "0.05",
+    "PYSOEM_VELOCITY_ANOMALY_LOG_PERIOD",
 )
-POSITION_FEEDBACK_LAG_LOGS = os.environ.get(
+POSITION_FEEDBACK_LAG_LOGS = env_value(
+    "MOTION_SERVER_POSITION_FEEDBACK_LAG_LOGS",
+    "0",
     "PYSOEM_POSITION_FEEDBACK_LAG_LOGS",
-    "0",
 ).strip() == "1"
-POSITION_FEEDBACK_LAG_LOG_PERIOD = float(
-    os.environ.get("PYSOEM_POSITION_FEEDBACK_LAG_LOG_PERIOD", "0.2")
+POSITION_FEEDBACK_LAG_LOG_PERIOD = env_float(
+    "MOTION_SERVER_POSITION_FEEDBACK_LAG_LOG_PERIOD",
+    "0.2",
+    "PYSOEM_POSITION_FEEDBACK_LAG_LOG_PERIOD",
 )
-CSP_COMMAND_STEP_THRESHOLD = float(
-    os.environ.get("PYSOEM_CSP_COMMAND_STEP_THRESHOLD", "250.0")
+CSP_COMMAND_STEP_THRESHOLD = env_float(
+    "MOTION_SERVER_CSP_COMMAND_STEP_THRESHOLD",
+    "250.0",
+    "PYSOEM_CSP_COMMAND_STEP_THRESHOLD",
 )
-CSP_COMMAND_STEP_ERROR_THRESHOLD = float(
-    os.environ.get("PYSOEM_CSP_COMMAND_STEP_ERROR_THRESHOLD", "75.0")
+CSP_COMMAND_STEP_ERROR_THRESHOLD = env_float(
+    "MOTION_SERVER_CSP_COMMAND_STEP_ERROR_THRESHOLD",
+    "75.0",
+    "PYSOEM_CSP_COMMAND_STEP_ERROR_THRESHOLD",
 )
 DEVICE_PROFILE = get_device_profile("cmmt")
 PROFILE_POSITION_MODE = DEVICE_PROFILE.PROFILE_POSITION_MODE
@@ -242,11 +301,12 @@ def parse_args(argv=None):
     )
     parser.add_argument(
         "--bus",
-        default=os.environ.get("PYSOEM_BUS", "cmmt"),
+        default=bus_env_value(),
         help=(
             "Comma-separated EtherCAT bus layout. Entries without a prefix "
-            "are motion axes. Use io:<profile> or device:<profile> for "
-            "non-motion slaves, for example cmmt,cmmt,io:cpx_ap_i_ec."
+            "are motion axes. Use io:<profile>:<id> or device:<profile>:<id> "
+            "for non-motion slaves, for example "
+            "cmmt,cmmt,io:cpx_ap_i_ec:io0."
         ),
     )
     parser.add_argument(
@@ -346,34 +406,50 @@ def parse_args(argv=None):
     parser.add_argument(
         "--max-velocity",
         type=float,
-        default=float(os.environ.get("PYSOEM_MAX_VELOCITY", "50.0")),
+        default=env_float(
+            "MOTION_SERVER_MAX_VELOCITY",
+            "50.0",
+            "PYSOEM_MAX_VELOCITY",
+        ),
     )
     parser.add_argument(
         "--acceleration",
         type=float,
-        default=float(os.environ.get("PYSOEM_ACCELERATION", "100.0")),
+        default=env_float(
+            "MOTION_SERVER_ACCELERATION",
+            "100.0",
+            "PYSOEM_ACCELERATION",
+        ),
     )
     parser.add_argument(
         "--deceleration",
         type=float,
-        default=float(os.environ.get("PYSOEM_DECELERATION", "100.0")),
+        default=env_float(
+            "MOTION_SERVER_DECELERATION",
+            "100.0",
+            "PYSOEM_DECELERATION",
+        ),
     )
     parser.add_argument(
         "--jerk",
         type=float,
-        default=float(os.environ.get("PYSOEM_JERK", "1000.0")),
+        default=env_float("MOTION_SERVER_JERK", "1000.0", "PYSOEM_JERK"),
         help="CSP S-curve jerk limit in user units per second cubed.",
     )
     parser.add_argument(
         "--pp-jerk",
         type=int,
-        default=int(os.environ.get("PYSOEM_PP_JERK", "100000")),
+        default=env_int("MOTION_SERVER_PP_JERK", "100000", "PYSOEM_PP_JERK"),
         help="Profile position jerk configured on the drive.",
     )
     parser.add_argument(
         "--csp-counts-per-unit",
         type=float,
-        default=float(os.environ.get("PYSOEM_CSP_COUNTS_PER_UNIT", "1.0")),
+        default=env_float(
+            "MOTION_SERVER_CSP_COUNTS_PER_UNIT",
+            "1.0",
+            "PYSOEM_CSP_COUNTS_PER_UNIT",
+        ),
         help=(
             "Scale PP/user velocity units to CSP position counts. "
             "Example: 1000 count/mm -> 1000.0."
@@ -383,9 +459,10 @@ def parse_args(argv=None):
         "--csp-profile",
         choices=["trapezoid", "quintic"],
         type=lambda value: value.strip().lower(),
-        default=os.environ.get(
-            "PYSOEM_CSP_PROFILE",
+        default=env_value(
+            "MOTION_SERVER_CSP_PROFILE",
             "quintic",
+            "PYSOEM_CSP_PROFILE",
         ).strip().lower(),
         help=(
             "CSP profile used by Point Move and position-only Trajectory Move. "
@@ -417,7 +494,11 @@ def parse_args(argv=None):
     parser.add_argument(
         "--csp-interpolation-mode",
         type=int,
-        default=int(os.environ.get("PYSOEM_CSP_INTERPOLATION_MODE", "1")),
+        default=env_int(
+            "MOTION_SERVER_CSP_INTERPOLATION_MODE",
+            "1",
+            "PYSOEM_CSP_INTERPOLATION_MODE",
+        ),
         help=(
             "Device CSP interpolation mode. "
             "For CMMT: 1=CSP, 4=CSP-V, 5=CSP-T, 6=CSP-VT."
@@ -426,7 +507,11 @@ def parse_args(argv=None):
     parser.add_argument(
         "--csp-velocity-offset",
         action="store_true",
-        default=os.environ.get("PYSOEM_CSP_VELOCITY_OFFSET", "0").strip() == "1",
+        default=env_bool(
+            "MOTION_SERVER_CSP_VELOCITY_OFFSET",
+            "0",
+            "PYSOEM_CSP_VELOCITY_OFFSET",
+        ),
         help=(
             "Send CSP command velocity as 0x60B1 velocity offset in user units. "
             "Use with CSP interpolation mode CSP-V."
@@ -441,12 +526,17 @@ def parse_args(argv=None):
     parser.add_argument(
         "--motion-mode",
         choices=sorted(MOTION_MODES),
-        default=os.environ.get("PYSOEM_MOTION_MODE", "pp").lower(),
+        default=env_value(
+            "MOTION_SERVER_MOTION_MODE",
+            "pp",
+            "PYSOEM_MOTION_MODE",
+        ).lower(),
     )
     args = parser.parse_args(argv)
     bus_config = parse_bus_config(args.bus)
     args.device_profile_names = bus_config["device_profile_names"]
     args.axis_slave_indices = bus_config["axis_slave_indices"]
+    args.io_devices = bus_config["io_devices"]
     args.axis_count = len(args.axis_slave_indices)
     if args.axis_count < 1:
         parser.error("--bus must contain at least one motion axis")
@@ -458,11 +548,12 @@ def parse_args(argv=None):
 def parse_bus_config(raw_bus):
     raw_bus = str(raw_bus or "").strip()
     if not raw_bus:
-        raise ValueError("PYSOEM_BUS must not be empty")
+        raise ValueError("MOTION_SERVER_BUS must not be empty")
 
     available = set(available_device_names())
     device_profile_names = []
     axis_slave_indices = []
+    io_devices = []
 
     for raw_entry in raw_bus.split(","):
         entry = raw_entry.strip().lower()
@@ -471,11 +562,12 @@ def parse_bus_config(raw_bus):
 
         role = "axis"
         profile_name = entry
+        logical_id = None
         if ":" in entry:
-            role, profile_name = [
-                part.strip()
-                for part in entry.split(":", 1)
-            ]
+            parts = [part.strip() for part in entry.split(":")]
+            role = parts[0]
+            profile_name = parts[1] if len(parts) > 1 else ""
+            logical_id = parts[2] if len(parts) > 2 else None
 
         if role in {"axis", "drive"}:
             is_motion_axis = True
@@ -483,13 +575,13 @@ def parse_bus_config(raw_bus):
             is_motion_axis = False
         else:
             raise ValueError(
-                f"Unsupported PYSOEM_BUS role {role!r}; "
-                "use axis:<profile> or io:<profile>"
+                f"Unsupported MOTION_SERVER_BUS role {role!r}; "
+                "use axis:<profile> or io:<profile>:<id>"
             )
 
         if profile_name not in available:
             raise ValueError(
-                f"Unsupported PYSOEM_BUS profile {profile_name!r}. "
+                f"Unsupported MOTION_SERVER_BUS profile {profile_name!r}. "
                 f"Supported profiles: {', '.join(available_device_names())}"
             )
 
@@ -497,13 +589,22 @@ def parse_bus_config(raw_bus):
         device_profile_names.append(profile_name)
         if is_motion_axis:
             axis_slave_indices.append(slave_index)
+        else:
+            if not logical_id:
+                logical_id = f"io{len(io_devices)}"
+            io_devices.append({
+                "id": logical_id,
+                "profile": profile_name,
+                "slave_index": slave_index,
+            })
 
     if not device_profile_names:
-        raise ValueError("PYSOEM_BUS does not contain any devices")
+        raise ValueError("MOTION_SERVER_BUS does not contain any devices")
 
     return {
         "device_profile_names": device_profile_names,
         "axis_slave_indices": axis_slave_indices,
+        "io_devices": io_devices,
     }
 
 

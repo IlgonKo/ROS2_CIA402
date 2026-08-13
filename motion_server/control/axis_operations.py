@@ -72,7 +72,7 @@ def reject_if_any_axis_disabled(runtime, axes, client, command):
 
 
 def pv_allowed_axis(state, axis_index):
-    return state["drive_manager"].pv_allowed(axis_index)
+    return state["axis_devices"].pv_allowed(axis_index)
 
 
 def pv_reject_message(state, axis_indices):
@@ -85,7 +85,7 @@ def pv_reject_message(state, axis_indices):
         else:
             details.append(
                 f"axis {axis_index}: 0x216E:01=0x{int(user_position_unit):04X} "
-                f"unit={state['drive_manager'].user_position_unit_name(user_position_unit)}"
+                f"unit={state['axis_devices'].user_position_unit_name(user_position_unit)}"
             )
     return (
         "PV mode is allowed only for rotary user position units "

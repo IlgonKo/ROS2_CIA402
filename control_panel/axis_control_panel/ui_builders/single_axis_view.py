@@ -3,8 +3,8 @@
 import tkinter as tk
 from tkinter import ttk
 
-from axis_control_panel.statusword import STATUSWORD_BITS
-from axis_control_panel.trace import TraceCanvas
+from control_panel.axis_control_panel.statusword import STATUSWORD_BITS
+from control_panel.axis_control_panel.trace import TraceCanvas
 
 
 class SingleAxisViewBuilderMixin:

@@ -23,7 +23,7 @@ prepare_compose_env_file() {
       set -a
       # shellcheck disable=SC1090
       source "${base_env}"
-      printf '%s' "${PYSOEM_DEVICE_CONFIG_ROOT:-device}"
+      printf '%s' "${MOTION_SERVER_DEVICE_CONFIG_ROOT:-${PYSOEM_DEVICE_CONFIG_ROOT:-device}}"
     )"
     if [[ "${device_config_root}" != /* ]]; then
       device_config_root="${project_root}/${device_config_root}"
@@ -34,7 +34,7 @@ prepare_compose_env_file() {
       set -a
       # shellcheck disable=SC1090
       source "${base_env}"
-      printf '%s' "${PYSOEM_BUS:-cmmt}"
+      printf '%s' "${MOTION_SERVER_BUS:-${PYSOEM_BUS:-cmmt}}"
     )"
     local loaded_profiles=","
     local bus_entry profile device_env_file
@@ -44,7 +44,10 @@ prepare_compose_env_file() {
       if [[ -z "${bus_entry}" ]]; then
         continue
       fi
-      profile="${bus_entry##*:}"
+      profile="${bus_entry}"
+      if [[ "${bus_entry}" == *:* ]]; then
+        IFS=':' read -r _role profile _logical_id <<< "${bus_entry}"
+      fi
       if [[ "${loaded_profiles}" == *",${profile},"* ]]; then
         continue
       fi

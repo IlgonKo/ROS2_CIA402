@@ -10,7 +10,7 @@ from motion_server.config import (
     require_pdo_fields_for_mode,
 )
 from motion_server.app.cycle import exchange
-from motion_server.drive.diagnostics import diagnostics_summary
+from motion_server.device_manager.axis_diagnostics import diagnostics_summary
 from motion_server.control.axis_operations import (
     configure_motion_mode,
     faulted_axes,

@@ -34,3 +34,11 @@ def selected_single_axis(message, runtime, command):
     if len(axes) != 1:
         raise ValueError(f"{command} requires exactly one axis")
     return axes[0]
+
+
+def io_devices(runtime):
+    return runtime.device_manager.io.devices
+
+
+def selected_io_device(runtime, io_id=None, slave_index=None):
+    return runtime.device_manager.io.selected_device(io_id, slave_index)

@@ -6,7 +6,7 @@ param(
 
 $ProjectRoot = Resolve-Path (Join-Path $PSScriptRoot "..\..")
 . (Join-Path $PSScriptRoot "env.ps1")
-$PanelConfigRoot = Join-Path $ProjectRoot "control_panel\axis_control_panel"
+$PanelConfigRoot = Join-Path $ProjectRoot "control_panel\io_control_panel"
 $PanelEnvPath = Join-Path $PanelConfigRoot ".env"
 $PanelEnv = Read-DotEnvFile -Path $PanelEnvPath
 
@@ -18,10 +18,10 @@ if ($Port -le 0) {
 }
 $env:MOTION_SERVER_HOST = $HostName
 $env:MOTION_SERVER_PORT = [string]$Port
-$env:AXIS_CONTROL_PANEL_CONFIG_ROOT = $PanelConfigRoot
+$env:IO_CONTROL_PANEL_CONFIG_ROOT = $PanelConfigRoot
 $env:PYTHONPATH = "$ProjectRoot;$env:PYTHONPATH"
 
-Write-Host "Starting Axis Control Panel"
+Write-Host "Starting IO Control Panel"
 Write-Host "Host=$HostName"
 Write-Host "Port=$Port"
 Write-Host "Config=$PanelEnvPath"
@@ -29,7 +29,7 @@ Write-Host "PYTHONPATH=$env:PYTHONPATH"
 
 Push-Location $ProjectRoot
 try {
-    & $Python -B -m control_panel.axis_control_panel.control_panel
+    & $Python -B -m control_panel.io_control_panel.control_panel
 }
 finally {
     Pop-Location

@@ -5,12 +5,12 @@ import socket
 import threading
 import time
 
-from axis_control_panel.panel_update_data import (
+from control_panel.axis_control_panel.panel_update_data import (
     initial_feedback,
     merge_axis_status,
     merge_system_feedback,
 )
-from axis_control_panel.units import api_to_user_unit_factor
+from control_panel.axis_control_panel.units import api_to_user_unit_factor
 
 RECONNECT_PERIOD = 1.0
 

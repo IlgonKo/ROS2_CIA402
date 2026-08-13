@@ -72,17 +72,20 @@ def load_axis_env(root):
         )
         values.update(read_dotenv(virtual_env_path))
 
-    device_config_root = values.get("PYSOEM_DEVICE_CONFIG_ROOT", "device")
+    device_config_root = values.get(
+        "MOTION_SERVER_DEVICE_CONFIG_ROOT",
+        values.get("PYSOEM_DEVICE_CONFIG_ROOT", "device"),
+    )
     device_config_root_path = Path(device_config_root)
     if not device_config_root_path.is_absolute():
         device_config_root_path = root / device_config_root_path
-    bus = values.get("PYSOEM_BUS", "cmmt")
+    bus = values.get("MOTION_SERVER_BUS", values.get("PYSOEM_BUS", "cmmt"))
     loaded_profiles = set()
     for raw_entry in bus.split(","):
         entry = raw_entry.strip().lower()
         if not entry:
             continue
-        profile = entry.split(":", 1)[1].strip() if ":" in entry else entry
+        profile = entry.split(":")[1].strip() if ":" in entry else entry
         if profile in loaded_profiles:
             continue
         loaded_profiles.add(profile)

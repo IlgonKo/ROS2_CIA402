@@ -62,18 +62,18 @@ Runtime settings are stored in `.env`:
 
 ```text
 PYSOEM_INTERFACE=enp1s0
-AXIS_SERVER_BACKEND=pysoem
-PYSOEM_BUS=cmmt
-AXIS_SERVER_PORT=15000
+MOTION_SERVER_BACKEND=pysoem
+MOTION_SERVER_BUS=cmmt
+MOTION_SERVER_PORT=15000
 PYSOEM_CYCLE_TIME=0.01
-PYSOEM_DERIVED_VELOCITY_ALPHA=0.2
+MOTION_SERVER_DERIVED_VELOCITY_ALPHA=0.2
 ```
 
 CMMT-specific settings are stored in `device/cmmt/.env`:
 
 ```text
-PYSOEM_CSP_COUNTS_PER_UNIT=1000.0
-PYSOEM_MOTION_MODE=pp
+MOTION_SERVER_CSP_COUNTS_PER_UNIT=1000.0
+MOTION_SERVER_MOTION_MODE=pp
 ```
 
 Virtual servo drive settings are stored in `device/virtual_servo_drive/.env`:
@@ -97,8 +97,8 @@ bus layout, and interface values it read from `.env`.
 For a three-axis mock backend, use:
 
 ```text
-AXIS_SERVER_BACKEND=mock
-PYSOEM_BUS=cmmt,cmmt,cmmt
+MOTION_SERVER_BACKEND=mock
+MOTION_SERVER_BUS=cmmt,cmmt,cmmt
 ```
 
 For multiple same-profile CiA402 slaves, edit `.env` once:
@@ -126,23 +126,18 @@ an `io:` prefix. For example, two CMMT motion axes plus a CPX-AP-I-EC I/O
 station:
 
 ```text
-PYSOEM_BUS=cmmt,cmmt,io:cpx_ap_i_ec
+MOTION_SERVER_BUS=cmmt,cmmt,io:cpx_ap_i_ec:io0
 ```
 
-The CPX profile keeps the device PDO mapping and uses
-`device/cpx_ap_i_ec/.env` to describe the I/O image by count:
+The CPX profile keeps the device PDO mapping. The station AP module layout is
+declared in the common Motion Server configuration:
 
 ```text
-CPX_DIGITAL_INPUTS=16
-CPX_ANALOG_INPUTS=2
-CPX_DIGITAL_OUTPUTS=16
-CPX_ANALOG_OUTPUTS=1
-CPX_ANALOG_BITS=16
+MOTION_SERVER_IO_io0_MODULES=di:16,do:16,aio:2:1
 ```
 
-The configured byte size is compared with the actual PDO byte size before
-`config_map()`. If all CPX counts are zero, the profile accepts the device PDO
-size as raw bytes.
+The configured byte size from `MOTION_SERVER_IO_<id>_MODULES` is compared with
+the actual PDO byte size before `config_map()`.
 
 The CPX object dictionary is based on the CPX-AP-I-EC manual. Fixed objects
 such as `0x27F0`, `0x27F1`, `0xF000`, and `0xF980` are declared directly.
@@ -174,6 +169,15 @@ after changing the panel Dockerfile or dependencies:
 
 ```bash
 bash scripts/host/panel.sh --build
+```
+
+Control panel source code is grouped under `control_panel/`.
+`control_panel/axis_control_panel` contains the motion-axis panel, and
+`control_panel/io_control_panel` contains the CPX remote I/O monitoring and
+digital output control panel. On Windows, the I/O panel can be started from:
+
+```powershell
+.\scripts\windows\io_panel.ps1
 ```
 
 The Axis Server accepts multiple TCP clients. Command messages require command

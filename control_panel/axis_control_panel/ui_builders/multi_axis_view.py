@@ -2,7 +2,7 @@
 
 from tkinter import ttk
 
-from axis_control_panel.trace import TraceCanvas
+from control_panel.axis_control_panel.trace import TraceCanvas
 
 
 class MultiAxisViewBuilderMixin:

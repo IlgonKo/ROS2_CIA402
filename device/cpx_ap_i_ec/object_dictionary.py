@@ -145,8 +145,18 @@ def cpx_object(index, subindex=0):
 def cpx_dynamic_object(index, subindex=0):
     index = int(index)
     subindex = int(subindex)
+    if is_pdo_assignment_index(index):
+        return cpx_pdo_assignment_object(index, subindex)
+    if is_pdo_mapping_index(index):
+        return cpx_pdo_mapping_object(index, subindex)
+    if is_process_data_index(index, 0x6000):
+        return cpx_process_data_object(index, subindex, "Input byte", "IB")
+    if is_process_data_index(index, 0x7000):
+        return cpx_process_data_object(index, subindex, "Output byte", "QB")
     if is_isdu_access_index(index):
         return cpx_isdu_access_object(index, subindex)
+    if is_module_parameter_index(index):
+        return cpx_module_parameter_object(index, subindex)
     if 0x9000 <= index <= 0x9FFF:
         return cpx_module_information_object(index, subindex)
     if is_module_diagnosis_index(index):
@@ -163,6 +173,91 @@ def cpx_dynamic_object(index, subindex=0):
             subindex,
             "Detected module ident",
         )
+    return None
+
+
+def is_pdo_assignment_index(index):
+    return int(index) in (0x1C12, 0x1C13)
+
+
+def cpx_pdo_assignment_object(index, subindex):
+    if subindex == 0:
+        label = "RxPDO assignment" if int(index) == 0x1C12 else "TxPDO assignment"
+        return ObjectDictionaryEntry(index, subindex, label, "uint8")
+    if 1 <= subindex <= 255:
+        label = "Assigned RxPDO" if int(index) == 0x1C12 else "Assigned TxPDO"
+        return ObjectDictionaryEntry(
+            index,
+            subindex,
+            f"{label} {subindex}",
+            "uint16",
+        )
+    return None
+
+
+def is_pdo_mapping_index(index):
+    index = int(index)
+    return 0x1600 <= index <= 0x17FF or 0x1A00 <= index <= 0x1BFF
+
+
+def cpx_pdo_mapping_object(index, subindex):
+    if subindex == 0:
+        label = "RxPDO mapping" if int(index) < 0x1A00 else "TxPDO mapping"
+        return ObjectDictionaryEntry(index, subindex, f"{label} entries", "uint8")
+    if 1 <= subindex <= 16:
+        label = "RxPDO mapping" if int(index) < 0x1A00 else "TxPDO mapping"
+        return ObjectDictionaryEntry(
+            index,
+            subindex,
+            f"{label} entry {subindex}",
+            "uint32",
+        )
+    return None
+
+
+def is_process_data_index(index, base_index):
+    index = int(index)
+    base_index = int(base_index)
+    return base_index <= index <= base_index + 0x0FFF
+
+
+def cpx_process_data_object(index, subindex, label, prefix):
+    if subindex == 0:
+        return ObjectDictionaryEntry(index, subindex, f"{label} entries", "uint8")
+    if 1 <= subindex <= 20:
+        return ObjectDictionaryEntry(
+            index,
+            subindex,
+            f"{prefix}{subindex - 1}",
+            "uint8",
+        )
+    return None
+
+
+def is_module_parameter_index(index):
+    index = int(index)
+    return 0x2000 <= index <= 0x2FFF
+
+
+def cpx_module_parameter_object(index, subindex):
+    if subindex == 0:
+        return ObjectDictionaryEntry(
+            index,
+            subindex,
+            "Module parameter entries",
+            "uint8",
+        )
+    if subindex == 1:
+        return ObjectDictionaryEntry(index, subindex, "Module parameter 1", "uint8")
+    if subindex in (2,):
+        return ObjectDictionaryEntry(
+            index,
+            subindex,
+            f"Module parameter {subindex}",
+            "uint8",
+        )
+    if 3 <= subindex <= 255:
+        return ObjectDictionaryEntry(index, subindex, f"Module parameter {subindex}", "uint32")
     return None
 
 

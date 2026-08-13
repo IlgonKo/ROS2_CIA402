@@ -30,7 +30,7 @@ def inactive_homing_state(result="idle"):
 
 def initial_server_state(
     args,
-    drive_manager,
+    axis_devices,
     positions,
     software_position_limits,
     profile_settings=None,
@@ -65,15 +65,15 @@ def initial_server_state(
         user_position_units = [None for _ in range(args.axis_count)]
     if converting_unit_exponents is None:
         converting_unit_exponents = [None for _ in range(args.axis_count)]
-    drive_manager.configure_unit_conversion(
+    axis_devices.configure_unit_conversion(
         user_position_units,
         converting_unit_exponents,
         args.csp_counts_per_unit,
     )
     if axis_metadata is None:
-        axis_metadata = drive_manager.unit_metadata()
+        axis_metadata = axis_devices.unit_metadata()
     return {
-        "drive_manager": drive_manager,
+        "axis_devices": axis_devices,
         "drive_initialized": bool(initialized),
         "initialization_error": initialization_error,
         "server_mode": args.server_mode,
@@ -100,7 +100,7 @@ def initial_server_state(
             args.csp_counts_per_unit
         ),
         "axis_position_counts_per_unit": axis_position_counts_per_api_units(
-            {"drive_manager": drive_manager},
+            {"axis_devices": axis_devices},
             args.axis_count,
         ),
         "capabilities": {

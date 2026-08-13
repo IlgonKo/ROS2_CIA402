@@ -40,14 +40,20 @@ function Import-AxisServerEnv {
         $merged[$entry.Key] = $entry.Value
     }
 
-    $deviceConfigRoot = $merged["PYSOEM_DEVICE_CONFIG_ROOT"]
+    $deviceConfigRoot = $merged["MOTION_SERVER_DEVICE_CONFIG_ROOT"]
+    if ([string]::IsNullOrWhiteSpace($deviceConfigRoot)) {
+        $deviceConfigRoot = $merged["PYSOEM_DEVICE_CONFIG_ROOT"]
+    }
     if ([string]::IsNullOrWhiteSpace($deviceConfigRoot)) {
         $deviceConfigRoot = "device"
     }
     if (-not [System.IO.Path]::IsPathRooted($deviceConfigRoot)) {
         $deviceConfigRoot = Join-Path $ProjectRoot $deviceConfigRoot
     }
-    $bus = $merged["PYSOEM_BUS"]
+    $bus = $merged["MOTION_SERVER_BUS"]
+    if ([string]::IsNullOrWhiteSpace($bus)) {
+        $bus = $merged["PYSOEM_BUS"]
+    }
     if ([string]::IsNullOrWhiteSpace($bus)) {
         $bus = "cmmt"
     }
@@ -59,7 +65,7 @@ function Import-AxisServerEnv {
         }
         $profile = $entry
         if ($entry.Contains(":")) {
-            $profile = $entry.Split(":", 2)[1].Trim()
+            $profile = $entry.Split(":")[1].Trim()
         }
         if ($loadedProfiles.ContainsKey($profile)) {
             continue

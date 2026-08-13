@@ -12,7 +12,7 @@ def available_device_names():
     return sorted(DEVICE_PROFILES)
 
 
-def get_device_profile(name):
+def get_device_profile(name, **kwargs):
     key = str(name or "cmmt").strip().lower()
     try:
         profile_class = DEVICE_PROFILES[key]
@@ -21,4 +21,4 @@ def get_device_profile(name):
             f"Unsupported device profile: {name}. "
             f"Supported profiles: {', '.join(available_device_names())}"
         ) from exc
-    return profile_class()
+    return profile_class(**kwargs)

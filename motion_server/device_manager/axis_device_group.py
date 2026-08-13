@@ -1,16 +1,16 @@
 from dataclasses import dataclass
 
-from motion_server.drive.unit_conversion import DriveUnitConverter
+from motion_server.device_manager.axis_unit_conversion import AxisUnitConverter
 
 
 @dataclass(frozen=True)
-class DriveBinding:
+class AxisBinding:
     axis_index: int
     slave_index: int
 
 
 @dataclass
-class DriveCommand:
+class AxisCommand:
     target_position: int | None = None
     target_velocity: int | None = None
     velocity_offset: int | None = None
@@ -19,7 +19,7 @@ class DriveCommand:
 
 
 @dataclass(frozen=True)
-class DriveFeedback:
+class AxisFeedback:
     statusword: int
     mode_of_operation_display: int
     actual_position: float
@@ -34,40 +34,37 @@ class DriveFeedback:
         return bool(self.statusword & 0x0004)
 
 
-class DriveSdoAccess:
-    def __init__(self, sdo, drive_bindings):
+class AxisSdoAccess:
+    def __init__(self, sdo, axis_bindings):
         self._sdo = sdo
         self._slave_indices = [
-            binding.slave_index for binding in drive_bindings
+            binding.slave_index for binding in axis_bindings
         ]
 
     def __getattr__(self, name):
         operation = getattr(self._sdo, name)
 
-        def drive_operation(axis_index, *args, **kwargs):
+        def axis_operation(axis_index, *args, **kwargs):
             slave_index = self._slave_indices[int(axis_index)]
             return operation(slave_index, *args, **kwargs)
 
-        return drive_operation
+        return axis_operation
 
 
-class DriveManager:
-    """Owns drive-to-slave mapping and drive communication."""
+class AxisDeviceGroup:
+    """Motion-axis view over EtherCAT devices."""
 
-    def __init__(self, ethercat_master, drive_bindings):
+    def __init__(self, ethercat_master, axis_bindings):
         self.ethercat_master = ethercat_master
-        self.drive_bindings = list(drive_bindings)
+        self.axis_bindings = list(axis_bindings)
         self._validate_bindings()
-        self.drives = [
+        self.devices = [
             ethercat_master.slaves[binding.slave_index]
-            for binding in self.drive_bindings
+            for binding in self.axis_bindings
         ]
-        self.sdo = DriveSdoAccess(
-            ethercat_master.sdo,
-            self.drive_bindings,
-        )
+        self.sdo = AxisSdoAccess(ethercat_master.sdo, self.axis_bindings)
         self.last_diagnostics = []
-        self.unit_converter = DriveUnitConverter(len(self.drives))
+        self.unit_converter = AxisUnitConverter(len(self.devices))
         self.configure_unit_conversion()
 
     def configure_unit_conversion(
@@ -116,63 +113,38 @@ class DriveManager:
     def motion_api_to_drive(self, axis_index, value, kind="velocity"):
         return self.unit_converter.motion_api_to_drive(axis_index, value, kind)
 
-    @property
-    def devices(self):
-        return self.ethercat_master.slaves
-
-    def connect(self, target_state=None):
-        self.ethercat_master.connect(target_state=target_state)
-
-    def enter_operational(self):
-        self.ethercat_master.enter_operational()
-
-    def close(self):
-        self.ethercat_master.close()
-
-    def prepare_processdata(self):
-        self.ethercat_master.prepare_processdata()
-
-    def send_processdata(self):
-        self.ethercat_master.send_processdata()
-
-    def receive_processdata(self):
-        return self.ethercat_master.receive_processdata()
-
-    def expected_wkc(self):
-        return self.ethercat_master.expected_wkc()
-
     def feedback(self):
         return [
-            DriveFeedback(
-                statusword=int(drive.txpdo.statusword),
+            AxisFeedback(
+                statusword=int(axis.txpdo.statusword),
                 mode_of_operation_display=int(
-                    drive.txpdo.mode_of_operation_display
+                    axis.txpdo.mode_of_operation_display
                 ),
-                actual_position=float(drive.txpdo.actual_position),
-                actual_velocity=float(drive.txpdo.actual_velocity),
+                actual_position=float(axis.txpdo.actual_position),
+                actual_velocity=float(axis.txpdo.actual_velocity),
             )
-            for drive in self.drives
+            for axis in self.devices
         ]
 
     def modes_of_operation(self):
-        return [int(drive.rxpdo.mode_of_operation) for drive in self.drives]
+        return [int(axis.rxpdo.mode_of_operation) for axis in self.devices]
 
     def target_positions(self):
-        return [int(drive.rxpdo.target_position) for drive in self.drives]
+        return [int(axis.rxpdo.target_position) for axis in self.devices]
 
     def actual_positions(self):
         return [float(item.actual_position) for item in self.feedback()]
 
     def set_target_position(self, axis_index, target_position):
-        drive = self.drives[int(axis_index)]
-        drive.rxpdo.target_position = int(round(target_position))
+        axis = self.devices[int(axis_index)]
+        axis.rxpdo.target_position = int(round(target_position))
 
     def apply_commands(self, commands):
-        for drive, command in zip(self.drives, commands):
+        for axis, command in zip(self.devices, commands):
             if command is None:
                 continue
             if isinstance(command, dict):
-                command = DriveCommand(**command)
+                command = AxisCommand(**command)
             for field in (
                 "target_position",
                 "target_velocity",
@@ -181,16 +153,16 @@ class DriveManager:
                 "mode_of_operation",
             ):
                 value = getattr(command, field)
-                if value is not None and drive.rxpdo.has_field(field):
-                    setattr(drive.rxpdo, field, value)
+                if value is not None and axis.rxpdo.has_field(field):
+                    setattr(axis.rxpdo, field, value)
 
     def set_controlword_all(self, controlword):
-        for drive in self.drives:
-            drive.rxpdo.controlword = controlword
+        for axis in self.devices:
+            axis.rxpdo.controlword = controlword
 
     def set_mode_of_operation_all(self, mode_of_operation):
-        for drive in self.drives:
-            drive.rxpdo.mode_of_operation = mode_of_operation
+        for axis in self.devices:
+            axis.rxpdo.mode_of_operation = mode_of_operation
 
     def set_mock_motion_limits(
         self,
@@ -199,7 +171,7 @@ class DriveManager:
         acceleration,
         deceleration,
     ):
-        axis = getattr(self.drives[axis_index], "axis", None)
+        axis = getattr(self.devices[axis_index], "axis", None)
         if axis is not None:
             axis.set_motion_limits(
                 self.motion_api_to_drive(axis_index, max_velocity),
@@ -208,14 +180,14 @@ class DriveManager:
             )
 
     def _validate_bindings(self):
-        axis_indices = [binding.axis_index for binding in self.drive_bindings]
-        if axis_indices != list(range(len(self.drive_bindings))):
+        axis_indices = [binding.axis_index for binding in self.axis_bindings]
+        if axis_indices != list(range(len(self.axis_bindings))):
             raise ValueError(
-                "drive bindings must have ordered, contiguous axis indices"
+                "axis bindings must have ordered, contiguous axis indices"
             )
-        slave_indices = [binding.slave_index for binding in self.drive_bindings]
+        slave_indices = [binding.slave_index for binding in self.axis_bindings]
         if len(slave_indices) != len(set(slave_indices)):
-            raise ValueError("each drive must bind to a unique slave")
+            raise ValueError("each axis must bind to a unique slave")
         device_count = len(self.ethercat_master.slaves)
         if any(index < 0 or index >= device_count for index in slave_indices):
-            raise ValueError("drive binding contains an invalid slave index")
+            raise ValueError("axis binding contains an invalid slave index")

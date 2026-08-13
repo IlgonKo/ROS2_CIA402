@@ -13,4 +13,4 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 WORKDIR /workspace
 
-CMD ["python3", "-B", "axis_control_panel/control_panel.py"]
+CMD ["python3", "-B", "-m", "control_panel.axis_control_panel.control_panel"]

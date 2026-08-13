@@ -1,12 +1,13 @@
 import json
 
-from motion_server.commands.parameters import read_parameter
+from motion_server.commands.parameters import read_io_parameter, read_parameter
 from motion_server.commands.routes import COMMAND_ROUTER
 from motion_server.config import AXIS_SERVER_COMMAND_LOGS
 from motion_server.api.responses import (
     axis_status_message,
     bus_status_message,
     axes_status_message,
+    io_status_message,
     server_status_message,
 )
 from motion_server.api import (
@@ -59,9 +60,7 @@ COMMAND_MESSAGE_TYPES = {
     "system/axes/move_vel",
     "system/axes/trajectory",
     "system/axes/trajectory_stop",
-    "system/io/read",
-    "system/io/write",
-    "system/io/set_output",
+    "system/io/output_write",
     "system/io/reset",
     "system/io/restart",
     "system/io/param_write",
@@ -94,6 +93,7 @@ STATUS_MESSAGE_TYPES = {
     "system/axis/status",
     "system/axes/status",
     "system/io/status",
+    "system/io/input_read",
 }
 
 
@@ -153,7 +153,14 @@ def dispatch_message(message, runtime, state, client):
         return
 
     if message_type == "system/io/status":
-        reject_command_message(client, message_type, f"{message_type} is not implemented yet.")
+        send_client_message(
+            client,
+            io_status_message(
+                runtime,
+                state,
+                include_raw=bool(message.get("raw", False)),
+            ),
+        )
         return
 
     if message_type == "system/axis/status":
@@ -193,8 +200,12 @@ def dispatch_message(message, runtime, state, client):
         return
 
     if message_type == "system/io/param_read":
-        reject_command_message(client, message_type, f"{message_type} is not implemented yet.")
+        read_io_parameter(message, runtime, client)
         return
+
+    if message_type == "system/io/input_read":
+        if COMMAND_ROUTER.dispatch(message_type, message, runtime, state, client):
+            return
 
     if (
         message_type in ADVANCED_MESSAGE_TYPES

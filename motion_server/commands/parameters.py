@@ -45,6 +45,16 @@ def parse_sdo_request(message, runtime):
     return axis_index, index, subindex, data_type
 
 
+def parse_io_sdo_request(message):
+    data_type = str(message.get("data_type", "uint32")).strip().lower()
+    if "io" not in message:
+        raise ValueError("I/O parameter commands require io")
+    io_selector = message.get("io")
+    index = parse_int(message.get("index"), 0)
+    subindex = parse_int(message.get("subindex", 0))
+    return io_selector, index, subindex, data_type
+
+
 def selected_single_axis(message, runtime, command):
     if "axes" in message:
         axes = [parse_int(value) for value in message.get("axes", [])]
@@ -159,6 +169,124 @@ def write_parameter(message, runtime, client):
             "value": value,
         },
     )
+
+
+def read_io_parameter(message, runtime, client):
+    response_type = sdo_response_type(message, "system/io/param_read")
+    try:
+        io_selector, index, subindex, data_type = parse_io_sdo_request(message)
+        validate_io_parameter_access(index, subindex)
+        reader_name = SDO_READERS.get(data_type)
+        if reader_name is None:
+            raise ValueError(f"Unsupported SDO data type: {data_type}")
+        reader = getattr(runtime.sdo.io, reader_name)
+        value = reader(io_selector, index, subindex)
+    except (TypeError, ValueError) as exc:
+        send_client_message(
+            client,
+            {
+                "type": response_type,
+                "ok": False,
+                "io": message.get("io"),
+                "index": message.get("index"),
+                "subindex": message.get("subindex", 0),
+                "data_type": str(message.get("data_type", "uint32")).strip().lower(),
+                "error": str(exc),
+            },
+        )
+        return
+    except Exception as exc:
+        send_client_message(
+            client,
+            {
+                "type": response_type,
+                "ok": False,
+                "io": io_selector,
+                "index": index,
+                "subindex": subindex,
+                "data_type": data_type,
+                "error": str(exc),
+            },
+        )
+        return
+
+    send_client_message(
+        client,
+        {
+            "type": response_type,
+            "ok": True,
+            "io": io_selector,
+            "index": index,
+            "subindex": subindex,
+            "data_type": data_type,
+            "value": float(value) if data_type == "float32" else int(value),
+            "hex": (
+                None
+                if data_type == "float32"
+                else f"0x{int(value) & 0xFFFFFFFF:08X}"
+            ),
+        },
+    )
+
+
+def write_io_parameter(message, runtime, client):
+    response_type = public_command_name(message)
+    try:
+        io_selector, index, subindex, data_type = parse_io_sdo_request(message)
+        validate_io_parameter_access(index, subindex)
+        writer_name = SDO_WRITERS.get(data_type)
+        if writer_name is None:
+            raise ValueError(f"Unsupported SDO data type: {data_type}")
+        if "value" not in message:
+            raise ValueError("param_write requires value")
+        value = float(message["value"]) if data_type == "float32" else int(
+            str(message["value"]),
+            0,
+        )
+        getattr(runtime.sdo.io, writer_name)(io_selector, index, subindex, value)
+    except Exception as exc:
+        send_client_message(
+            client,
+            {
+                "type": response_type,
+                "ok": False,
+                "io": message.get("io"),
+                "index": message.get("index"),
+                "subindex": message.get("subindex", 0),
+                "data_type": str(message.get("data_type", "uint32")).strip().lower(),
+                "error": str(exc),
+            },
+        )
+        return
+
+    send_client_message(
+        client,
+        {
+            "type": response_type,
+            "ok": True,
+            "io": io_selector,
+            "index": index,
+            "subindex": subindex,
+            "data_type": data_type,
+            "value": value,
+        },
+    )
+
+
+def validate_io_parameter_access(index, subindex):
+    if is_cpx_isdu_access_object(index):
+        raise ValueError(
+            "Direct SDO access to CPX IO-Link ISDU objects "
+            f"0x{int(index):04X}:xx is blocked. "
+            "Use a dedicated IO-Link ISDU command instead; generic "
+            "system/io/param_read and param_write are only for ordinary "
+            "EtherCAT OD objects."
+        )
+
+
+def is_cpx_isdu_access_object(index):
+    index = int(index)
+    return 0x2001 <= index <= 0x2FF1 and ((index - 0x2001) % 0x10) == 0
 
 
 def save_parameters(message, runtime, client):

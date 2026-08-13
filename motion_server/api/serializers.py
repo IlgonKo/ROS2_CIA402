@@ -3,6 +3,12 @@ from motion_server.control.axis_units import (
     motion_limits_drive_to_api,
     profile_settings_drive_to_api,
 )
+from device.cpx_ap_i_ec.pdo import (
+    flattened_analog_inputs,
+    flattened_analog_outputs,
+    flattened_digital_inputs,
+    flattened_digital_outputs,
+)
 
 
 def axis_list_value(values, axis_index, default=None):
@@ -110,3 +116,62 @@ def public_axis_homing_state(state, axis_index):
             break
     homing["per_axis"] = per_axis
     return homing
+
+
+def io_device_snapshot(device, include_raw=False):
+    slave = device["slave"]
+    rxpdo = slave.rxpdo
+    txpdo = slave.txpdo
+    config = rxpdo.config
+    snapshot = {
+        "id": device["id"],
+        "slave_index": device["slave_index"],
+        "profile": device["profile"],
+        "input_bytes": txpdo.mapping_size(),
+        "output_bytes": rxpdo.mapping_size(),
+        "digital_inputs": flattened_digital_inputs(txpdo),
+        "digital_outputs": flattened_digital_outputs(rxpdo),
+        "analog_inputs": flattened_analog_inputs(txpdo),
+        "analog_outputs": flattened_analog_outputs(rxpdo),
+        "modules": [
+            io_module_snapshot(module, rxpdo, txpdo)
+            for module in config.layout.modules
+        ],
+    }
+    if include_raw:
+        snapshot["input_image"] = bytes(txpdo.payload).hex()
+        snapshot["output_image"] = bytes(rxpdo.payload).hex()
+    return snapshot
+
+
+def io_module_snapshot(module, rxpdo, txpdo):
+    data = module.to_dict()
+    if module.input_bytes:
+        data["inputs"] = io_module_input_values(module, txpdo)
+    if module.output_bytes:
+        data["outputs"] = io_module_output_values(module, rxpdo)
+    return data
+
+
+def io_module_input_values(module, txpdo):
+    values = {}
+    module_data = txpdo.module_inputs[module.slot]
+    if module.digital_inputs:
+        values["digital"] = list(module_data["digital"])
+    if module.analog_inputs:
+        values["analog"] = list(module_data["analog"])
+    if module.module_type == "iol":
+        values["io_link"] = bytes(module_data["io_link"]).hex()
+    return values
+
+
+def io_module_output_values(module, rxpdo):
+    values = {}
+    module_data = rxpdo.module_outputs[module.slot]
+    if module.digital_outputs:
+        values["digital"] = list(module_data["digital"])
+    if module.analog_outputs:
+        values["analog"] = list(module_data["analog"])
+    if module.module_type == "iol":
+        values["io_link"] = bytes(module_data["io_link"]).hex()
+    return values

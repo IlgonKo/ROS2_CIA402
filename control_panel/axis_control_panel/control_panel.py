@@ -1,19 +1,25 @@
+import sys
 import tkinter as tk
+from pathlib import Path
 from tkinter import messagebox
 
-from axis_control_panel.client import AxisServerClient
-from axis_control_panel.config import read_runtime_config
-from axis_control_panel.connection import ConnectionMixin
-from axis_control_panel.diagnosis import DiagnosisMixin
-from axis_control_panel.motion import MotionMixin
-from axis_control_panel.motion_settings import MotionSettingsMixin
-from axis_control_panel.panel_update_data import PanelUpdateDataMixin
-from axis_control_panel.statusword import StatuswordMixin
-from axis_control_panel.trace import TraceMixin
-from axis_control_panel.ui_builders.multi_axis_view import MultiAxisViewBuilderMixin
-from axis_control_panel.ui_builders.panel_layout import PanelLayoutMixin
-from axis_control_panel.ui_builders.single_axis_view import SingleAxisViewBuilderMixin
-from axis_control_panel.units import (
+if __package__ in {None, ""}:
+    project_root = Path(__file__).resolve().parents[2]
+    sys.path.insert(0, str(project_root))
+
+from control_panel.axis_control_panel.client import AxisServerClient
+from control_panel.axis_control_panel.config import read_runtime_config
+from control_panel.axis_control_panel.connection import ConnectionMixin
+from control_panel.axis_control_panel.diagnosis import DiagnosisMixin
+from control_panel.axis_control_panel.motion import MotionMixin
+from control_panel.axis_control_panel.motion_settings import MotionSettingsMixin
+from control_panel.axis_control_panel.panel_update_data import PanelUpdateDataMixin
+from control_panel.axis_control_panel.statusword import StatuswordMixin
+from control_panel.axis_control_panel.trace import TraceMixin
+from control_panel.axis_control_panel.ui_builders.multi_axis_view import MultiAxisViewBuilderMixin
+from control_panel.axis_control_panel.ui_builders.panel_layout import PanelLayoutMixin
+from control_panel.axis_control_panel.ui_builders.single_axis_view import SingleAxisViewBuilderMixin
+from control_panel.axis_control_panel.units import (
     MODE_DISPLAY_NAMES,
     UnitConversionMixin,
 )

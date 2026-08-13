@@ -95,7 +95,7 @@ try {
     Copy-WindowsConfig "device\cmmt\.env.example" (Join-Path $PackageRoot "device\cmmt\config.example.txt")
     Copy-WindowsConfig "device\cpx_ap_i_ec\.env.example" (Join-Path $PackageRoot "device\cpx_ap_i_ec\config.example.txt")
     Copy-WindowsConfig "device\virtual_servo_drive\.env.example" (Join-Path $PackageRoot "device\virtual_servo_drive\config.example.txt")
-    Copy-WindowsConfig "axis_control_panel\.env.example" (Join-Path $PanelToolRoot "config.example.txt")
+    Copy-WindowsConfig "control_panel\axis_control_panel\.env.example" (Join-Path $PanelToolRoot "config.example.txt")
     Copy-Item -Force "Reference\cmmt_error_catalog.json" (Join-Path $PackageRoot "Reference\cmmt_error_catalog.json")
     $manualFiles = Get-ChildItem -Path "docs" -File -Filter "Motion_Server_*_Manual*"
     foreach ($manualFile in $manualFiles) {
@@ -124,8 +124,8 @@ try {
         if (Test-Path "device\virtual_servo_drive\.env") {
             Copy-WindowsConfig "device\virtual_servo_drive\.env" (Join-Path $PackageRoot "device\virtual_servo_drive\config.txt")
         }
-        if (Test-Path "axis_control_panel\.env") {
-            Copy-WindowsConfig "axis_control_panel\.env" (Join-Path $PanelToolRoot "config.txt")
+        if (Test-Path "control_panel\axis_control_panel\.env") {
+            Copy-WindowsConfig "control_panel\axis_control_panel\.env" (Join-Path $PanelToolRoot "config.txt")
         }
     }
 

@@ -11,7 +11,7 @@ from motion_server.config import (
     VELOCITY_ANOMALY_THRESHOLD,
     VELOCITY_JUMP_THRESHOLD,
 )
-from motion_server.drive.diagnostics import format_diagnostics
+from motion_server.device_manager.axis_diagnostics import format_diagnostics
 
 
 def format_latest_cycle_value(cycle_stats, name):

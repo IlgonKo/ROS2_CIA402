@@ -1,3 +1,4 @@
+import json
 import os
 from pathlib import Path
 import select
@@ -35,7 +36,7 @@ from motion_server.app.cycle_diagnostics import (
     log_velocity_anomalies,
     record_tx_history,
 )
-from motion_server.drive.diagnostics import default_diagnostics
+from motion_server.device_manager.axis_diagnostics import default_diagnostics
 from motion_server.app.startup import (
     create_axis_runtime,
     initialize_drive,
@@ -322,7 +323,7 @@ def run_main_once():
         return
 
     if args.axis_count < 1:
-        raise ValueError("PYSOEM_BUS must contain at least one motion axis")
+        raise ValueError("MOTION_SERVER_BUS must contain at least one motion axis")
 
     motion_limits = [
         {
@@ -368,7 +369,7 @@ def run_main_once():
             positions = [0.0 for _ in range(args.axis_count)]
             state = initial_server_state(
                 args,
-                runtime.drive_manager,
+                runtime.device_manager.axes,
                 positions,
                 software_position_limits,
                 profile_settings=profile_settings,
@@ -396,19 +397,19 @@ def run_main_once():
             user_position_units = startup_sdo.get("user_position_units")
             converting_unit_exponents = startup_sdo.get("converting_unit_exponents")
             unit_state = {
-                "drive_manager": runtime.drive_manager,
+                "axis_devices": runtime.device_manager.axes,
                 "position_counts_per_unit": (
                     args.csp_counts_per_unit
                     if args.backend == "pysoem"
                     else 1.0
                 ),
             }
-            runtime.drive_manager.configure_unit_conversion(
+            runtime.device_manager.axes.configure_unit_conversion(
                 user_position_units,
                 converting_unit_exponents,
                 unit_state["position_counts_per_unit"],
             )
-            axis_metadata = runtime.drive_manager.unit_metadata()
+            axis_metadata = runtime.device_manager.axes.unit_metadata()
             unit_state["axis_metadata"] = axis_metadata
             axis_position_scales = axis_position_counts_per_api_units(
                 unit_state,
@@ -521,7 +522,7 @@ def run_main_once():
             )
             state = initial_server_state(
                 args,
-                runtime.drive_manager,
+                runtime.device_manager.axes,
                 positions,
                 software_position_limits,
                 profile_settings=profile_settings,

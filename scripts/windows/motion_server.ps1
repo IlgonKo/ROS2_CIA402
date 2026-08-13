@@ -30,7 +30,9 @@ if ([string]::IsNullOrWhiteSpace($ServerMode)) {
     )
 }
 if ([string]::IsNullOrWhiteSpace($Bus)) {
-    $Bus = Get-AxisServerEnvValue -EnvValues $AxisEnv -Name "PYSOEM_BUS" -Default "cmmt"
+    $Bus = Get-AxisServerEnvValue -EnvValues $AxisEnv -Name "MOTION_SERVER_BUS" -Default (
+        Get-AxisServerEnvValue -EnvValues $AxisEnv -Name "PYSOEM_BUS" -Default "cmmt"
+    )
 }
 
 $env:PYTHONPATH = "$ProjectRoot;$env:PYTHONPATH"

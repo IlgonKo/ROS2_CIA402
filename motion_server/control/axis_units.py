@@ -9,7 +9,7 @@ def axis_metadata(state, axis_index):
 
 
 def axis_position_counts_per_api_unit(state, axis_index):
-    return state["drive_manager"].position_counts_per_api_unit(axis_index)
+    return state["axis_devices"].position_counts_per_api_unit(axis_index)
 
 
 def axis_position_counts_per_api_units(state, axis_count_value):
@@ -20,19 +20,19 @@ def axis_position_counts_per_api_units(state, axis_count_value):
 
 
 def axis_position_drive_to_api(state, axis_index, value):
-    return state["drive_manager"].position_drive_to_api(axis_index, value)
+    return state["axis_devices"].position_drive_to_api(axis_index, value)
 
 
 def axis_position_api_to_drive(state, axis_index, value):
-    return state["drive_manager"].position_api_to_drive(axis_index, value)
+    return state["axis_devices"].position_api_to_drive(axis_index, value)
 
 
 def axis_motion_drive_to_api(state, axis_index, value, kind="velocity"):
-    return state["drive_manager"].motion_drive_to_api(axis_index, value, kind)
+    return state["axis_devices"].motion_drive_to_api(axis_index, value, kind)
 
 
 def axis_motion_api_to_drive(state, axis_index, value, kind="velocity"):
-    return state["drive_manager"].motion_api_to_drive(axis_index, value, kind)
+    return state["axis_devices"].motion_api_to_drive(axis_index, value, kind)
 
 
 def profile_settings_drive_to_api(state, axis_index, values):

@@ -1,0 +1,50 @@
+"""Runtime configuration helpers for IO Control Panel."""
+
+import os
+from pathlib import Path
+
+
+PANEL_CONFIG_ROOT = Path(
+    os.environ.get(
+        "IO_CONTROL_PANEL_CONFIG_ROOT",
+        Path(__file__).resolve().parent,
+    )
+).resolve()
+PANEL_CONFIG_FILE = PANEL_CONFIG_ROOT / "config.txt"
+PANEL_ENV_FILE = PANEL_CONFIG_ROOT / ".env"
+
+
+def load_env_file(path):
+    values = {}
+    if not path.exists():
+        return values
+
+    for line in path.read_text(encoding="utf-8").splitlines():
+        stripped = line.strip()
+        if not stripped or stripped.startswith("#") or "=" not in stripped:
+            continue
+        key, value = stripped.split("=", 1)
+        values[key.strip()] = value.strip().strip('"').strip("'")
+    return values
+
+
+def load_panel_config():
+    if PANEL_CONFIG_FILE.exists():
+        return load_env_file(PANEL_CONFIG_FILE)
+    return load_env_file(PANEL_ENV_FILE)
+
+
+def read_runtime_config():
+    config = load_panel_config()
+    host = os.environ.get(
+        "MOTION_SERVER_HOST",
+        config.get("MOTION_SERVER_HOST", "127.0.0.1"),
+    )
+    port = int(
+        os.environ.get(
+            "MOTION_SERVER_PORT",
+            config.get("MOTION_SERVER_PORT", "15000"),
+        )
+    )
+    return host, port
+

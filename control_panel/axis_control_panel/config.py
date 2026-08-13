@@ -3,7 +3,7 @@
 import os
 from pathlib import Path
 
-from axis_control_panel.client import (
+from control_panel.axis_control_panel.client import (
     axis_count_from_status,
     request_initial_system_status,
 )

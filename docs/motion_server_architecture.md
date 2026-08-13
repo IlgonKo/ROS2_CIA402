@@ -24,7 +24,7 @@ Client
   -> motion_server.api.dispatcher
   -> motion_server.commands.*
   -> motion_server.app.runtime.AxisRuntime
-  -> motion_server.drive.DriveManager
+  -> motion_server.device_manager.DeviceManager
   -> EtherCAT master backend
        -> pysoem real drive
        -> mock virtual servo drive
@@ -40,7 +40,7 @@ motion_server/
   app/                      Runtime loop, startup, process data cycle
   commands/                 system/axis 명령 구현
   control/                  motion controller, unit conversion helpers
-  drive/                    drive binding, SDO access, unit converter
+  device_manager/           EtherCAT device groups, logical selector, SDO access
 
 ethercat/
   pysoem_master.py          Real EtherCAT master backend
@@ -53,6 +53,10 @@ device/
   cia402/                   CiA402 공통 state machine / OD
   common_object_dictionary/ EtherCAT 공통 object dictionary
   cpx_ap_i_ec/              CPX AP I EC profile 준비 영역
+
+control_panel/
+  axis_control_panel/       Motion axis monitoring/control GUI
+  io_control_panel/         Remote I/O monitoring/control GUI
 
 docker/
   motion_server/            Motion Server image
@@ -81,15 +85,15 @@ scripts/
 
 상위 command 계층은 가능하면 backend가 pysoem인지 mock인지 직접 알 필요 없이 `runtime.slaves`, `runtime.sdo`, `runtime.set_target_positions()` 같은 API를 사용한다.
 
-### DriveManager
+### DeviceManager
 
-`motion_server/drive/drive_manager.py`는 축과 EtherCAT slave의 매핑을 관리한다.
+`motion_server/device_manager/device_manager.py`는 전체 EtherCAT device와 논리 device group을 관리한다.
 
-- axis index와 slave index 바인딩
-- SDO 접근을 축 기준으로 변환
-- drive unit conversion 제공
-- mock drive limit 반영
-- TxPDO feedback 조회
+- `AxisDeviceGroup`: axis index와 EtherCAT slave index 바인딩, 축 feedback, 축 단위 변환, motion command 적용
+- `IoDeviceGroup`: I/O id 또는 I/O index와 EtherCAT slave index 변환
+- `LogicalSdoAccess`: `runtime.sdo.axis.*`, `runtime.sdo.io.*` typed SDO 접근 제공
+
+상위 command 계층은 가능한 한 EtherCAT slave index를 직접 다루지 않고 `axis` 또는 `io` selector를 사용한다.
 
 ## Backend 구조
 
@@ -142,7 +146,7 @@ Motion Server API 단위는 사용자 관점 단위로 정규화한다.
 - acceleration/deceleration: mm/s^2 또는 deg/s^2
 - jerk: mm/s^3 또는 deg/s^3
 
-드라이브 내부 단위는 `DriveUnitConverter`가 장치의 unit object와 exponent를 기반으로 변환한다. 따라서 API 사용자는 CMMT 내부 count, SI exponent, rotary unit encoding을 직접 계산하지 않는다.
+축 내부 단위는 `AxisUnitConverter`가 장치의 unit object와 exponent를 기반으로 변환한다. 따라서 API 사용자는 CMMT 내부 count, SI exponent, rotary unit encoding을 직접 계산하지 않는다.
 
 ## Command Authority
 
@@ -182,7 +186,7 @@ authority/*    command authority 대상
 AXIS_SERVER_COMMAND_LOGS=1    수신 JSON command 로그
 AXIS_SERVER_STATUS_LOGS=1     authority, mode, homing, enable/disable, stop/reset,
                               client connection, periodic Axis status 로그
-PYSOEM_STATUS_LOG_PERIOD=1.0  periodic Axis status 로그 주기
+MOTION_SERVER_STATUS_LOG_PERIOD=1.0  periodic Axis status 로그 주기
 ```
 
 일반 운전에서는 `AXIS_SERVER_STATUS_LOGS=0`으로 두고, 상태 변화 추적이 필요할 때만 켠다.

@@ -1,13 +1,19 @@
 from motion_server.commands import CommandRouter
 from motion_server.api import reject_command_message
 from motion_server.commands.homing import start_homing
+from motion_server.commands.io import input_read, output_write
 from motion_server.commands.jog import start_jog, stop_jog
 from motion_server.commands.motion import (
     move_absolute,
     move_relative,
     move_velocity,
 )
-from motion_server.commands.parameters import save_parameters, write_parameter
+from motion_server.commands.parameters import (
+    read_io_parameter,
+    save_parameters,
+    write_io_parameter,
+    write_parameter,
+)
 from motion_server.commands.server import (
     request_bus_reconnect,
     request_server_reset,
@@ -107,12 +113,15 @@ COMMAND_ROUTER = CommandRouter({
     "system/server/restart": request_server_restart,
     "system/bus/reconnect": request_bus_reconnect,
     "system/bus/rescan": reject_not_implemented,
-    "system/io/read": reject_not_implemented,
-    "system/io/write": reject_not_implemented,
-    "system/io/set_output": reject_not_implemented,
+    "system/io/input_read": input_read,
+    "system/io/output_write": output_write,
     "system/io/reset": reject_not_implemented,
     "system/io/restart": reject_not_implemented,
-    "system/io/param_read": reject_not_implemented,
-    "system/io/param_write": reject_not_implemented,
+    "system/io/param_read": lambda message, runtime, state, client: (
+        read_io_parameter(message, runtime, client)
+    ),
+    "system/io/param_write": lambda message, runtime, state, client: (
+        write_io_parameter(message, runtime, client)
+    ),
     "system/io/param_save": reject_not_implemented,
 })
