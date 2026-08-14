@@ -14,6 +14,16 @@ DEFAULT_MODULE_IDENTS = {
     ("aio", 4, 4): 0x00002134,   # CPX-AP-I-4AI4AO-U-I-M12
 }
 
+DEFAULT_MODULE_NAMES = {
+    ("di", 8): "CPX-AP-I-8DI-M8-3P",
+    ("di", 16): "CPX-AP-I-16DI-M8-3P",
+    ("do", 8): "CPX-AP-I-8DO-M8-3P",
+    ("dio", 4, 4): "CPX-AP-I-4DI4DO-M8-3P",
+    ("dio", 16, 16): "CPX-AP-I-16DIO-M8-3P",
+    ("ai", 4): "CPX-AP-I-4AI-U-I-RTD-M12",
+    ("aio", 4, 4): "CPX-AP-I-4AI4AO-U-I-M12",
+}
+
 
 IO_LINK_VARIANT_IDENTS = {
     2: 0x0000200E,   # CPX-AP-I-4IOL-M12 Variant 2
@@ -48,6 +58,11 @@ MODULE_NAME_IDENTS = {
     "cpx-ap-i-4iol-m12-variant-32": 0x00002014,
 }
 
+MODULE_IDENT_NAMES = {
+    ident: name.upper()
+    for name, ident in MODULE_NAME_IDENTS.items()
+}
+
 
 def expected_module_idents(layout):
     return [
@@ -80,6 +95,35 @@ def module_ident(module):
             "Use an exact module name such as "
             "'CPX-AP-I-8DI-M12-5P' or an explicit 'ident:0x00002008'."
         ) from exc
+
+
+def module_display_name(module):
+    name_ident = module_name_ident(module.raw)
+    if name_ident is not None:
+        return MODULE_IDENT_NAMES.get(name_ident, normalized_module_name(module.raw).upper())
+
+    explicit_ident = explicit_module_ident(module.raw)
+    if explicit_ident is not None:
+        return MODULE_IDENT_NAMES.get(
+            explicit_ident,
+            f"Module ident 0x{explicit_ident:08X}",
+        )
+
+    if isinstance(module.spec, IoLinkModuleSpec):
+        try:
+            ident = io_link_module_ident(module)
+        except ValueError:
+            return f"CPX-AP-I-4IOL-M12 ({module.raw})"
+        return MODULE_IDENT_NAMES.get(
+            ident,
+            f"CPX-AP-I-4IOL-M12 ident 0x{ident:08X}",
+        )
+
+    key = default_module_key(module)
+    try:
+        return DEFAULT_MODULE_NAMES[key]
+    except KeyError:
+        return str(module.raw)
 
 
 def explicit_module_ident(raw_module):

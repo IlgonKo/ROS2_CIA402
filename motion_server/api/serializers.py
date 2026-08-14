@@ -9,6 +9,7 @@ from device.cpx_ap_i_ec.pdo import (
     flattened_digital_inputs,
     flattened_digital_outputs,
 )
+from device.cpx_ap_i_ec.module_catalog import module_display_name
 
 
 def axis_list_value(values, axis_index, default=None):
@@ -146,6 +147,7 @@ def io_device_snapshot(device, include_raw=False):
 
 def io_module_snapshot(module, rxpdo, txpdo):
     data = module.to_dict()
+    data["name"] = module_display_name(module)
     if module.input_bytes:
         data["inputs"] = io_module_input_values(module, txpdo)
     if module.output_bytes:
@@ -161,7 +163,18 @@ def io_module_input_values(module, txpdo):
     if module.analog_inputs:
         values["analog"] = list(module_data["analog"])
     if module.module_type == "iol":
-        values["io_link"] = bytes(module_data["io_link"]).hex()
+        payload = bytes(module_data["io_link"])
+        values["io_link"] = payload.hex()
+        values["io_link_channels"] = io_link_channel_payloads(
+            payload,
+            module.io_link_ports,
+            module.io_link_input_data_bytes,
+        )
+        values["io_link_qualifiers"] = io_link_qualifiers(
+            payload,
+            module.io_link_input_data_bytes,
+            module.io_link_ports,
+        )
     return values
 
 
@@ -173,5 +186,39 @@ def io_module_output_values(module, rxpdo):
     if module.analog_outputs:
         values["analog"] = list(module_data["analog"])
     if module.module_type == "iol":
-        values["io_link"] = bytes(module_data["io_link"]).hex()
+        payload = bytes(module_data["io_link"])
+        values["io_link"] = payload.hex()
+        values["io_link_channels"] = io_link_channel_payloads(
+            payload,
+            module.io_link_ports,
+            module.io_link_output_data_bytes,
+        )
     return values
+
+
+def io_link_channel_payloads(payload, ports, data_bytes):
+    ports = int(ports)
+    data_bytes = int(data_bytes)
+    if ports <= 0:
+        return []
+    bytes_per_port = data_bytes // ports
+    channels = []
+    for port in range(ports):
+        start = port * bytes_per_port
+        end = start + bytes_per_port
+        channels.append({
+            "port": port,
+            "data": bytes(payload[start:end]).hex(),
+        })
+    return channels
+
+
+def io_link_qualifiers(payload, data_bytes, ports):
+    data_bytes = int(data_bytes)
+    ports = int(ports)
+    return [
+        int(payload[data_bytes + port])
+        if data_bytes + port < len(payload)
+        else 0
+        for port in range(ports)
+    ]

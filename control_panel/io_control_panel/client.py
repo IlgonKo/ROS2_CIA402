@@ -84,6 +84,7 @@ class MotionServerClient:
     def _store_message(self, message):
         with self.lock:
             message_type = message.get("type")
+            command_authority = dict(self.feedback.get("command_authority", {}))
             if message_type == "system/feedback":
                 io_feedback = message.get("io", {})
                 if io_feedback:
@@ -91,6 +92,9 @@ class MotionServerClient:
                         "type": "system/io/status",
                         "ok": True,
                         "devices": list(io_feedback.get("devices", [])),
+                        "command_authority": dict(
+                            message.get("command_authority", {})
+                        ),
                     }
             elif message_type in {
                 "system/io/status",
@@ -98,6 +102,10 @@ class MotionServerClient:
                 "system/io/output_write",
                 "system/io/param_read",
                 "system/io/param_write",
+                "system/io/ap/param_read",
+                "system/io/ap/param_write",
+                "system/io/iolink/isdu_read",
+                "system/io/iolink/isdu_write",
                 "system/authority/request",
                 "system/authority/release",
                 "system/authority/status",
@@ -106,12 +114,38 @@ class MotionServerClient:
                 self.responses.append(message)
                 if message_type in {"system/io/status", "system/io/input_read"}:
                     self.feedback = dict(message)
+                    if command_authority and "command_authority" not in self.feedback:
+                        self.feedback["command_authority"] = command_authority
+                elif message_type in {
+                    "system/authority/request",
+                    "system/authority/release",
+                    "system/authority/status",
+                }:
+                    self.feedback["command_authority"] = {
+                        "owner": message.get("owner"),
+                        "owned_by_this_client": bool(
+                            message.get("owned_by_this_client", False)
+                        ),
+                        "available": bool(message.get("available", False)),
+                    }
+                elif (
+                    message_type == "command_rejected"
+                    and message.get("reason")
+                    in {"authority_required", "authority_busy"}
+                ):
+                    self.feedback["command_authority"] = {
+                        "owner": message.get("owner"),
+                        "owned_by_this_client": False,
+                        "available": bool(message.get("available", False)),
+                    }
                 elif message_type == "system/io/output_write":
                     self.feedback = {
                         "type": "system/io/status",
                         "ok": True,
                         "devices": [dict(message)],
                     }
+                    if command_authority:
+                        self.feedback["command_authority"] = command_authority
             self.condition.notify_all()
 
     def request(self, message, expected_type=None, timeout=None):
@@ -119,20 +153,11 @@ class MotionServerClient:
         self.send_json(message)
         return self.wait_for(expected_type, timeout=timeout)
 
-    def command_with_authority(self, message, expected_type=None, timeout=None):
-        expected_type = expected_type or message.get("cmd")
-        authority = self.request(
-            {"cmd": "system/authority/request"},
-            expected_type="system/authority/request",
-            timeout=timeout,
-        )
-        if not authority.get("granted", False):
-            return authority
-        try:
-            self.send_json(message)
-            return self.wait_for(expected_type, timeout=timeout)
-        finally:
-            self.send_json({"cmd": "system/authority/release"})
+    def request_command_authority(self):
+        self.send_json({"cmd": "system/authority/request"})
+
+    def release_command_authority(self):
+        self.send_json({"cmd": "system/authority/release"})
 
     def send_json(self, message):
         payload = (json.dumps(message) + "\n").encode("utf-8")

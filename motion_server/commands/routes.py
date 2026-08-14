@@ -2,6 +2,11 @@ from motion_server.commands import CommandRouter
 from motion_server.api import reject_command_message
 from motion_server.commands.homing import start_homing
 from motion_server.commands.io import input_read, output_write
+from motion_server.commands.io_parameters import (
+    read_ap_parameter,
+    write_ap_parameter,
+)
+from motion_server.commands.io_link_isdu import read_isdu, write_isdu
 from motion_server.commands.jog import start_jog, stop_jog
 from motion_server.commands.motion import (
     move_absolute,
@@ -124,4 +129,16 @@ COMMAND_ROUTER = CommandRouter({
         write_io_parameter(message, runtime, client)
     ),
     "system/io/param_save": reject_not_implemented,
+    "system/io/ap/param_read": lambda message, runtime, state, client: (
+        read_ap_parameter(message, runtime, client)
+    ),
+    "system/io/ap/param_write": lambda message, runtime, state, client: (
+        write_ap_parameter(message, runtime, client)
+    ),
+    "system/io/iolink/isdu_read": lambda message, runtime, state, client: (
+        read_isdu(message, runtime, client)
+    ),
+    "system/io/iolink/isdu_write": lambda message, runtime, state, client: (
+        write_isdu(message, runtime, client)
+    ),
 })

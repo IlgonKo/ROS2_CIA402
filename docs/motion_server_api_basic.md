@@ -445,6 +445,10 @@ system/io/restart
 system/io/param_read
 system/io/param_write
 system/io/param_save
+system/io/ap/param_read
+system/io/ap/param_write
+system/io/iolink/isdu_read
+system/io/iolink/isdu_write
 ```
 
 I/O SDO parameter access는 `axis`가 아니라 `io` selector를 사용한다.
@@ -469,6 +473,71 @@ I/O SDO parameter access는 `axis`가 아니라 `io` selector를 사용한다.
   "data_type": "uint16",
   "value": "1"
 }
+```
+
+### CPX-AP Module Parameters
+
+CPX-AP-I-EC station의 AP module parameter는 일반 I/O SDO 명령 대신 AP 전용 명령을 사용한다.
+
+```text
+system/io/ap/param_read
+system/io/ap/param_write
+```
+
+AP parameter access는 CPX-AP-I-EC의 `0x27F0 AP Parameter Access`
+object를 통해 수행된다. 사용자는 EtherCAT OD subindex를 직접 다루지 않고
+`module`, `parameter_id`, `instance`, `length`를 지정한다.
+`module`은 `0x27F0:02 Module`에 들어가는 AP module 번호이며 1부터 시작한다.
+
+```json
+{
+  "cmd": "system/io/ap/param_read",
+  "io": "io0",
+  "module": 1,
+  "parameter_id": "0x00000001",
+  "instance": 0,
+  "length": 1,
+  "data_type": "uint8"
+}
+```
+
+```json
+{
+  "cmd": "system/io/ap/param_write",
+  "io": "io0",
+  "module": 1,
+  "parameter_id": "0x00000001",
+  "instance": 0,
+  "data_type": "uint8",
+  "value": "1"
+}
+```
+
+응답에는 내부 access object index `0x27F0`과 AP parameter 정보가 포함된다.
+
+```json
+{
+  "type": "system/io/ap/param_read",
+  "ok": true,
+  "io": "io0",
+  "object_index": "0x27F0",
+  "module": 1,
+  "parameter_id": 1,
+  "parameter_id_hex": "0x00000001",
+  "instance": 0,
+  "data_type": "uint8",
+  "status": 0,
+  "length": 1,
+  "data": "01",
+  "value": 1,
+}
+```
+
+IO-Link ISDU API 이름은 예약되어 있으나 현재는 미구현이다.
+
+```text
+system/io/iolink/isdu_read
+system/io/iolink/isdu_write
 ```
 
 ## Server and Bus Management

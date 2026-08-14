@@ -117,6 +117,18 @@ class CPXApModule:
         return 0
 
     @property
+    def io_link_input_data_bytes(self):
+        if isinstance(self.spec, IoLinkModuleSpec):
+            return self.spec.input_data_bytes
+        return 0
+
+    @property
+    def io_link_output_data_bytes(self):
+        if isinstance(self.spec, IoLinkModuleSpec):
+            return self.spec.output_data_bytes
+        return 0
+
+    @property
     def has_analog_data(self):
         return isinstance(self.spec, AnalogModuleSpec)
 
@@ -219,7 +231,7 @@ class CPXApLayout:
 
 def parse_cpx_ap_modules(raw_modules, analog_bits=16, analog_signed=True):
     modules = []
-    for slot, raw_module in enumerate(split_module_list(raw_modules)):
+    for slot, raw_module in enumerate(split_module_list(raw_modules), start=2):
         modules.append(parse_cpx_ap_module(
             slot,
             raw_module,

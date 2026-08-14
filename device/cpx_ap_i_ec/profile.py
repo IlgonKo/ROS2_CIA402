@@ -1,5 +1,6 @@
 from device.cpx_ap_i_ec.ap_module_idents import configure_ap_module_idents
 from device.cpx_ap_i_ec.io_config import load_cpx_io_config
+from device.cpx_ap_i_ec.io_link_variants import configure_io_link_variants
 from device.cpx_ap_i_ec.pdo import CPXRxPDO, CPXTxPDO
 from device.cpx_ap_i_ec.pdo_codec import CPXPdoCodec
 
@@ -28,6 +29,7 @@ class CPXApIEcDeviceProfile:
     ):
         rxpdo = master.slaves[slave_index].rxpdo
         txpdo = master.slaves[slave_index].txpdo
+        configure_io_link_variants(master, slave_index, self.config)
         configure_ap_module_idents(master, slave_index, self.config)
         device_output_bytes = self.process_image_bytes(
             master,

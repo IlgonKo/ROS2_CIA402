@@ -65,6 +65,8 @@ COMMAND_MESSAGE_TYPES = {
     "system/io/restart",
     "system/io/param_write",
     "system/io/param_save",
+    "system/io/ap/param_write",
+    "system/io/iolink/isdu_write",
 }
 
 AUTHORITY_MESSAGE_TYPES = {
@@ -94,6 +96,8 @@ STATUS_MESSAGE_TYPES = {
     "system/axes/status",
     "system/io/status",
     "system/io/input_read",
+    "system/io/ap/param_read",
+    "system/io/iolink/isdu_read",
 }
 
 
