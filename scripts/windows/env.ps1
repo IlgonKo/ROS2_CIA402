@@ -9,13 +9,37 @@ function Read-DotEnvFile {
         return $values
     }
 
+    $pending = ""
     foreach ($line in Get-Content -LiteralPath $Path) {
         $trimmed = $line.Trim()
+        if ($pending.Length -eq 0 -and ($trimmed.Length -eq 0 -or $trimmed.StartsWith("#"))) {
+            continue
+        }
+
+        $continued = $trimmed.EndsWith("\")
+        if ($continued) {
+            $trimmed = $trimmed.Substring(0, $trimmed.Length - 1).Trim()
+        }
+
+        $pending = "$pending$trimmed"
+        if ($continued) {
+            continue
+        }
+
+        $trimmed = $pending
+        $pending = ""
         if ($trimmed.Length -eq 0 -or $trimmed.StartsWith("#") -or -not $trimmed.Contains("=")) {
             continue
         }
 
         $parts = $trimmed.Split("=", 2)
+        $key = $parts[0].Trim()
+        $value = $parts[1].Trim().Trim('"').Trim("'")
+        $values[$key] = $value
+    }
+
+    if ($pending.Length -gt 0 -and $pending.Contains("=")) {
+        $parts = $pending.Split("=", 2)
         $key = $parts[0].Trim()
         $value = $parts[1].Trim().Trim('"').Trim("'")
         $values[$key] = $value
@@ -62,6 +86,9 @@ function Import-AxisServerEnv {
         $entry = $busEntry.Trim().ToLowerInvariant()
         if ([string]::IsNullOrWhiteSpace($entry)) {
             continue
+        }
+        if ($entry -match '^\d+\s*:\s*(.+)$') {
+            $entry = $Matches[1].Trim()
         }
         $profile = $entry
         if ($entry.Contains(":")) {

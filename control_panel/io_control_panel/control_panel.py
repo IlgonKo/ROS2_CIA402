@@ -1,3 +1,4 @@
+import re
 import sys
 import tkinter as tk
 from pathlib import Path
@@ -16,6 +17,7 @@ AP_TYPE_LENGTHS = {
     "int8": "1",
     "uint8": "1",
     "uint16": "2",
+    "int16": "2",
     "int32": "4",
     "uint32": "4",
     "float32": "4",
@@ -36,6 +38,8 @@ class IOControlPanel:
         self.param_type_var = tk.StringVar(value="uint32")
         self.param_value_var = tk.StringVar(value="0")
         self.param_result_var = tk.StringVar(value="")
+        self.ec_catalog_var = tk.StringVar(value="")
+        self.ec_catalog_items = {}
         self.ap_module_var = tk.StringVar(value="1")
         self.ap_parameter_id_var = tk.StringVar(value="791")
         self.ap_instance_var = tk.StringVar(value="0")
@@ -51,6 +55,8 @@ class IOControlPanel:
         self.iol_type_var = tk.StringVar(value="uint32")
         self.iol_value_var = tk.StringVar(value="0")
         self.iol_result_var = tk.StringVar(value="")
+        self.iol_catalog_var = tk.StringVar(value="")
+        self.iol_catalog_items = {}
         self.raw_var = tk.BooleanVar(value=False)
         self.status_var = tk.StringVar(value="Disconnected")
         self.command_authority_var = tk.StringVar(value="Authority: unknown")
@@ -129,64 +135,93 @@ class IOControlPanel:
             command=self.apply_digital_output,
         ).grid(row=0, column=7)
 
-        parameter = ttk.LabelFrame(self.root, text="EtherCAT Parameter", padding=8)
-        parameter.pack(fill="x", padx=8, pady=(0, 8))
+        parameter_tabs = ttk.Notebook(self.root)
+        parameter_tabs.pack(fill="x", padx=8, pady=(0, 8))
 
-        ttk.Label(parameter, text="I/O").grid(row=0, column=0, sticky="w")
+        parameter = ttk.Frame(parameter_tabs, padding=8)
+        parameter_tabs.add(parameter, text="EC Parameter")
+
+        ttk.Label(parameter, text="Catalog").grid(row=0, column=0, sticky="w")
+        self.ec_catalog_combo = ttk.Combobox(
+            parameter,
+            textvariable=self.ec_catalog_var,
+            width=36,
+            state="readonly",
+        )
+        self.ec_catalog_combo.grid(row=0, column=1, columnspan=4, sticky="ew", padx=4)
+        self.ec_catalog_combo.bind("<<ComboboxSelected>>", self.on_ec_catalog_selected)
+        ttk.Button(
+            parameter,
+            text="Load Catalog",
+            command=self.load_ec_catalog,
+        ).grid(row=0, column=8, padx=(8, 0))
+
+        self.ec_catalog_detail_text = self.add_detail_text(
+            parameter,
+            row=1,
+            columnspan=12,
+        )
+
+        ttk.Label(parameter, text="I/O").grid(row=2, column=0, sticky="w", pady=(6, 0))
         self.param_device_combo = ttk.Combobox(
             parameter,
             textvariable=self.device_var,
             width=12,
             state="readonly",
         )
-        self.param_device_combo.grid(row=0, column=1, padx=4)
+        self.param_device_combo.grid(row=2, column=1, padx=4, pady=(6, 0))
 
-        ttk.Label(parameter, text="Index").grid(row=0, column=2, sticky="w")
+        ttk.Label(parameter, text="Index").grid(row=2, column=2, sticky="w", pady=(6, 0))
         ttk.Entry(parameter, textvariable=self.param_index_var, width=10).grid(
-            row=0,
+            row=2,
             column=3,
             padx=4,
+            pady=(6, 0),
         )
 
-        ttk.Label(parameter, text="Sub").grid(row=0, column=4, sticky="w")
+        ttk.Label(parameter, text="Sub").grid(row=2, column=4, sticky="w", pady=(6, 0))
         ttk.Entry(parameter, textvariable=self.param_subindex_var, width=8).grid(
-            row=0,
+            row=2,
             column=5,
             padx=4,
+            pady=(6, 0),
         )
 
-        ttk.Label(parameter, text="Type").grid(row=0, column=6, sticky="w")
+        ttk.Label(parameter, text="Type").grid(row=2, column=6, sticky="w", pady=(6, 0))
         ttk.Combobox(
             parameter,
             textvariable=self.param_type_var,
-            values=("uint8", "int8", "uint16", "int32", "uint32", "float32"),
+            values=("uint8", "int8", "uint16", "int16", "int32", "uint32", "float32"),
             width=9,
             state="readonly",
-        ).grid(row=0, column=7, padx=4)
+        ).grid(row=2, column=7, padx=4, pady=(6, 0))
 
-        ttk.Label(parameter, text="Value").grid(row=0, column=8, sticky="w")
+        ttk.Label(parameter, text="Value").grid(row=2, column=8, sticky="w", pady=(6, 0))
         ttk.Entry(parameter, textvariable=self.param_value_var, width=12).grid(
-            row=0,
+            row=2,
             column=9,
             padx=4,
+            pady=(6, 0),
         )
 
         ttk.Button(parameter, text="Read", command=self.read_parameter).grid(
-            row=0,
+            row=2,
             column=10,
             padx=(8, 0),
+            pady=(6, 0),
         )
         ttk.Button(parameter, text="Write", command=self.write_parameter).grid(
-            row=0,
+            row=2,
             column=11,
             padx=4,
+            pady=(6, 0),
         )
         ttk.Entry(
             parameter,
             textvariable=self.param_result_var,
             state="readonly",
         ).grid(
-            row=1,
+            row=3,
             column=0,
             columnspan=12,
             sticky="ew",
@@ -194,8 +229,8 @@ class IOControlPanel:
         )
         parameter.columnconfigure(11, weight=1)
 
-        ap_parameter = ttk.LabelFrame(self.root, text="AP Parameter", padding=8)
-        ap_parameter.pack(fill="x", padx=8, pady=(0, 8))
+        ap_parameter = ttk.Frame(parameter_tabs, padding=8)
+        parameter_tabs.add(ap_parameter, text="AP Parameter")
 
         ttk.Label(ap_parameter, text="I/O").grid(row=0, column=0, sticky="w")
         self.ap_device_combo = ttk.Combobox(
@@ -289,55 +324,80 @@ class IOControlPanel:
         )
         ap_parameter.columnconfigure(9, weight=1)
 
-        iol_parameter = ttk.LabelFrame(self.root, text="IOL Parameter", padding=8)
-        iol_parameter.pack(fill="x", padx=8, pady=(0, 8))
+        iol_parameter = ttk.Frame(parameter_tabs, padding=8)
+        parameter_tabs.add(iol_parameter, text="IOL Parameter")
 
-        ttk.Label(iol_parameter, text="I/O").grid(row=0, column=0, sticky="w")
+        ttk.Label(iol_parameter, text="Catalog").grid(row=0, column=0, sticky="w")
+        self.iol_catalog_combo = ttk.Combobox(
+            iol_parameter,
+            textvariable=self.iol_catalog_var,
+            width=36,
+            state="readonly",
+        )
+        self.iol_catalog_combo.grid(row=0, column=1, columnspan=4, sticky="ew", padx=4)
+        self.iol_catalog_combo.bind("<<ComboboxSelected>>", self.on_iol_catalog_selected)
+        ttk.Button(
+            iol_parameter,
+            text="Load Catalog",
+            command=self.load_iol_catalog,
+        ).grid(row=0, column=8, padx=(8, 0))
+
+        self.iol_catalog_detail_text = self.add_detail_text(
+            iol_parameter,
+            row=1,
+            columnspan=10,
+        )
+
+        ttk.Label(iol_parameter, text="I/O").grid(row=2, column=0, sticky="w", pady=(6, 0))
         self.iol_device_combo = ttk.Combobox(
             iol_parameter,
             textvariable=self.device_var,
             width=12,
             state="readonly",
         )
-        self.iol_device_combo.grid(row=0, column=1, padx=4)
+        self.iol_device_combo.grid(row=2, column=1, padx=4, pady=(6, 0))
 
-        ttk.Label(iol_parameter, text="Module").grid(row=0, column=2, sticky="w")
+        ttk.Label(iol_parameter, text="Module").grid(row=2, column=2, sticky="w", pady=(6, 0))
         ttk.Entry(iol_parameter, textvariable=self.iol_module_var, width=8).grid(
-            row=0,
+            row=2,
             column=3,
             padx=4,
+            pady=(6, 0),
         )
 
-        ttk.Label(iol_parameter, text="Port").grid(row=0, column=4, sticky="w")
+        ttk.Label(iol_parameter, text="Port").grid(row=2, column=4, sticky="w", pady=(6, 0))
         ttk.Entry(iol_parameter, textvariable=self.iol_port_var, width=8).grid(
-            row=0,
+            row=2,
             column=5,
             padx=4,
+            pady=(6, 0),
         )
 
-        ttk.Label(iol_parameter, text="Index").grid(row=0, column=6, sticky="w")
+        ttk.Label(iol_parameter, text="Index").grid(row=2, column=6, sticky="w", pady=(6, 0))
         ttk.Entry(iol_parameter, textvariable=self.iol_index_var, width=10).grid(
-            row=0,
+            row=2,
             column=7,
             padx=4,
+            pady=(6, 0),
         )
 
-        ttk.Label(iol_parameter, text="Sub").grid(row=0, column=8, sticky="w")
+        ttk.Label(iol_parameter, text="Sub").grid(row=2, column=8, sticky="w", pady=(6, 0))
         ttk.Entry(iol_parameter, textvariable=self.iol_subindex_var, width=8).grid(
-            row=0,
+            row=2,
             column=9,
             padx=4,
+            pady=(6, 0),
         )
 
-        ttk.Label(iol_parameter, text="Length").grid(row=1, column=0, sticky="w")
+        ttk.Label(iol_parameter, text="Length").grid(row=3, column=0, sticky="w")
         ttk.Entry(iol_parameter, textvariable=self.iol_length_var, width=8).grid(
-            row=1,
+            row=3,
             column=1,
             padx=4,
             pady=(6, 0),
         )
 
-        ttk.Label(iol_parameter, text="Type").grid(row=1, column=2, sticky="w", pady=(6, 0))
+        ttk.Label(iol_parameter, text="Type").grid(row=3, column=2, sticky="w", pady=(6, 0))
         self.iol_type_combo = ttk.Combobox(
             iol_parameter,
             textvariable=self.iol_type_var,
@@ -355,12 +415,12 @@ class IOControlPanel:
             width=9,
             state="readonly",
         )
-        self.iol_type_combo.grid(row=1, column=3, padx=4, pady=(6, 0))
+        self.iol_type_combo.grid(row=3, column=3, padx=4, pady=(6, 0))
         self.iol_type_combo.bind("<<ComboboxSelected>>", self.on_iol_type_changed)
 
-        ttk.Label(iol_parameter, text="Value").grid(row=1, column=4, sticky="w", pady=(6, 0))
+        ttk.Label(iol_parameter, text="Value").grid(row=3, column=4, sticky="w", pady=(6, 0))
         ttk.Entry(iol_parameter, textvariable=self.iol_value_var, width=18).grid(
-            row=1,
+            row=3,
             column=5,
             columnspan=2,
             sticky="w",
@@ -369,13 +429,13 @@ class IOControlPanel:
         )
 
         ttk.Button(iol_parameter, text="Read", command=self.read_iol_parameter).grid(
-            row=1,
+            row=3,
             column=7,
             padx=(8, 0),
             pady=(6, 0),
         )
         ttk.Button(iol_parameter, text="Write", command=self.write_iol_parameter).grid(
-            row=1,
+            row=3,
             column=8,
             padx=4,
             pady=(6, 0),
@@ -385,7 +445,7 @@ class IOControlPanel:
             textvariable=self.iol_result_var,
             state="readonly",
         ).grid(
-            row=2,
+            row=4,
             column=0,
             columnspan=10,
             sticky="ew",
@@ -403,6 +463,37 @@ class IOControlPanel:
         self.tree.column("#0", width=420)
         self.tree.column("value", width=520)
         self.tree.pack(fill="both", expand=True, padx=8, pady=(0, 8))
+
+    def add_detail_text(self, parent, row, columnspan):
+        frame = ttk.Frame(parent)
+        frame.grid(
+            row=row,
+            column=0,
+            columnspan=columnspan,
+            sticky="ew",
+            pady=(6, 0),
+        )
+        text = tk.Text(
+            frame,
+            height=3,
+            wrap="word",
+            state="disabled",
+            relief="solid",
+            borderwidth=1,
+        )
+        scrollbar = ttk.Scrollbar(frame, orient="vertical", command=text.yview)
+        text.configure(yscrollcommand=scrollbar.set)
+        text.pack(side="left", fill="both", expand=True)
+        scrollbar.pack(side="right", fill="y")
+        frame.columnconfigure(0, weight=1)
+        return text
+
+    @staticmethod
+    def set_detail_text(widget, text):
+        widget.configure(state="normal")
+        widget.delete("1.0", "end")
+        widget.insert("1.0", str(text or ""))
+        widget.configure(state="disabled")
 
     def refresh(self):
         try:
@@ -637,6 +728,81 @@ class IOControlPanel:
             text = f"{text} ({response.get('hex')})"
         self.param_result_var.set(text)
 
+    def load_ec_catalog(self):
+        try:
+            response = self.client.request(
+                {
+                    "cmd": "system/io/ethercat/param_catalog",
+                    "io": self.device_var.get(),
+                },
+                expected_type="system/io/ethercat/param_catalog",
+            )
+            if not response.get("ok", False):
+                raise RuntimeError(response.get("error", "catalog request failed"))
+            self.ec_catalog_items = self.ec_catalog_entries(response)
+            labels = sorted(self.ec_catalog_items)
+            self.ec_catalog_combo["values"] = labels
+            if labels:
+                self.ec_catalog_var.set(labels[0])
+                self.on_ec_catalog_selected()
+            self.param_result_var.set(f"Catalog loaded: {len(labels)} items")
+        except Exception as exc:
+            messagebox.showerror("IO Control Panel", str(exc))
+
+    def on_ec_catalog_selected(self, _event=None):
+        item = self.ec_catalog_items.get(self.ec_catalog_var.get())
+        if not item:
+            return
+        self.param_index_var.set(item["index"])
+        self.param_subindex_var.set(item["subindex"])
+        self.param_type_var.set(item["data_type"])
+        self.set_detail_text(self.ec_catalog_detail_text, item.get("detail", ""))
+
+    def ec_catalog_entries(self, response):
+        entries = {}
+        for obj in response.get("objects", []):
+            subitems = obj.get("subitems", [])
+            if subitems:
+                for subitem in subitems:
+                    entry = {
+                        "index": obj.get("index_hex", f"0x{int(obj.get('index', 0)):04X}"),
+                        "subindex": f"0x{int(subitem.get('subindex', 0)):02X}",
+                        "data_type": self.catalog_data_type(
+                            subitem.get("data_type"),
+                            subitem.get("bit_size"),
+                        ),
+                        "access": subitem.get("access", ""),
+                        "detail": (
+                            f"{obj.get('name', '')}.{subitem.get('name', '')} "
+                            f"type={subitem.get('data_type', '')} "
+                            f"access={subitem.get('access', '')}"
+                        ),
+                    }
+                    label = (
+                        f"{entry['index']}:{entry['subindex']} "
+                        f"{self.short_catalog_name(subitem.get('name') or obj.get('name'))}"
+                    )
+                    entries[label] = entry
+                continue
+
+            entry = {
+                "index": obj.get("index_hex", f"0x{int(obj.get('index', 0)):04X}"),
+                "subindex": "0x00",
+                "data_type": self.catalog_data_type(
+                    obj.get("data_type"),
+                    obj.get("bit_size"),
+                ),
+                "access": obj.get("access", ""),
+                "detail": (
+                    f"{obj.get('name', '')} "
+                    f"type={obj.get('data_type', '')} "
+                    f"access={obj.get('access', '')}"
+                ),
+            }
+            label = f"{entry['index']}:0x00 {self.short_catalog_name(obj.get('name'))}"
+            entries[label] = entry
+        return entries
+
     def read_ap_parameter(self):
         try:
             response = self.client.request(
@@ -738,6 +904,114 @@ class IOControlPanel:
             text = f"{text} Data=0x{response.get('data')}"
         self.iol_result_var.set(text)
 
+    def load_iol_catalog(self):
+        try:
+            response = self.client.request(
+                {
+                    "cmd": "system/io/iol/param_catalog",
+                    "io": self.device_var.get(),
+                    "module": self.iol_module_var.get(),
+                    "port": self.iol_port_var.get(),
+                },
+                expected_type="system/io/iol/param_catalog",
+            )
+            if not response.get("ok", False):
+                raise RuntimeError(response.get("error", "catalog request failed"))
+            self.iol_catalog_items = self.iol_catalog_entries(response)
+            labels = sorted(self.iol_catalog_items)
+            self.iol_catalog_combo["values"] = labels
+            if labels:
+                self.iol_catalog_var.set(labels[0])
+                self.on_iol_catalog_selected()
+            self.iol_result_var.set(
+                "Catalog loaded: "
+                f"module={self.iol_module_var.get()} "
+                f"port={self.iol_port_var.get()} "
+                f"items={len(labels)}"
+            )
+        except Exception as exc:
+            messagebox.showerror("IO Control Panel", str(exc))
+
+    def on_iol_catalog_selected(self, _event=None):
+        item = self.iol_catalog_items.get(self.iol_catalog_var.get())
+        if not item:
+            return
+        self.iol_module_var.set(str(item["module"]))
+        self.iol_port_var.set(str(item["port"]))
+        self.iol_index_var.set(item["index"])
+        self.iol_subindex_var.set(item["subindex"])
+        self.iol_type_var.set(item["data_type"])
+        if item.get("length"):
+            self.iol_length_var.set(str(item["length"]))
+        self.set_detail_text(self.iol_catalog_detail_text, item.get("detail", ""))
+
+    def iol_catalog_entries(self, response):
+        entries = {}
+        for module in response.get("modules", []):
+            module_number = int(module.get("module", 0))
+            for device in module.get("devices", []):
+                port = int(device.get("port", 0))
+                device_name = device.get("device_name", "")
+                for variable in device.get("variables", []):
+                    subindices = variable.get("subindices", [])
+                    if subindices:
+                        for subitem in subindices:
+                            entry = self.iol_catalog_entry(
+                                module_number,
+                                port,
+                                variable,
+                                int(subitem.get("subindex", 0)),
+                                device_name,
+                            )
+                            label = self.iol_catalog_label(
+                                entry,
+                                variable,
+                                device_name,
+                            )
+                            entries[label] = entry
+                        continue
+
+                    entry = self.iol_catalog_entry(
+                        module_number,
+                        port,
+                        variable,
+                        0,
+                        device_name,
+                    )
+                    label = self.iol_catalog_label(entry, variable, device_name)
+                    entries[label] = entry
+        return entries
+
+    def iol_catalog_entry(self, module_number, port, variable, subindex, device_name):
+        bit_length = int(variable.get("bit_length") or 0)
+        return {
+            "module": module_number,
+            "port": port,
+            "index": variable.get("index_hex", f"0x{int(variable.get('index', 0)):04X}"),
+            "subindex": f"0x{subindex:02X}",
+            "data_type": self.catalog_data_type(
+                variable.get("data_type"),
+                bit_length,
+            ),
+            "length": self.bytes_from_bits(bit_length),
+            "access": variable.get("access", ""),
+            "detail": (
+                f"{variable.get('name', '')} "
+                f"device={device_name} "
+                f"type={variable.get('data_type', '')} "
+                f"bits={bit_length} "
+                f"access={variable.get('access', '')}"
+            ),
+        }
+
+    @staticmethod
+    def iol_catalog_label(entry, variable, device_name):
+        return (
+            f"M{entry['module']} P{entry['port']} "
+            f"{entry['index']}:{entry['subindex']} "
+            f"{IOControlPanel.short_catalog_name(variable.get('name'))}"
+        )
+
     def on_ap_type_changed(self, _event=None):
         length = AP_TYPE_LENGTHS.get(self.ap_type_var.get())
         if length is not None:
@@ -753,6 +1027,94 @@ class IOControlPanel:
         if isinstance(value, int):
             return f"{value} (0x{value:X})"
         return value
+
+    @staticmethod
+    def catalog_data_type(data_type, bit_length=None):
+        text = str(data_type or "").strip().lower()
+        bit_length = int(bit_length or 0)
+        if text.startswith("string("):
+            return "char"
+        if text.startswith("array"):
+            return "bytes"
+        if IOControlPanel.is_unsigned_catalog_type(text):
+            return IOControlPanel.unsigned_type_for_bits(bit_length)
+        if IOControlPanel.is_signed_catalog_type(text):
+            return IOControlPanel.signed_type_for_bits(bit_length)
+        mapping = {
+            "bool": "uint8",
+            "booleant": "uint8",
+            "boolean": "uint8",
+            "byte": "uint8",
+            "uint8": "uint8",
+            "usint": "uint8",
+            "integer8": "int8",
+            "int8": "int8",
+            "sint": "int8",
+            "uint16": "uint16",
+            "uint": "uint16",
+            "uint16t": "uint16",
+            "uintegert": "uint16",
+            "int16": "int16",
+            "integer16": "int16",
+            "uint32": "uint32",
+            "udint": "uint32",
+            "uint32t": "uint32",
+            "int32": "int32",
+            "dint": "int32",
+            "integer32": "int32",
+            "float32": "float32",
+            "real": "float32",
+            "stringt": "char",
+            "visible_string": "char",
+            "char": "char",
+            "recordt": "bytes",
+            "arrayt": "bytes",
+        }
+        return mapping.get(text, "bytes")
+
+    @staticmethod
+    def is_unsigned_catalog_type(text):
+        if text in {"uintegert", "uint", "unsigned", "usint", "byte"}:
+            return True
+        return bool(re.match(r"^dt[0-9a-f]*en[0-9a-f]+$", text))
+
+    @staticmethod
+    def is_signed_catalog_type(text):
+        return text in {"integert", "int", "signed", "sint", "integer"}
+
+    @staticmethod
+    def unsigned_type_for_bits(bit_length):
+        if int(bit_length or 0) <= 8:
+            return "uint8"
+        if int(bit_length or 0) <= 16:
+            return "uint16"
+        if int(bit_length or 0) <= 32:
+            return "uint32"
+        return "bytes"
+
+    @staticmethod
+    def signed_type_for_bits(bit_length):
+        if int(bit_length or 0) <= 8:
+            return "int8"
+        if int(bit_length or 0) <= 16:
+            return "int16"
+        if int(bit_length or 0) <= 32:
+            return "int32"
+        return "bytes"
+
+    @staticmethod
+    def bytes_from_bits(bit_length):
+        bit_length = int(bit_length or 0)
+        if bit_length <= 0:
+            return ""
+        return max(1, (bit_length + 7) // 8)
+
+    @staticmethod
+    def short_catalog_name(name, max_length=32):
+        text = " ".join(str(name or "").split())
+        if len(text) <= max_length:
+            return text
+        return f"{text[:max_length - 3]}..."
 
     def toggle_command_authority(self):
         try:

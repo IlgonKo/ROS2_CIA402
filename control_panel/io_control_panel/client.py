@@ -104,6 +104,8 @@ class MotionServerClient:
                 "system/io/param_write",
                 "system/io/ap/param_read",
                 "system/io/ap/param_write",
+                "system/io/ethercat/param_catalog",
+                "system/io/iol/param_catalog",
                 "system/io/iolink/isdu_read",
                 "system/io/iolink/isdu_write",
                 "system/authority/request",

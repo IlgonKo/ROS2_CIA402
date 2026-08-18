@@ -21,6 +21,7 @@ AP_DATA_FORMATS = {
     "int8": "<b",
     "uint8": "<B",
     "uint16": "<H",
+    "int16": "<h",
     "int32": "<i",
     "uint32": "<I",
     "udint": "<I",
@@ -153,7 +154,7 @@ def write_ap_access_header(
         slave_index,
         AP_PARAMETER_ACCESS_INDEX,
         2,
-        request["module"],
+        request["ap_access_module"],
     )
     ap_sdo_step(
         "write parameter id",
@@ -203,6 +204,7 @@ def require_ap_success(status, request):
         "AP parameter access failed: "
         f"status=0x{status:04X} "
         f"module={request['module']} "
+        f"ap_access_module={request['ap_access_module']} "
         f"parameter_id=0x{request['parameter_id']:08X} "
         f"instance={request['instance']}"
     )
@@ -257,6 +259,7 @@ def parse_ap_parameter_request(message, require_value):
     return {
         "io": message.get("io"),
         "module": module,
+        "ap_access_module": ap_access_module_number(module),
         "parameter_id": parameter_id,
         "instance": instance,
         "length": length,
@@ -272,10 +275,15 @@ def ap_sdo_step(step, request, operation, *args, **kwargs):
             "AP parameter SDO step failed: "
             f"step={step} "
             f"module={request.get('module')} "
+            f"ap_access_module={request.get('ap_access_module')} "
             f"parameter_id=0x{request['parameter_id']:08X} "
             f"instance={request['instance']} "
             f"error={exc}"
         ) from exc
+
+
+def ap_access_module_number(module):
+    return int(module) + 1
 
 
 def read_ap_data_payload(runtime, slave_index, request, read_length):
@@ -403,6 +411,7 @@ def ap_parameter_response(response_type, request):
         "io": request["io"],
         "object_index": f"0x{AP_PARAMETER_ACCESS_INDEX:04X}",
         "module": request["module"],
+        "ap_access_module": request["ap_access_module"],
         "parameter_id": request["parameter_id"],
         "parameter_id_hex": f"0x{request['parameter_id']:08X}",
         "instance": request["instance"],
@@ -412,16 +421,22 @@ def ap_parameter_response(response_type, request):
 
 def ap_parameter_error_response(response_type, message, exc):
     parameter_id = message.get("parameter_id")
+    module = message.get("module", message.get("slot"))
     try:
         parameter_id_hex = f"0x{parse_int(parameter_id, 0):08X}"
     except Exception:
         parameter_id_hex = None
+    try:
+        ap_access_module = ap_access_module_number(parse_int(module, 0))
+    except Exception:
+        ap_access_module = None
     return {
         "type": response_type,
         "ok": False,
         "io": message.get("io"),
         "object_index": f"0x{AP_PARAMETER_ACCESS_INDEX:04X}",
-        "module": message.get("module", message.get("slot")),
+        "module": module,
+        "ap_access_module": ap_access_module,
         "parameter_id": parameter_id,
         "parameter_id_hex": parameter_id_hex,
         "instance": message.get("instance", 0),

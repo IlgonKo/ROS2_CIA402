@@ -1,5 +1,5 @@
 from device.cpx_ap_i_ec.ap_parameter_access import write_ap_uint32_parameter
-from device.cpx_ap_i_ec.module_catalog import (
+from device.cpx_ap_i_ec.module_resolver import (
     module_display_name,
     module_ident,
 )

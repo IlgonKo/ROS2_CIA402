@@ -1,4 +1,4 @@
-from device.cpx_ap_i_ec.module_catalog import expected_module_idents
+from device.cpx_ap_i_ec.module_resolver import expected_module_idents
 
 
 CONFIGURED_MODULE_LIST_INDEX = 0xF030

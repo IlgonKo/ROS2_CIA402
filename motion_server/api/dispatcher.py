@@ -96,6 +96,8 @@ STATUS_MESSAGE_TYPES = {
     "system/axes/status",
     "system/io/status",
     "system/io/input_read",
+    "system/io/ethercat/param_catalog",
+    "system/io/iol/param_catalog",
     "system/io/ap/param_read",
     "system/io/iolink/isdu_read",
 }

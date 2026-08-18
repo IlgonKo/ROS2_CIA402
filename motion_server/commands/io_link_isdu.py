@@ -34,6 +34,7 @@ def read_isdu(message, runtime, client):
     response_type = command_name(message) or "system/io/iolink/isdu_read"
     try:
         request = parse_isdu_request(message, require_value=False)
+        validate_isdu_request_against_iodd(runtime, request, access="read")
         slave_index = runtime.device_manager.io.slave_index(request["io"])
         write_isdu_header(
             runtime,
@@ -86,6 +87,7 @@ def write_isdu(message, runtime, client):
     response_type = public_command_name(message)
     try:
         request = parse_isdu_request(message, require_value=True)
+        validate_isdu_request_against_iodd(runtime, request, access="write")
         slave_index = runtime.device_manager.io.slave_index(request["io"])
         payload = encode_isdu_payload(message["value"], request["data_type"])
         if len(payload) > ISDU_MAX_DATA_BYTES:
@@ -270,7 +272,97 @@ def parse_isdu_request(message, require_value):
 
 
 def isdu_access_object_index(module):
-    return ISDU_ACCESS_BASE_INDEX + (int(module) - 1) * ISDU_ACCESS_INDEX_STEP
+    return ISDU_ACCESS_BASE_INDEX + int(module) * ISDU_ACCESS_INDEX_STEP
+
+
+def validate_isdu_request_against_iodd(runtime, request, access):
+    binding = iodd_binding_for_request(runtime, request)
+    variable = iodd_variable_for_index(binding, request["index"])
+    validate_iodd_variable_access(variable, access, request)
+    validate_iodd_subindex(variable, request)
+
+
+def iodd_binding_for_request(runtime, request):
+    device = runtime.device_manager.io.selected_device(io_id=request["io"])
+    profile = getattr(device["slave"], "device_profile", None)
+    config = getattr(profile, "config", None)
+    if config is None:
+        raise ValueError(f"I/O device {request['io']} has no CPX configuration")
+
+    for binding in config.io_link_devices:
+        if (
+            int(binding.module) == int(request["module"])
+            and int(binding.port) == int(request["port"])
+        ):
+            return binding
+
+    raise ValueError(
+        "No IODD device binding for IO-Link parameter access: "
+        f"io={request['io']} "
+        f"module={request['module']} "
+        f"port={request['port']}. "
+        "Configure MOTION_SERVER_IO_<io>_IOL_PORTS before using ISDU access."
+    )
+
+
+def iodd_variable_for_index(binding, index):
+    for variable in binding.device.variables:
+        if int(variable.index) == int(index):
+            return variable
+    raise ValueError(
+        "Unsupported IO-Link parameter index for configured IODD: "
+        f"device={binding.device.device_name!r} "
+        f"module={binding.module} "
+        f"port={binding.port} "
+        f"index=0x{int(index):04X}"
+    )
+
+
+def validate_iodd_variable_access(variable, access, request):
+    rights = str(variable.access or "").strip().lower()
+    if access == "read" and "r" in rights:
+        return
+    if access == "write" and "w" in rights:
+        return
+    raise ValueError(
+        "IO-Link parameter access is not allowed by IODD: "
+        f"index=0x{request['index']:04X} "
+        f"subindex=0x{request['subindex']:02X} "
+        f"requested={access} "
+        f"iodd_access={variable.access!r} "
+        f"name={variable.name!r}"
+    )
+
+
+def validate_iodd_subindex(variable, request):
+    subindex = int(request["subindex"])
+    if subindex == 0:
+        return
+
+    supported_subindices = {
+        int(item["subindex"])
+        for item in variable.subindices
+        if "subindex" in item
+    }
+    if not supported_subindices:
+        raise ValueError(
+            "IO-Link parameter subindex is not defined in IODD: "
+            f"index=0x{request['index']:04X} "
+            f"subindex=0x{subindex:02X} "
+            f"name={variable.name!r}"
+        )
+    if subindex not in supported_subindices:
+        formatted = ", ".join(
+            f"0x{item:02X}"
+            for item in sorted(supported_subindices)
+        )
+        raise ValueError(
+            "Unsupported IO-Link parameter subindex for configured IODD: "
+            f"index=0x{request['index']:04X} "
+            f"subindex=0x{subindex:02X} "
+            f"supported=[{formatted}] "
+            f"name={variable.name!r}"
+        )
 
 
 def isdu_sdo_step(step, request, operation, *args, **kwargs):

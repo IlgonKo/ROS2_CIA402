@@ -3,6 +3,7 @@
 import os
 from pathlib import Path
 
+from config_file import read_key_value_config
 from control_panel.axis_control_panel.client import (
     axis_count_from_status,
     request_initial_system_status,
@@ -18,19 +19,7 @@ PANEL_CONFIG_FILE = PANEL_CONFIG_ROOT / "config.txt"
 PANEL_ENV_FILE = PANEL_CONFIG_ROOT / ".env"
 
 def load_env_file(path):
-    values = {}
-    if not path.exists():
-        return values
-
-    for line in path.read_text(encoding="utf-8").splitlines():
-        stripped = line.strip()
-        if not stripped or stripped.startswith("#") or "=" not in stripped:
-            continue
-
-        key, value = stripped.split("=", 1)
-        values[key.strip()] = value.strip().strip('"').strip("'")
-
-    return values
+    return read_key_value_config(path)
 
 def load_panel_config():
     if PANEL_CONFIG_FILE.exists():

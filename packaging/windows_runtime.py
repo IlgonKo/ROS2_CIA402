@@ -1,6 +1,12 @@
 import os
 from pathlib import Path
+import re
 import sys
+
+from config_file import read_key_value_config
+
+
+INDEXED_LIST_ITEM_RE = re.compile(r"^\s*\d+\s*:\s*(.+)$")
 
 
 def app_root():
@@ -10,18 +16,7 @@ def app_root():
 
 
 def read_dotenv(path):
-    values = {}
-    if not path.exists():
-        return values
-
-    for line in path.read_text(encoding="utf-8").splitlines():
-        stripped = line.strip()
-        if not stripped or stripped.startswith("#") or "=" not in stripped:
-            continue
-        key, value = stripped.split("=", 1)
-        values[key.strip()] = value.strip().strip('"').strip("'")
-
-    return values
+    return read_key_value_config(path)
 
 
 def read_config(root, filename="config.txt", fallback_filename=".env"):
@@ -82,7 +77,7 @@ def load_axis_env(root):
     bus = values.get("MOTION_SERVER_BUS", values.get("PYSOEM_BUS", "cmmt"))
     loaded_profiles = set()
     for raw_entry in bus.split(","):
-        entry = raw_entry.strip().lower()
+        entry = strip_index_label(raw_entry).strip().lower()
         if not entry:
             continue
         profile = entry.split(":")[1].strip() if ":" in entry else entry
@@ -99,6 +94,13 @@ def load_axis_env(root):
     os.environ.setdefault("MOTION_SERVER_PROJECT_ROOT", str(root))
     os.environ.setdefault("AXIS_SERVER_PROJECT_ROOT", str(root))
     return values
+
+
+def strip_index_label(item):
+    match = INDEXED_LIST_ITEM_RE.match(str(item or ""))
+    if match:
+        return match.group(1).strip()
+    return str(item or "").strip()
 
 
 def add_windows_npcap_dll_paths():

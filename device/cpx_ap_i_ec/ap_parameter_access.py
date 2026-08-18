@@ -19,6 +19,7 @@ def write_ap_uint32_parameter(
 ):
     request = {
         "module": int(module),
+        "ap_access_module": ap_access_module_number(module),
         "parameter_id": int(parameter_id),
         "instance": int(instance),
     }
@@ -36,6 +37,7 @@ def write_ap_uint32_parameter(
             "AP parameter write failed: "
             f"status=0x{int(status):04X} "
             f"module={request['module']} "
+            f"ap_access_module={request['ap_access_module']} "
             f"parameter_id=0x{request['parameter_id']:08X} "
             f"instance={request['instance']}"
         )
@@ -47,7 +49,7 @@ def write_ap_header(master, slave_index, request, length):
         slave_index,
         AP_PARAMETER_ACCESS_INDEX,
         2,
-        request["module"],
+        request["ap_access_module"],
     )
     master.sdo.write_uint32(
         slave_index,
@@ -94,3 +96,7 @@ def poll_ap_status(master, slave_index):
         if time.monotonic() >= deadline:
             return status
         time.sleep(AP_STATUS_POLL_PERIOD)
+
+
+def ap_access_module_number(module):
+    return int(module) + 1

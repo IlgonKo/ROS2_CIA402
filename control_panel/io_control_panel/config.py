@@ -3,6 +3,8 @@
 import os
 from pathlib import Path
 
+from config_file import read_key_value_config
+
 
 PANEL_CONFIG_ROOT = Path(
     os.environ.get(
@@ -15,17 +17,7 @@ PANEL_ENV_FILE = PANEL_CONFIG_ROOT / ".env"
 
 
 def load_env_file(path):
-    values = {}
-    if not path.exists():
-        return values
-
-    for line in path.read_text(encoding="utf-8").splitlines():
-        stripped = line.strip()
-        if not stripped or stripped.startswith("#") or "=" not in stripped:
-            continue
-        key, value = stripped.split("=", 1)
-        values[key.strip()] = value.strip().strip('"').strip("'")
-    return values
+    return read_key_value_config(path)
 
 
 def load_panel_config():
@@ -47,4 +39,3 @@ def read_runtime_config():
         )
     )
     return host, port
-

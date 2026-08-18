@@ -6,6 +6,10 @@ from motion_server.commands.io_parameters import (
     read_ap_parameter,
     write_ap_parameter,
 )
+from motion_server.commands.io_parameter_catalog import (
+    ethercat_param_catalog,
+    iol_param_catalog,
+)
 from motion_server.commands.io_link_isdu import read_isdu, write_isdu
 from motion_server.commands.jog import start_jog, stop_jog
 from motion_server.commands.motion import (
@@ -129,6 +133,13 @@ COMMAND_ROUTER = CommandRouter({
         write_io_parameter(message, runtime, client)
     ),
     "system/io/param_save": reject_not_implemented,
+    "system/io/ethercat/param_catalog": lambda message, runtime, state, client: (
+        ethercat_param_catalog(message, runtime, client)
+    ),
+    "system/io/ap/param_catalog": reject_not_implemented,
+    "system/io/iol/param_catalog": lambda message, runtime, state, client: (
+        iol_param_catalog(message, runtime, client)
+    ),
     "system/io/ap/param_read": lambda message, runtime, state, client: (
         read_ap_parameter(message, runtime, client)
     ),

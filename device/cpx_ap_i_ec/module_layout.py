@@ -1,4 +1,11 @@
 from dataclasses import dataclass, replace
+import re
+
+from config_file import split_indexed_config_list
+from device.cpx_ap_i_ec.esi_module_catalog import (
+    module_info_by_ident,
+    module_info_by_name,
+)
 
 
 DIGITAL_MODULE_TYPES = {"di", "do", "dio"}
@@ -157,7 +164,7 @@ class CPXApModule:
 @dataclass(frozen=True)
 class CPXApLayout:
     modules: tuple[CPXApModule, ...]
-    station_input_bytes: int = 1
+    station_input_bytes: int = 0
     station_output_bytes: int = 1
 
     @property
@@ -229,14 +236,21 @@ class CPXApLayout:
         }
 
 
-def parse_cpx_ap_modules(raw_modules, analog_bits=16, analog_signed=True):
+def parse_cpx_ap_modules(
+    raw_modules,
+    analog_bits=16,
+    analog_signed=True,
+    io_link_module_sizes=None,
+):
+    io_link_module_sizes = io_link_module_sizes or {}
     modules = []
-    for slot, raw_module in enumerate(split_module_list(raw_modules), start=2):
+    for slot, raw_module in split_module_list(raw_modules):
         modules.append(parse_cpx_ap_module(
             slot,
             raw_module,
             analog_bits,
             analog_signed,
+            io_link_module_sizes,
         ))
     return CPXApLayout(tuple(assign_process_image_offsets(modules)))
 
@@ -259,14 +273,24 @@ def assign_process_image_offsets(modules):
 
 
 def split_module_list(raw_modules):
-    return [
-        item.strip()
-        for item in str(raw_modules or "").split(",")
-        if item.strip()
-    ]
+    return split_indexed_config_list(raw_modules, default_start=1)
 
 
-def parse_cpx_ap_module(slot, raw_module, analog_bits=16, analog_signed=True):
+def parse_cpx_ap_module(
+    slot,
+    raw_module,
+    analog_bits=16,
+    analog_signed=True,
+    io_link_module_sizes=None,
+):
+    explicit_module = parse_explicit_cpx_ap_module(
+        slot,
+        raw_module,
+        analog_signed,
+    )
+    if explicit_module is not None:
+        return explicit_module
+
     parts = [
         part.strip().lower()
         for part in str(raw_module).split(":")
@@ -317,7 +341,12 @@ def parse_cpx_ap_module(slot, raw_module, analog_bits=16, analog_signed=True):
             analog_signed,
         )
     if module_type == "iol":
-        return io_link_module(slot, raw_module, parts)
+        return io_link_module(
+            slot,
+            raw_module,
+            parts,
+            io_link_module_sizes or {},
+        )
 
     raise ValueError(f"Unsupported CPX AP module type {module_type!r}")
 
@@ -435,7 +464,32 @@ def mixed_analog_module(
     )
 
 
-def io_link_module(slot, raw_module, parts):
+def io_link_module(slot, raw_module, parts, io_link_module_sizes):
+    if len(parts) == 2:
+        ports = parse_non_negative_int(parts[1], raw_module)
+        size = io_link_module_sizes.get(int(slot))
+        if size is None:
+            raise ValueError(
+                f"Invalid CPX AP IO-Link module {raw_module!r}; "
+                "expected iol:<ports>:in<input_bytes>:out<output_bytes> "
+                "or matching MOTION_SERVER_IO_<io>_IOL_PORTS entries."
+            )
+        input_bytes_per_port, output_bytes_per_port = size
+        input_bytes = input_bytes_per_port * ports
+        output_bytes = output_bytes_per_port * ports
+        return CPXApModule(
+            slot=slot,
+            module_type="iol",
+            raw=str(raw_module),
+            spec=IoLinkModuleSpec(
+                ports=ports,
+                input_data_bytes=input_bytes,
+                output_data_bytes=output_bytes,
+            ),
+            input_bytes=input_bytes + ports,
+            output_bytes=output_bytes,
+        )
+
     if len(parts) < 4:
         raise ValueError(
             f"Invalid CPX AP IO-Link module {raw_module!r}; "
@@ -528,3 +582,189 @@ def common_analog_property(modules, attribute, default):
 
 def bytes_for_bits(bit_count):
     return (max(0, int(bit_count)) + 7) // 8
+
+
+def parse_explicit_cpx_ap_module(slot, raw_module, analog_signed=True):
+    info = explicit_module_info(raw_module)
+    if info is None:
+        return None
+    return module_from_esi_info(slot, raw_module, info, analog_signed)
+
+
+def explicit_module_info(raw_module):
+    value = str(raw_module).strip()
+    lowered = value.lower()
+    for prefix in ("ident:", "module_ident:"):
+        if lowered.startswith(prefix):
+            return module_info_by_ident(int(value[len(prefix):], 0))
+    if normalized_module_name(value).startswith("cpx-ap-i-"):
+        return module_info_by_name(value)
+    return None
+
+
+def module_from_esi_info(slot, raw_module, info, analog_signed=True):
+    name = info.type_name
+    normalized_name = normalized_module_name(name)
+
+    if "iol" in normalized_name:
+        ports = parse_module_count(normalized_name, "iol", raw_module)
+        input_data_bytes = info.txpdo_bytes - ports
+        output_data_bytes = info.rxpdo_bytes
+        if input_data_bytes < 0:
+            raise ValueError(
+                f"Invalid CPX AP IO-Link ESI size for {raw_module!r}"
+            )
+        return CPXApModule(
+            slot=slot,
+            module_type="iol",
+            raw=str(raw_module),
+            spec=IoLinkModuleSpec(
+                ports=ports,
+                input_data_bytes=input_data_bytes,
+                output_data_bytes=output_data_bytes,
+            ),
+            input_bytes=info.txpdo_bytes,
+            output_bytes=info.rxpdo_bytes,
+        )
+
+    digital_spec = digital_spec_from_name(normalized_name, raw_module)
+    if digital_spec is not None:
+        module_type = "dio"
+        if digital_spec.digital_inputs and not digital_spec.digital_outputs:
+            module_type = "di"
+        elif digital_spec.digital_outputs and not digital_spec.digital_inputs:
+            module_type = "do"
+        return CPXApModule(
+            slot=slot,
+            module_type=module_type,
+            raw=str(raw_module),
+            spec=digital_spec,
+            input_bytes=info.txpdo_bytes,
+            output_bytes=info.rxpdo_bytes,
+        )
+
+    analog_spec = analog_spec_from_name(
+        normalized_name,
+        raw_module,
+        info,
+        analog_signed,
+    )
+    if analog_spec is not None:
+        module_type = "aio"
+        if analog_spec.analog_inputs and not analog_spec.analog_outputs:
+            module_type = "ai"
+        elif analog_spec.analog_outputs and not analog_spec.analog_inputs:
+            module_type = "ao"
+        return CPXApModule(
+            slot=slot,
+            module_type=module_type,
+            raw=str(raw_module),
+            spec=analog_spec,
+            input_bytes=info.txpdo_bytes,
+            output_bytes=info.rxpdo_bytes,
+        )
+
+    raise ValueError(
+        f"Cannot infer CPX AP module layout from ESI name {name!r}. "
+        "Use shorthand syntax such as di:8, do:8, dio:4:4, ai:4, "
+        "ao:2, aio:4:4, or iol:4:in32:out32."
+    )
+
+
+def digital_spec_from_name(normalized_name, raw_module):
+    mixed = re.search(r"(\d+)di(\d+)do", normalized_name)
+    if mixed:
+        return DigitalModuleSpec(
+            digital_inputs=parse_non_negative_int(mixed.group(1), raw_module),
+            digital_outputs=parse_non_negative_int(mixed.group(2), raw_module),
+        )
+
+    mixed = re.search(r"(\d+)dio", normalized_name)
+    if mixed:
+        points = parse_non_negative_int(mixed.group(1), raw_module)
+        return DigitalModuleSpec(
+            digital_inputs=points,
+            digital_outputs=points,
+        )
+
+    inputs = re.search(r"(\d+)di", normalized_name)
+    if inputs:
+        return DigitalModuleSpec(
+            digital_inputs=parse_non_negative_int(inputs.group(1), raw_module),
+        )
+
+    outputs = re.search(r"(\d+)do", normalized_name)
+    if outputs:
+        return DigitalModuleSpec(
+            digital_outputs=parse_non_negative_int(outputs.group(1), raw_module),
+        )
+
+    return None
+
+
+def analog_spec_from_name(normalized_name, raw_module, info, analog_signed):
+    mixed = re.search(r"(\d+)ai(\d+)ao", normalized_name)
+    if mixed:
+        analog_inputs = parse_non_negative_int(mixed.group(1), raw_module)
+        analog_outputs = parse_non_negative_int(mixed.group(2), raw_module)
+    else:
+        inputs = re.search(r"(\d+)ai", normalized_name)
+        outputs = re.search(r"(\d+)ao", normalized_name)
+        analog_inputs = (
+            parse_non_negative_int(inputs.group(1), raw_module)
+            if inputs
+            else 0
+        )
+        analog_outputs = (
+            parse_non_negative_int(outputs.group(1), raw_module)
+            if outputs
+            else 0
+        )
+
+    if not analog_inputs and not analog_outputs:
+        return None
+
+    input_bits = analog_bits_from_pdo_size(info.txpdo_bytes, analog_inputs)
+    output_bits = analog_bits_from_pdo_size(info.rxpdo_bytes, analog_outputs)
+    analog_bits = input_bits or output_bits or 16
+    if input_bits and output_bits and input_bits != output_bits:
+        raise ValueError(
+            f"Mixed analog bit widths are not supported for {raw_module!r}"
+        )
+
+    return AnalogModuleSpec(
+        analog_inputs=analog_inputs,
+        analog_outputs=analog_outputs,
+        analog_bits=analog_bits,
+        analog_signed=analog_signed,
+    )
+
+
+def analog_bits_from_pdo_size(byte_count, channels):
+    channels = int(channels)
+    if channels <= 0:
+        return 0
+    bits = int(byte_count) * 8 // channels
+    if bits not in (8, 16, 32):
+        raise ValueError(
+            f"Unsupported CPX AP analog channel width inferred from ESI: "
+            f"{bits} bits"
+        )
+    return bits
+
+
+def parse_module_count(normalized_name, suffix, raw_module):
+    match = re.search(rf"(\d+){suffix}", normalized_name)
+    if not match:
+        raise ValueError(f"Cannot infer module count from {raw_module!r}")
+    return parse_non_negative_int(match.group(1), raw_module)
+
+
+def normalized_module_name(raw_module):
+    return (
+        str(raw_module)
+        .strip()
+        .lower()
+        .replace("_", "-")
+        .replace(" ", "-")
+    )

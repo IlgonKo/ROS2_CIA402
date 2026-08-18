@@ -9,7 +9,7 @@ from device.cpx_ap_i_ec.pdo import (
     flattened_digital_inputs,
     flattened_digital_outputs,
 )
-from device.cpx_ap_i_ec.module_catalog import module_display_name
+from device.cpx_ap_i_ec.module_resolver import module_display_name
 
 
 def axis_list_value(values, axis_index, default=None):

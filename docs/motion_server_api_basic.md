@@ -445,6 +445,8 @@ system/io/restart
 system/io/param_read
 system/io/param_write
 system/io/param_save
+system/io/ethercat/param_catalog
+system/io/iol/param_catalog
 system/io/ap/param_read
 system/io/ap/param_write
 system/io/iolink/isdu_read
@@ -487,7 +489,10 @@ system/io/ap/param_write
 AP parameter access는 CPX-AP-I-EC의 `0x27F0 AP Parameter Access`
 object를 통해 수행된다. 사용자는 EtherCAT OD subindex를 직접 다루지 않고
 `module`, `parameter_id`, `instance`, `length`를 지정한다.
-`module`은 `0x27F0:02 Module`에 들어가는 AP module 번호이며 1부터 시작한다.
+`module`은 `MOTION_SERVER_IO_<id>_MODULES`에서 선언한 AP module 번호다.
+slot 0은 CPX-AP-I-EC interface module이므로 사용자가 접근하는 AP module은
+1부터 시작한다. Motion Server는 이 번호를 장치의 `0x27F0:02 Module`
+필드에 맞게 내부 변환한다.
 
 ```json
 {

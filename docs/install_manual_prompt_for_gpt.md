@@ -133,9 +133,11 @@ MOTION_SERVER_FEEDBACK_PERIOD=0.05
   - `{}` 안의 GUID만 쓰는 것이 아니라 전체 `\Device\NPF_{...}` 형식 사용
 - `MOTION_SERVER_BUS`
   - EtherCAT slave profile 순서
-  - 예: `cmmt`
-  - 예: `cmmt,cmmt`
-  - I/O 포함 예: `cmmt,cmmt,io:cpx_ap_i_ec`
+  - 축 short form 예: `cmmt`
+  - 축 explicit form 예: `axis:cmmt`
+  - 다축 예: `cmmt,cmmt`
+  - I/O 포함 예: `cmmt,cmmt,io:cpx_ap_i_ec:io0`
+  - 물리 slave 순서를 명확히 남기고 싶으면 `0: axis:cmmt,1: cmmt,2: io:cpx_ap_i_ec:io0`처럼 index label 사용 가능
 - `MOTION_SERVER_DEVICE_CONFIG_ROOT`
   - 기본값 `device`
   - Motion Server가 `MOTION_SERVER_BUS`에 등장한 profile을 보고 `device/<profile>/config.txt`를 자동 로드
@@ -145,6 +147,28 @@ MOTION_SERVER_FEEDBACK_PERIOD=0.05
   - process-data cycle time, seconds
 - `MOTION_SERVER_FEEDBACK_PERIOD`
   - Axis Control Panel/Client로 보내는 `system/feedback` 주기, seconds
+
+Remote I/O 설정:
+
+```text
+MOTION_SERVER_IO_io0_MODULES=1: do:8,2: CPX-AP-I-4IOL-M12 Variant 32
+MOTION_SERVER_IO_io0_IOL_PORTS=0:Balluff_BCM_R16E_004_CI01,1:none,2:none,3:none
+```
+
+설명:
+
+- `MOTION_SERVER_IO_<id>_MODULES`
+  - `<id>`는 `MOTION_SERVER_BUS`의 `io:cpx_ap_i_ec:<id>`와 일치
+  - slot 0은 CPX-AP-I-EC interface module이므로 AP module은 slot 1부터 선언
+  - short form 예: `do:8`, `di:8`, `dio:4:4`, `dio:i4:o4`, `ai:4`, `ao:2`, `aio:4:4`, `iol:4`
+  - full device form 예: `CPX-AP-I-8DO-M8-3P`, `CPX-AP-I-4IOL-M12 Variant 32`
+  - explicit ident form 예: `ident:0x00002139`
+  - full device form과 ident form은 `device/cpx_ap_i_ec/esi` 아래 ESI 파일을 기준으로 해석
+- `MOTION_SERVER_IO_<id>_IOL_PORTS`
+  - IO-Link device binding
+  - port 번호는 0부터 시작
+  - 값은 `device/io_link/iodd` 아래 IODD 파일 prefix
+  - 사용하지 않는 port는 `none`
 
 Axis Control Panel 설정:
 
@@ -289,10 +313,17 @@ MOTION_SERVER_FEEDBACK_PERIOD=0.05
   - 예: `enp1s0`
 - `MOTION_SERVER_BUS`
   - 실제 EtherCAT slave 순서와 일치해야 함
+  - 축은 `cmmt` short form 또는 `axis:cmmt` explicit form 사용 가능
+  - I/O는 `io:cpx_ap_i_ec:io0`처럼 profile과 logical id를 함께 선언
+  - `0: cmmt,1: io:cpx_ap_i_ec:io0`처럼 index label로 물리 순서를 명시 가능
 - `MOTION_SERVER_DEVICE_CONFIG_ROOT=device`
   - `MOTION_SERVER_BUS` profile별 `.env` 자동 로드
 - `MOTION_SERVER_MODE=basic`
   - 설치 매뉴얼 기준
+
+Remote I/O 설정은 Windows와 동일하게 `MOTION_SERVER_IO_<id>_MODULES`를 사용한다.
+모듈은 `do:8` 같은 short form, `CPX-AP-I-8DO-M8-3P` 같은 full device
+form, `ident:0x00002139` 같은 explicit ident form을 사용할 수 있다.
 
 ### Linux Docker 실행
 

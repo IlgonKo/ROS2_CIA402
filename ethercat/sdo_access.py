@@ -8,6 +8,7 @@ class SdoAccess:
         "int8": "<b",
         "uint8": "<B",
         "uint16": "<H",
+        "int16": "<h",
         "int32": "<i",
         "uint32": "<I",
         "float32": "<f",
@@ -24,6 +25,9 @@ class SdoAccess:
 
     def write_uint16(self, slave_index, index, subindex, value):
         self._write("uint16", slave_index, index, subindex, int(value))
+
+    def write_int16(self, slave_index, index, subindex, value):
+        self._write("int16", slave_index, index, subindex, int(value))
 
     def write_int32(self, slave_index, index, subindex, value):
         self._write("int32", slave_index, index, subindex, int(value))
@@ -42,6 +46,9 @@ class SdoAccess:
 
     def read_uint16(self, slave_index, index, subindex):
         return self._read("uint16", slave_index, index, subindex)
+
+    def read_int16(self, slave_index, index, subindex):
+        return self._read("int16", slave_index, index, subindex)
 
     def read_int32(self, slave_index, index, subindex):
         return self._read("int32", slave_index, index, subindex)

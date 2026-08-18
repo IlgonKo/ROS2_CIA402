@@ -2,20 +2,12 @@ import argparse
 import os
 from pathlib import Path
 
+from config_file import read_key_value_config, split_config_list
 from device import available_device_names, get_device_profile
 
 
 def load_env_defaults(env_path, override=False):
-    if not env_path.is_file():
-        return
-
-    for raw_line in env_path.read_text(encoding="utf-8").splitlines():
-        line = raw_line.strip()
-        if not line or line.startswith("#") or "=" not in line:
-            continue
-        key, value = line.split("=", 1)
-        key = key.strip()
-        value = value.strip().strip('"').strip("'")
+    for key, value in read_key_value_config(env_path).items():
         if override:
             os.environ[key] = value
         else:
@@ -59,7 +51,7 @@ def device_config_root_env_value():
 
 def bus_profile_names(raw_bus):
     profiles = []
-    for raw_entry in str(raw_bus or "").split(","):
+    for raw_entry in split_config_list(raw_bus, strip_index_labels=True):
         entry = raw_entry.strip().lower()
         if not entry:
             continue
@@ -555,7 +547,7 @@ def parse_bus_config(raw_bus):
     axis_slave_indices = []
     io_devices = []
 
-    for raw_entry in raw_bus.split(","):
+    for raw_entry in split_config_list(raw_bus, strip_index_labels=True):
         entry = raw_entry.strip().lower()
         if not entry:
             continue
