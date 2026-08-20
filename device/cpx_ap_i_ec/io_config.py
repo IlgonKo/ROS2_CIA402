@@ -2,7 +2,10 @@ import os
 from dataclasses import dataclass
 
 from config_file import split_indexed_config_list
-from device.cpx_ap_i_ec.module_resolver import validate_layout_against_esi
+from device.cpx_ap_i_ec.module_resolver import (
+    layout_with_esi_pdo_sizes,
+    validate_layout_against_esi,
+)
 from device.cpx_ap_i_ec.module_layout import (
     CPXApLayout,
     parse_cpx_ap_modules,
@@ -98,18 +101,21 @@ def load_cpx_io_config(io_id):
         )
 
     io_link_modules = io_link_module_refs(raw_modules)
-    io_link_devices = parse_io_link_device_bindings(
-        values,
-        io_id,
-        io_link_modules,
-    )
+    io_link_devices = []
+    if io_link_modules:
+        io_link_devices = parse_io_link_device_bindings(
+            values,
+            io_id,
+            io_link_modules,
+        )
     io_link_module_sizes = inferred_io_link_module_sizes(io_link_devices)
+    layout = parse_cpx_ap_modules(
+        raw_modules,
+        io_link_module_sizes=io_link_module_sizes,
+    )
     config = CPXIoConfig(
         io_id=io_id,
-        layout=parse_cpx_ap_modules(
-            raw_modules,
-            io_link_module_sizes=io_link_module_sizes,
-        ),
+        layout=layout_with_esi_pdo_sizes(layout),
         io_link_devices=tuple(sorted(
             io_link_devices,
             key=lambda binding: (binding.module, binding.port),

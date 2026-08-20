@@ -38,6 +38,18 @@ class SdoAccess:
     def write_float32(self, slave_index, index, subindex, value):
         self._write("float32", slave_index, index, subindex, float(value))
 
+    def write_string(self, slave_index, index, subindex, value):
+        payload = encode_string_payload(value)
+        try:
+            self.transport.write_sdo(slave_index, index, subindex, payload)
+        except Exception as exc:
+            raise RuntimeError(
+                "SDO write failed: "
+                f"slave={slave_index} object=0x{index:04X}:{subindex:02X} "
+                f"type=string value={value!r} payload={payload.hex()} "
+                f"error={exc}"
+            ) from exc
+
     def read_int8(self, slave_index, index, subindex):
         return self._read("int8", slave_index, index, subindex)
 
@@ -58,6 +70,22 @@ class SdoAccess:
 
     def read_float32(self, slave_index, index, subindex):
         return self._read("float32", slave_index, index, subindex)
+
+    def read_string(self, slave_index, index, subindex, size):
+        try:
+            payload = self.transport.read_sdo(
+                slave_index,
+                index,
+                subindex,
+                int(size),
+            )
+        except Exception as exc:
+            raise RuntimeError(
+                "SDO read failed: "
+                f"slave={slave_index} object=0x{index:04X}:{subindex:02X} "
+                f"type=string size={size} error={exc}"
+            ) from exc
+        return decode_string_payload(payload)
 
     def _write(self, data_type, slave_index, index, subindex, value):
         payload = struct.pack(self._FORMATS[data_type], value)
@@ -91,3 +119,14 @@ class SdoAccess:
                 f"type={data_type} expected={size} actual={len(payload)}"
             )
         return struct.unpack(data_format, payload[:size])[0]
+
+
+def encode_string_payload(value):
+    return str(value).encode("ascii", errors="replace")
+
+
+def decode_string_payload(payload):
+    return bytes(payload).split(b"\x00", 1)[0].decode(
+        "ascii",
+        errors="replace",
+    )

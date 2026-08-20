@@ -1,7 +1,7 @@
 """Single-axis UI builder for Axis Control Panel."""
 
 import tkinter as tk
-from tkinter import ttk
+from tkinter import scrolledtext, ttk
 
 from control_panel.axis_control_panel.statusword import STATUSWORD_BITS
 from control_panel.axis_control_panel.trace import TraceCanvas
@@ -397,15 +397,62 @@ class SingleAxisViewBuilderMixin:
 
         diagnosis_frame = ttk.LabelFrame(diagnosis_tab, text="Selected Axis SDO")
         diagnosis_frame.pack(fill="x", pady=(0, 10))
+        ttk.Label(diagnosis_frame, text="Catalog").grid(
+            row=0,
+            column=0,
+            padx=5,
+            pady=5,
+            sticky="e",
+        )
+        self.diagnosis_catalog_combo = ttk.Combobox(
+            diagnosis_frame,
+            textvariable=self.diagnosis_catalog_var,
+            width=48,
+            state="readonly",
+        )
+        self.diagnosis_catalog_combo.grid(
+            row=0,
+            column=1,
+            columnspan=7,
+            padx=5,
+            pady=5,
+            sticky="ew",
+        )
+        self.diagnosis_catalog_combo.bind(
+            "<<ComboboxSelected>>",
+            self.on_diagnosis_catalog_selected,
+        )
+        ttk.Button(
+            diagnosis_frame,
+            text="Load Catalog",
+            command=self.load_diagnosis_catalog,
+        ).grid(row=0, column=8, columnspan=2, padx=5, pady=5, sticky="ew")
+
+        self.diagnosis_catalog_detail_text = scrolledtext.ScrolledText(
+            diagnosis_frame,
+            height=3,
+            wrap="word",
+            state="disabled",
+        )
+        self.diagnosis_catalog_detail_text.grid(
+            row=1,
+            column=0,
+            columnspan=10,
+            padx=5,
+            pady=(0, 5),
+            sticky="ew",
+        )
+
         diagnosis_fields = [
             ("Index", self.diagnosis_index_var, "entry"),
             ("Subindex", self.diagnosis_subindex_var, "entry"),
             ("Type", self.diagnosis_type_var, "combo"),
+            ("Length", self.diagnosis_length_var, "entry"),
             ("Value", self.diagnosis_value_var, "entry"),
         ]
         for index, (label, var, kind) in enumerate(diagnosis_fields):
             ttk.Label(diagnosis_frame, text=label).grid(
-                row=0,
+                row=2,
                 column=index * 2,
                 padx=5,
                 pady=5,
@@ -419,10 +466,12 @@ class SingleAxisViewBuilderMixin:
                         "uint8",
                         "int8",
                         "uint16",
+                        "int16",
                         "int32",
                         "uint32",
                         "udint",
                         "float32",
+                        "string",
                     ],
                     width=12,
                     state="readonly",
@@ -436,7 +485,7 @@ class SingleAxisViewBuilderMixin:
                 )
                 self.bind_entry_focus(widget, var)
             widget.grid(
-                row=0,
+                row=2,
                 column=index * 2 + 1,
                 padx=5,
                 pady=5,

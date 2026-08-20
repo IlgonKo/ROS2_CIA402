@@ -6,7 +6,7 @@ PROJECT_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 COMPOSE_FILE="${PROJECT_ROOT}/docker/motion_server/compose.yaml"
 ENV_FILE="${PROJECT_ROOT}/.env"
 source "${PROJECT_ROOT}/scripts/env.sh"
-SERVER_CONTAINER_NAME="${PYSOEM_CONTAINER_NAME:-ros_cia402_motion_server}"
+SERVER_CONTAINER_NAME="${MOTION_SERVER_CONTAINER_NAME:-ros_cia402_motion_server}"
 DISPLAY_VALUE="${DISPLAY:-:0}"
 BUILD_PANEL=0
 

@@ -36,6 +36,7 @@ class IOControlPanel:
         self.param_index_var = tk.StringVar(value="0x1000")
         self.param_subindex_var = tk.StringVar(value="0x00")
         self.param_type_var = tk.StringVar(value="uint32")
+        self.param_length_var = tk.StringVar(value="12")
         self.param_value_var = tk.StringVar(value="0")
         self.param_result_var = tk.StringVar(value="")
         self.ec_catalog_var = tk.StringVar(value="")
@@ -191,28 +192,46 @@ class IOControlPanel:
         ttk.Combobox(
             parameter,
             textvariable=self.param_type_var,
-            values=("uint8", "int8", "uint16", "int16", "int32", "uint32", "float32"),
+            values=(
+                "uint8",
+                "int8",
+                "uint16",
+                "int16",
+                "int32",
+                "uint32",
+                "float32",
+                "char",
+                "string",
+            ),
             width=9,
             state="readonly",
         ).grid(row=2, column=7, padx=4, pady=(6, 0))
 
-        ttk.Label(parameter, text="Value").grid(row=2, column=8, sticky="w", pady=(6, 0))
-        ttk.Entry(parameter, textvariable=self.param_value_var, width=12).grid(
+        ttk.Label(parameter, text="Length").grid(row=2, column=8, sticky="w", pady=(6, 0))
+        ttk.Entry(parameter, textvariable=self.param_length_var, width=8).grid(
             row=2,
             column=9,
             padx=4,
             pady=(6, 0),
         )
 
+        ttk.Label(parameter, text="Value").grid(row=2, column=10, sticky="w", pady=(6, 0))
+        ttk.Entry(parameter, textvariable=self.param_value_var, width=12).grid(
+            row=2,
+            column=11,
+            padx=4,
+            pady=(6, 0),
+        )
+
         ttk.Button(parameter, text="Read", command=self.read_parameter).grid(
             row=2,
-            column=10,
+            column=12,
             padx=(8, 0),
             pady=(6, 0),
         )
         ttk.Button(parameter, text="Write", command=self.write_parameter).grid(
             row=2,
-            column=11,
+            column=13,
             padx=4,
             pady=(6, 0),
         )
@@ -223,11 +242,11 @@ class IOControlPanel:
         ).grid(
             row=3,
             column=0,
-            columnspan=12,
+            columnspan=14,
             sticky="ew",
             pady=(6, 0),
         )
-        parameter.columnconfigure(11, weight=1)
+        parameter.columnconfigure(13, weight=1)
 
         ap_parameter = ttk.Frame(parameter_tabs, padding=8)
         parameter_tabs.add(ap_parameter, text="AP Parameter")
@@ -554,7 +573,7 @@ class IOControlPanel:
         self.tree.insert(
             device_id,
             "end",
-            text="module 1 ESI",
+            text="module 0 esi",
             values=("CPX-AP-I-EC",),
             open=True,
         )
@@ -710,13 +729,17 @@ class IOControlPanel:
             messagebox.showerror("IO Control Panel", str(exc))
 
     def parameter_message(self, command):
-        return {
+        message = {
             "cmd": command,
             "io": self.device_var.get(),
             "index": self.param_index_var.get(),
             "subindex": self.param_subindex_var.get(),
             "data_type": self.param_type_var.get(),
         }
+        length = self.param_length_from_type()
+        if length:
+            message["length"] = length
+        return message
 
     def show_parameter_response(self, response):
         if response.get("type") == "command_rejected" or not response.get("ok", False):
@@ -756,6 +779,8 @@ class IOControlPanel:
         self.param_index_var.set(item["index"])
         self.param_subindex_var.set(item["subindex"])
         self.param_type_var.set(item["data_type"])
+        if item.get("length"):
+            self.param_length_var.set(str(item["length"]))
         self.set_detail_text(self.ec_catalog_detail_text, item.get("detail", ""))
 
     def ec_catalog_entries(self, response):
@@ -768,6 +793,10 @@ class IOControlPanel:
                         "index": obj.get("index_hex", f"0x{int(obj.get('index', 0)):04X}"),
                         "subindex": f"0x{int(subitem.get('subindex', 0)):02X}",
                         "data_type": self.catalog_data_type(
+                            subitem.get("data_type"),
+                            subitem.get("bit_size"),
+                        ),
+                        "length": self.catalog_data_length(
                             subitem.get("data_type"),
                             subitem.get("bit_size"),
                         ),
@@ -789,6 +818,10 @@ class IOControlPanel:
                 "index": obj.get("index_hex", f"0x{int(obj.get('index', 0)):04X}"),
                 "subindex": "0x00",
                 "data_type": self.catalog_data_type(
+                    obj.get("data_type"),
+                    obj.get("bit_size"),
+                ),
+                "length": self.catalog_data_length(
                     obj.get("data_type"),
                     obj.get("bit_size"),
                 ),
@@ -856,8 +889,8 @@ class IOControlPanel:
     def read_iol_parameter(self):
         try:
             response = self.client.request(
-                self.iol_parameter_message("system/io/iolink/isdu_read"),
-                expected_type="system/io/iolink/isdu_read",
+                self.iol_parameter_message("system/io/iol/param_read"),
+                expected_type="system/io/iol/param_read",
             )
             self.show_iol_parameter_response(response)
         except Exception as exc:
@@ -866,11 +899,11 @@ class IOControlPanel:
     def write_iol_parameter(self):
         try:
             self.require_command_authority()
-            message = self.iol_parameter_message("system/io/iolink/isdu_write")
+            message = self.iol_parameter_message("system/io/iol/param_write")
             message["value"] = self.iol_value_var.get()
             response = self.client.request(
                 message,
-                expected_type="system/io/iolink/isdu_write",
+                expected_type="system/io/iol/param_write",
             )
             self.show_iol_parameter_response(response)
         except Exception as exc:
@@ -1022,6 +1055,11 @@ class IOControlPanel:
         if length is not None:
             self.iol_length_var.set(length)
 
+    def param_length_from_type(self):
+        if self.param_type_var.get().strip().lower() not in {"char", "string"}:
+            return ""
+        return self.param_length_var.get().strip()
+
     @staticmethod
     def format_ap_value(value):
         if isinstance(value, int):
@@ -1030,10 +1068,12 @@ class IOControlPanel:
 
     @staticmethod
     def catalog_data_type(data_type, bit_length=None):
+        # TECH_DEBT[TD-007]: Axis Diagnosis contains the same conversion policy.
+        # Consolidate this when the IO panel is split into smaller modules.
         text = str(data_type or "").strip().lower()
         bit_length = int(bit_length or 0)
         if text.startswith("string("):
-            return "char"
+            return "string"
         if text.startswith("array"):
             return "bytes"
         if IOControlPanel.is_unsigned_catalog_type(text):
@@ -1064,13 +1104,23 @@ class IOControlPanel:
             "integer32": "int32",
             "float32": "float32",
             "real": "float32",
-            "stringt": "char",
-            "visible_string": "char",
-            "char": "char",
+            "stringt": "string",
+            "visible_string": "string",
+            "char": "string",
             "recordt": "bytes",
             "arrayt": "bytes",
         }
         return mapping.get(text, "bytes")
+
+    @staticmethod
+    def catalog_data_length(data_type, bit_length=None):
+        text = str(data_type or "").strip().lower()
+        match = re.match(r"string\((\d+)\)", text)
+        if match:
+            return int(match.group(1))
+        if text in {"stringt", "visible_string", "char"} and bit_length:
+            return max(1, int(bit_length) // 8)
+        return None
 
     @staticmethod
     def is_unsigned_catalog_type(text):

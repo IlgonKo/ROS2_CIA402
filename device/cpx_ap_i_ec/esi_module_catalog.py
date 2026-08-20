@@ -25,6 +25,37 @@ class EsiModuleInfo:
 
 
 @dataclass(frozen=True)
+class EsiPdoEntryInfo:
+    index: int
+    subindex: int
+    bit_length: int
+    name: str
+
+    def mapping_entry(self):
+        if self.index == 0:
+            return self.bit_length & 0xFF
+        return (
+            ((self.index & 0xFFFF) << 16)
+            | ((self.subindex & 0xFF) << 8)
+            | (self.bit_length & 0xFF)
+        )
+
+
+@dataclass(frozen=True)
+class EsiPdoInfo:
+    index: int
+    name: str
+    entries: tuple[EsiPdoEntryInfo, ...]
+
+    @property
+    def byte_size(self):
+        return (sum(entry.bit_length for entry in self.entries) + 7) // 8
+
+    def mapping_entries(self):
+        return [entry.mapping_entry() for entry in self.entries]
+
+
+@dataclass(frozen=True)
 class EsiObjectInfo:
     index: int
     name: str
@@ -68,14 +99,25 @@ def interface_module_info():
 @lru_cache(maxsize=1)
 def esi_module_catalog():
     esi_path = find_esi_file(DEFAULT_ESI_STEM)
-    modules = parse_esi_modules(esi_path)
+    root = ET.parse(esi_path).getroot()
+    data_types = parse_data_types(root)
+    device = find_device(root)
+    modules = parse_esi_modules(root, data_types)
     by_name = {}
     by_ident = {}
     for module in modules:
         by_ident.setdefault(module.ident, module)
         by_name.setdefault(normalized_lookup_key(module.type_name), module)
         by_name.setdefault(normalized_lookup_key(module.display_name), module)
-    return EsiCatalog(esi_path, tuple(modules), by_name, by_ident)
+    return EsiCatalog(
+        esi_path,
+        tuple(modules),
+        by_name,
+        by_ident,
+        objects=parse_device_objects(device, data_types),
+        rxpdos=parse_pdos(device, "RxPdo"),
+        txpdos=parse_pdos(device, "TxPdo"),
+    )
 
 
 @dataclass(frozen=True)
@@ -84,15 +126,44 @@ class EsiCatalog:
     modules: tuple[EsiModuleInfo, ...]
     by_name: dict
     by_ident: dict
+    objects: dict
+    rxpdos: dict
+    txpdos: dict
+
+    def object_info(self, index, subindex=0):
+        return self.objects[(int(index), int(subindex))]
 
 
 def find_esi_file(stem):
     return find_unique_xml_file(ESI_DIR, stem, "CPX-AP-I-EC ESI")
 
 
-def parse_esi_modules(path):
-    root = ET.parse(path).getroot()
-    data_types = parse_data_types(root)
+def find_device(root):
+    candidates = []
+    for device in root.findall(".//Device"):
+        type_el = device.find("Type")
+        if type_el is None or xml_text(type_el) != "CPX-AP-I-EC-M12":
+            continue
+        candidates.append(device)
+        if device_has_object(device, 0x27F0):
+            return device
+    if candidates:
+        return candidates[0]
+    raise ValueError("CPX-AP-I-EC ESI does not contain a Device entry")
+
+
+def device_has_object(device, index):
+    expected = f"#x{int(index):04x}"
+    for obj in device.findall("Profile/Dictionary/Objects/Object"):
+        index_el = obj.find("Index")
+        if index_el is None:
+            continue
+        if xml_text(index_el).strip().lower() == expected:
+            return True
+    return False
+
+
+def parse_esi_modules(root, data_types):
     modules = []
     for module in root.findall(".//Module"):
         type_el = module.find("Type")
@@ -143,8 +214,34 @@ def parse_data_type_subitems(data_type):
 
 
 def parse_module_objects(module, data_types):
+    return parse_objects(module.findall(".//Object"), data_types)
+
+
+def parse_device_objects(device, data_types):
+    objects = {}
+    for obj in parse_objects(
+        device.findall("Profile/Dictionary/Objects/Object"),
+        data_types,
+    ):
+        objects[(obj.index, 0)] = obj
+        for subitem in obj.subitems:
+            if int(subitem.subindex) == 0:
+                continue
+            objects[(obj.index, subitem.subindex)] = EsiObjectInfo(
+                index=obj.index,
+                name=subitem.name,
+                data_type=subitem.data_type,
+                bit_size=subitem.bit_size,
+                access=subitem.access or obj.access,
+                depend_on_slot=obj.depend_on_slot,
+                subitems=(),
+            )
+    return objects
+
+
+def parse_objects(object_elements, data_types):
     objects = []
-    for obj in module.findall(".//Object"):
+    for obj in object_elements:
         index_el = obj.find("Index")
         index = parse_int(xml_text(index_el))
         if index <= 0:
@@ -224,6 +321,29 @@ def module_pdo_bytes(module, tag):
             for entry in pdo.findall("Entry")
         )
     return (bits + 7) // 8
+
+
+def parse_pdos(device, tag):
+    pdos = {}
+    for pdo in device.findall(tag):
+        index = parse_int(xml_text(pdo.find("Index")))
+        if index <= 0:
+            continue
+        pdos[index] = EsiPdoInfo(
+            index=index,
+            name=xml_text(pdo.find("Name")),
+            entries=tuple(parse_pdo_entry(entry) for entry in pdo.findall("Entry")),
+        )
+    return pdos
+
+
+def parse_pdo_entry(entry):
+    return EsiPdoEntryInfo(
+        index=parse_int(xml_text(entry.find("Index"))),
+        subindex=parse_int(xml_text(entry.find("SubIndex"))),
+        bit_length=parse_int(xml_text(entry.find("BitLen"))),
+        name=xml_text(entry.find("Name")),
+    )
 
 
 def module_has_isdu_access(module):

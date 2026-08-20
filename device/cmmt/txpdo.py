@@ -1,30 +1,27 @@
-from device.cmmt.object_dictionary import (
-    padding,
-    pdo_mapping_entries,
-    pdo_objects_from_mapping_entries,
+from device.cmmt.pdo_configuration import (
+    CMMT_PDO_CONFIGURATIONS,
+    DEFAULT_PDO_CONFIGURATION,
 )
 
 
 class TxPDO:
-    MAPPING_ITEMS = [
-        "statusword",
-        "mode_of_operation_display",
-        "actual_position",
-        "actual_velocity",
-        "actual_torque",
-        padding(8),
-    ]
-    MAPPING_ENTRIES = pdo_mapping_entries(MAPPING_ITEMS)
+    DEFAULT_CONFIGURATION = CMMT_PDO_CONFIGURATIONS[DEFAULT_PDO_CONFIGURATION]
+    MAPPING_ITEMS = DEFAULT_CONFIGURATION.txpdo_items
+    MAPPING_ENTRIES = DEFAULT_CONFIGURATION.txpdo_mapping_entries()
 
-    def __init__(self):
-        self.mapping = self.objects_from_mapping_entries(
-            self.MAPPING_ENTRIES
-        )
+    def __init__(self, pdo_configuration=None):
+        self.pdo_configuration = pdo_configuration or self.DEFAULT_CONFIGURATION
+        self.mapping = self.pdo_configuration.txpdo_objects()
         self.mapped_fields = set()
         self.reset_values()
 
     def select_mapping(self, mapping_entries):
-        self.mapping = self.objects_from_mapping_entries(mapping_entries)
+        if list(mapping_entries) == self.pdo_configuration.txpdo_mapping_entries():
+            self.mapping = self.pdo_configuration.txpdo_objects()
+        else:
+            raise ValueError(
+                "TxPDO mapping does not match selected CMMT PDO configuration."
+            )
         self.reset_values()
 
     def mapping_size(self):
@@ -45,7 +42,3 @@ class TxPDO:
 
     def has_field(self, field):
         return field in self.mapped_fields
-
-    @classmethod
-    def objects_from_mapping_entries(cls, mapping_entries):
-        return pdo_objects_from_mapping_entries(mapping_entries)

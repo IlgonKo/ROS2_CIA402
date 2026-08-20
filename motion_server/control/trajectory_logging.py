@@ -57,9 +57,12 @@ def log_trajectory_snapshot(label, runtime, state, axes, points=None, extra=None
     if not TRAJECTORY_SNAPSHOT_LOGS:
         return
 
-    scale = max(float(getattr(runtime, "csp_counts_per_unit", 1.0)), 1e-9)
     axis_parts = []
     for axis_index in axes:
+        scale = max(
+            float(runtime.axis_position_counts_per_api_unit(axis_index)),
+            1e-9,
+        )
         slave = runtime.slaves[axis_index]
         generator = runtime.trajectory_generators[axis_index]
         command_position = float(generator.command_position)

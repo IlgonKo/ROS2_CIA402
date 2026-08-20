@@ -18,14 +18,12 @@ class AxisUnitConverter:
         self,
         user_position_units=None,
         converting_unit_exponents=None,
-        position_counts_per_unit=1.0,
     ):
         self.user_position_units = self._axis_values(user_position_units, None)
         self.converting_unit_exponents = self._axis_values(
             converting_unit_exponents,
             None,
         )
-        self.position_counts_per_unit = max(float(position_counts_per_unit), 1e-9)
 
     def metadata(self):
         return [self.axis_metadata(index) for index in range(self.axis_count)]
@@ -65,7 +63,7 @@ class AxisUnitConverter:
                 1e-12,
             )
             return self.api_to_user_unit_factor(unit) / scale
-        return self.position_counts_per_unit
+        return 1.0
 
     def position_drive_to_api(self, axis_index, value):
         return float(value) / self.position_counts_per_api_unit(axis_index)

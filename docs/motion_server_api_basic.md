@@ -449,8 +449,8 @@ system/io/ethercat/param_catalog
 system/io/iol/param_catalog
 system/io/ap/param_read
 system/io/ap/param_write
-system/io/iolink/isdu_read
-system/io/iolink/isdu_write
+system/io/iol/param_read
+system/io/iol/param_write
 ```
 
 I/O SDO parameter access는 `axis`가 아니라 `io` selector를 사용한다.
@@ -489,10 +489,11 @@ system/io/ap/param_write
 AP parameter access는 CPX-AP-I-EC의 `0x27F0 AP Parameter Access`
 object를 통해 수행된다. 사용자는 EtherCAT OD subindex를 직접 다루지 않고
 `module`, `parameter_id`, `instance`, `length`를 지정한다.
-`module`은 `MOTION_SERVER_IO_<id>_MODULES`에서 선언한 AP module 번호다.
-slot 0은 CPX-AP-I-EC interface module이므로 사용자가 접근하는 AP module은
-1부터 시작한다. Motion Server는 이 번호를 장치의 `0x27F0:02 Module`
-필드에 맞게 내부 변환한다.
+`module`은 Motion Server의 public module 번호다. `module=0`은
+CPX-AP-I-EC base/interface module이고, `module=1..N`은
+`MOTION_SERVER_IO_<id>_MODULES`에서 선언한 AP module 번호다.
+Motion Server는 이 번호를 장치의 `0x27F0:02 Module` 필드에 맞게
+내부 변환한다.
 
 ```json
 {
@@ -538,12 +539,19 @@ slot 0은 CPX-AP-I-EC interface module이므로 사용자가 접근하는 AP mod
 }
 ```
 
-IO-Link ISDU API 이름은 예약되어 있으나 현재는 미구현이다.
+### IO-Link Parameters
+
+IO-Link device parameter는 `system/io/iol/*` namespace를 사용한다.
+내부 구현은 CPX-AP-I-EC의 IO-Link ISDU access object를 사용하지만, 공개 API에서는
+`param_read`와 `param_write` 명령으로 표현한다.
 
 ```text
-system/io/iolink/isdu_read
-system/io/iolink/isdu_write
+system/io/iol/param_read
+system/io/iol/param_write
 ```
+
+`module`은 IOL module 번호, `port`는 해당 module 안의 IO-Link port 번호다.
+`port`는 0부터 시작한다.
 
 ## Server and Bus Management
 

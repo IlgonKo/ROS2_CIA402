@@ -1,7 +1,7 @@
 import time
 
 from motion_server.config import (
-    AXIS_SERVER_STATUS_LOGS,
+    MOTION_SERVER_STATUS_LOGS,
     CSP_COMMAND_STEP_LOGS,
     POSITION_FEEDBACK_LAG_LOG_PERIOD,
     POSITION_FEEDBACK_LAG_LOGS,
@@ -65,7 +65,6 @@ def record_tx_history(runtime, state, cycle_stats):
     if history is None:
         return
 
-    scale = max(float(getattr(runtime, "csp_counts_per_unit", 1.0)), 1e-9)
     cycle_time_ns = max(1, int(round(float(runtime.cycle_time) * 1_000_000_000.0)))
     tx_dc_time_ns = getattr(runtime, "last_tx_dc_time_ns", None)
     tx_phase_ms = None
@@ -84,8 +83,16 @@ def record_tx_history(runtime, state, cycle_stats):
                 for slave in runtime.slaves
             ],
             "command_velocities": [
-                float(generator.command_velocity) / scale
-                for generator in runtime.trajectory_generators
+                (
+                    float(generator.command_velocity)
+                    / max(
+                        float(runtime.axis_position_counts_per_api_unit(axis_index)),
+                        1e-9,
+                    )
+                )
+                for axis_index, generator in enumerate(
+                    runtime.trajectory_generators
+                )
             ],
             "tx_gap_ms": cycle_stats.latest.get("tx_gap", 0.0) * 1000.0,
             "tx_phase_ms": tx_phase_ms,
@@ -227,9 +234,13 @@ def log_velocity_anomalies(runtime, state, cycle_stats):
             continue
 
         generator = runtime.trajectory_generators[axis_index]
+        scale = max(
+            float(runtime.axis_position_counts_per_api_unit(axis_index)),
+            1e-9,
+        )
         command_velocity = (
             float(generator.command_velocity)
-            / max(float(runtime.csp_counts_per_unit), 1e-9)
+            / scale
         )
         velocity_error = actual_velocity - command_velocity
         velocity_jump = actual_velocity - previous_actual[axis_index]
@@ -272,10 +283,13 @@ def log_csp_command_step_anomalies(runtime, state):
         return
 
     trajectory = state.get("trajectory", {})
-    scale = max(float(getattr(runtime, "csp_counts_per_unit", 1.0)), 1e-9)
     events = getattr(runtime, "last_csp_command_steps", [])
     for event in events:
         axis_index = int(event["axis"])
+        scale = max(
+            float(runtime.axis_position_counts_per_api_unit(axis_index)),
+            1e-9,
+        )
         generator = runtime.trajectory_generators[axis_index]
         timed_start = None
         timed_end = None
@@ -311,6 +325,10 @@ def log_csp_command_step_anomalies(runtime, state):
     output_events = getattr(runtime, "last_csp_output_steps", [])
     for event in output_events:
         axis_index = int(event["axis"])
+        scale = max(
+            float(runtime.axis_position_counts_per_api_unit(axis_index)),
+            1e-9,
+        )
         generator = runtime.trajectory_generators[axis_index]
         actual_position = runtime.slaves[axis_index].txpdo.actual_position
         print(
@@ -337,7 +355,7 @@ def log_csp_command_step_anomalies(runtime, state):
 
 
 def log_status_if_due(runtime, state, last_status_log_time):
-    if not AXIS_SERVER_STATUS_LOGS:
+    if not MOTION_SERVER_STATUS_LOGS:
         return last_status_log_time
     if STATUS_LOG_PERIOD <= 0.0:
         return last_status_log_time

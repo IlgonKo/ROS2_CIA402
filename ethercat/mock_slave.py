@@ -1,14 +1,15 @@
 from device.cmmt.rxpdo import RxPDO
 from device.cmmt.txpdo import TxPDO
-from device.virtual_servo_drive import VirtualPdoAdapter
+from device.virtual_servo_drive import VirtualOdBridge
 
 
 class MockSlave:
-    def __init__(self, axis):
+    def __init__(self, axis, pdo_configuration=None, device_profile=None):
         self.axis = axis
-        self.rxpdo = RxPDO()
-        self.txpdo = TxPDO()
-        self.pdo_adapter = VirtualPdoAdapter(
+        self.device_profile = device_profile
+        self.rxpdo = RxPDO(pdo_configuration)
+        self.txpdo = TxPDO(pdo_configuration)
+        self.od_bridge = VirtualOdBridge(
             self.axis,
             self.rxpdo,
             self.txpdo,
@@ -16,10 +17,10 @@ class MockSlave:
 
     def process(self):
         # RxPDO -> Axis
-        self.pdo_adapter.rxpdo_to_axis()
+        self.od_bridge.rxpdo_to_axis()
 
         # Axis -> VirtualServo cycle
         self.axis.update()
 
         # Axis -> TxPDO
-        self.pdo_adapter.axis_to_txpdo()
+        self.od_bridge.axis_to_txpdo()

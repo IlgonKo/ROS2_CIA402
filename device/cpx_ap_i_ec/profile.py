@@ -1,8 +1,10 @@
 from device.cpx_ap_i_ec.ap_module_idents import configure_ap_module_idents
+from device.cpx_ap_i_ec.esi_module_catalog import esi_module_catalog
 from device.cpx_ap_i_ec.io_config import load_cpx_io_config
 from device.cpx_ap_i_ec.io_link_variants import configure_io_link_variants
 from device.cpx_ap_i_ec.pdo import CPXRxPDO, CPXTxPDO
 from device.cpx_ap_i_ec.pdo_codec import CPXPdoCodec
+from device.cpx_ap_i_ec.pdo_configuration import cpx_pdo_configuration
 
 
 class CPXApIEcDeviceProfile:
@@ -14,7 +16,10 @@ class CPXApIEcDeviceProfile:
 
     def __init__(self, io_id=None):
         self.io_id = io_id
+        self.esi_catalog = esi_module_catalog()
         self.config = load_cpx_io_config(io_id)
+        self.pdo_configuration = cpx_pdo_configuration(self.config)
+        self.pdo_configuration.validate_catalog_support(self.esi_catalog)
 
     def create_rxpdo(self):
         return CPXRxPDO(self.config)
@@ -42,20 +47,13 @@ class CPXApIEcDeviceProfile:
             0x1C13,
         )
 
-        self.validate_or_resize(
-            "RxPDO/output",
+        self.pdo_configuration.validate_actual_process_image(
             slave_index,
-            configured_bytes=self.config.output_bytes,
-            device_bytes=device_output_bytes,
-            resize=rxpdo.resize,
+            device_output_bytes,
+            device_input_bytes,
         )
-        self.validate_or_resize(
-            "TxPDO/input",
-            slave_index,
-            configured_bytes=self.config.input_bytes,
-            device_bytes=device_input_bytes,
-            resize=txpdo.resize,
-        )
+        rxpdo.resize(self.pdo_configuration.output_bytes)
+        txpdo.resize(self.pdo_configuration.input_bytes)
         print(
             "Slave "
             f"{slave_index}: CPX-AP-I-EC process image "
@@ -74,28 +72,6 @@ class CPXApIEcDeviceProfile:
         )
         total_bits = sum(int(entry) & 0xFF for entry in entries)
         return (total_bits + 7) // 8
-
-    def validate_or_resize(
-        self,
-        label,
-        slave_index,
-        configured_bytes,
-        device_bytes,
-        resize,
-    ):
-        configured_bytes = int(configured_bytes)
-        device_bytes = int(device_bytes)
-        if configured_bytes == 0:
-            resize(device_bytes)
-            return
-        if configured_bytes != device_bytes:
-            raise RuntimeError(
-                f"CPX {label} size mismatch on slave {slave_index}. "
-                f"Configured={configured_bytes} bytes, "
-                f"device PDO={device_bytes} bytes. "
-                f"Check MOTION_SERVER_IO_{self.config.io_id}_MODULES."
-            )
-        resize(configured_bytes)
 
     def configure_sync_parameters(
         self,

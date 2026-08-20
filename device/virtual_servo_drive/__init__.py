@@ -1,8 +1,8 @@
-from device.virtual_servo_drive.pdo_adapter import VirtualPdoAdapter
-from device.virtual_servo_drive.drive import VirtualCiA402Servo
+from device.virtual_servo_drive.od_bridge import VirtualOdBridge
+from device.virtual_servo_drive.servo_model import VirtualCiA402Servo
 
 
 __all__ = [
-    "VirtualPdoAdapter",
+    "VirtualOdBridge",
     "VirtualCiA402Servo",
 ]

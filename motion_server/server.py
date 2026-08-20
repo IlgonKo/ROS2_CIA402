@@ -7,10 +7,7 @@ import sys
 import time
 
 PROJECT_ROOT = Path(
-    os.environ.get(
-        "MOTION_SERVER_PROJECT_ROOT",
-        os.environ.get("AXIS_SERVER_PROJECT_ROOT", Path(__file__).resolve().parents[1]),
-    )
+    os.environ.get("MOTION_SERVER_PROJECT_ROOT", Path(__file__).resolve().parents[1])
 ).resolve()
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
@@ -22,7 +19,7 @@ from motion_server.config import (
     parse_args,
     status_log,
 )
-from motion_server.commands.homing import update_homing_state
+from motion_server.handlers.command.homing import update_homing_state
 from motion_server.app.cycle import CycleStats, exchange, wait_until_cycle_time
 from motion_server.control.axis_units import (
     axis_motion_api_to_drive,
@@ -42,7 +39,7 @@ from motion_server.app.startup import (
     initialize_drive,
     read_startup_axis_sdo,
 )
-from motion_server.commands.trajectory import (
+from motion_server.handlers.command.trajectory import (
     update_active as update_active_trajectory,
 )
 from motion_server.app.state_updates import update_derived_velocities
@@ -53,7 +50,7 @@ from motion_server.control.axis_operations import (
 from motion_server.api import (
     require_uint32,
 )
-from motion_server.api.dispatcher import dispatch_message
+from motion_server.api.router import dispatch_message
 from motion_server.app.state import (
     initial_server_state,
 )
@@ -398,16 +395,10 @@ def run_main_once():
             converting_unit_exponents = startup_sdo.get("converting_unit_exponents")
             unit_state = {
                 "axis_devices": runtime.device_manager.axes,
-                "position_counts_per_unit": (
-                    args.csp_counts_per_unit
-                    if args.backend == "pysoem"
-                    else 1.0
-                ),
             }
             runtime.device_manager.axes.configure_unit_conversion(
                 user_position_units,
                 converting_unit_exponents,
-                unit_state["position_counts_per_unit"],
             )
             axis_metadata = runtime.device_manager.axes.unit_metadata()
             unit_state["axis_metadata"] = axis_metadata
@@ -416,8 +407,13 @@ def run_main_once():
                 args.axis_count,
             )
             for axis_index, scale in enumerate(axis_position_scales):
-                if hasattr(runtime, "set_axis_csp_counts_per_unit"):
-                    runtime.set_axis_csp_counts_per_unit(axis_index, scale)
+                # TECH_DEBT[TD-004]: Runtime unit-update capability is still
+                # detected dynamically across backend implementations.
+                if hasattr(runtime, "set_axis_position_counts_per_api_unit"):
+                    runtime.set_axis_position_counts_per_api_unit(
+                        axis_index,
+                        scale,
+                    )
             default_profile_settings = [
                 [
                     axis_motion_api_to_drive(unit_state, axis_index, args.max_velocity),
@@ -505,7 +501,7 @@ def run_main_once():
                 f"axes={args.axis_count} "
                 f"cycle_time={args.cycle_time} "
                 f"spin_wait_time={args.spin_wait_time} "
-                f"csp_counts_per_unit={args.csp_counts_per_unit} "
+                f"axis_position_counts_per_api_unit={axis_position_scales} "
                 f"csp_profile={args.csp_profile} "
                 f"dc_phase_lock={args.dc_phase_lock} "
                 f"dc_absolute_shift={args.dc_absolute_shift} "
@@ -536,7 +532,7 @@ def run_main_once():
             state["position_counts_per_unit"] = (
                 axis_position_scales[0]
                 if axis_position_scales
-                else args.csp_counts_per_unit
+                else 1.0
             )
 
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as server:

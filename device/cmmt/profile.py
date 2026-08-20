@@ -1,11 +1,15 @@
 from device.cmmt.error_catalog import load_cmmt_error_catalog
+from device.cmmt.esi_catalog import cmmt_catalog_by_profile_name
 from device.cmmt.pdo_codec import CiA402PdoCodec
+from device.cmmt.pdo_configuration import pdo_configuration_from_env, pdo_od_role
+from device.cmmt.required_od import required_od, required_od_roles
 from device.cmmt.rxpdo import RxPDO
 from device.cmmt.txpdo import TxPDO
 
 
 class CMMTDeviceProfile:
     name = "cmmt"
+    variant = None
 
     PROFILE_POSITION_MODE = 1
     PROFILE_VELOCITY_MODE = 3
@@ -23,41 +27,51 @@ class CMMTDeviceProfile:
     HOMING_REFERENCED_MASK = 1 << 15
     HOMING_ERROR_MASK = 1 << 13
 
-    STATUSWORD_INDEX = 0x6041
-    ERROR_CODE_INDEX = 0x2145
-    ERROR_CODE_SUBINDEX = 0x0C
-    MODE_DISPLAY_INDEX = 0x6061
-    MODE_OF_OPERATION_INDEX = 0x6060
-    CSP_INTERPOLATION_MODE_INDEX = 0x217B
-    CSP_INTERPOLATION_MODE_SUBINDEX = 0x0D
-    PP_JERK_INDEX = 0x60A4
-    PP_JERK_SUBINDEX = 0x01
-    USER_UNIT_INDEX = 0x216E
-    USER_UNIT_POSITION_SUBINDEX = 0x01
-    CONVERTING_UNIT_INDEX = 0x2194
-    CONVERTING_UNIT_POSITION_SUBINDEX = 0x01
-    CONVERTING_UNIT_VELOCITY_SUBINDEX = 0x02
-    CONVERTING_UNIT_ACCELERATION_SUBINDEX = 0x03
-    CONVERTING_UNIT_JERK_SUBINDEX = 0x04
+    STATUSWORD_INDEX = pdo_od_role("statusword").index
+    ERROR_CODE_INDEX = required_od("error_code").index
+    ERROR_CODE_SUBINDEX = required_od("error_code").subindex
+    MODE_DISPLAY_INDEX = pdo_od_role("mode_of_operation_display").index
+    MODE_OF_OPERATION_INDEX = pdo_od_role("mode_of_operation").index
+    CSP_INTERPOLATION_MODE_INDEX = required_od("csp_interpolation_mode").index
+    CSP_INTERPOLATION_MODE_SUBINDEX = required_od("csp_interpolation_mode").subindex
+    PP_JERK_INDEX = required_od("pp_jerk").index
+    PP_JERK_SUBINDEX = required_od("pp_jerk").subindex
+    USER_UNIT_INDEX = required_od("user_position_unit").index
+    USER_UNIT_POSITION_SUBINDEX = required_od("user_position_unit").subindex
+    CONVERTING_UNIT_INDEX = required_od("converting_unit_position").index
+    CONVERTING_UNIT_POSITION_SUBINDEX = required_od("converting_unit_position").subindex
+    CONVERTING_UNIT_VELOCITY_SUBINDEX = required_od("converting_unit_velocity").subindex
+    CONVERTING_UNIT_ACCELERATION_SUBINDEX = required_od(
+        "converting_unit_acceleration"
+    ).subindex
+    CONVERTING_UNIT_JERK_SUBINDEX = required_od("converting_unit_jerk").subindex
     DEFAULT_CONVERTING_UNIT_EXPONENTS = [6, 3, 3, 3]
-    SOFTWARE_POSITION_LIMIT_INDEX = 0x607D
-    MAX_PROFILE_VELOCITY_INDEX = 0x607F
-    NEGATIVE_VELOCITY_LIMIT_INDEX = 0x2183
-    NEGATIVE_VELOCITY_LIMIT_SUBINDEX = 0x0C
-    PROFILE_VELOCITY_INDEX = 0x6081
-    PROFILE_ACCELERATION_INDEX = 0x6083
-    PROFILE_DECELERATION_INDEX = 0x6084
-    MAX_ACCELERATION_INDEX = 0x60C5
-    MAX_DECELERATION_INDEX = 0x60C6
-    SYNC_PARAMETER_INDEX = 0x212E
-    DEVICE_RESET_INDEX = 0x2000
-    DEVICE_RESET_COMMAND_SUBINDEX = 0x01
-    PARAMETER_SAVE_INDEX = 0x2005
-    PARAMETER_SAVE_COMMAND_SUBINDEX = 0x01
-    PARAMETER_SAVE_STATUS_SUBINDEX = 0x02
-    PARAMETER_SAVE_SELECTION_SUBINDEX = 0x03
-    PARAMETER_SAVE_RETURN_CODE_SUBINDEX = 0x04
-    PARAMETER_SAVE_RETURN_VALUE_SUBINDEX = 0x05
+    SOFTWARE_POSITION_LIMIT_INDEX = required_od("software_position_limit_negative").index
+    MAX_PROFILE_VELOCITY_INDEX = required_od("max_profile_velocity").index
+    NEGATIVE_VELOCITY_LIMIT_INDEX = required_od("negative_velocity_limit").index
+    NEGATIVE_VELOCITY_LIMIT_SUBINDEX = required_od(
+        "negative_velocity_limit"
+    ).subindex
+    PROFILE_VELOCITY_INDEX = required_od("profile_velocity").index
+    PROFILE_ACCELERATION_INDEX = required_od("profile_acceleration").index
+    PROFILE_DECELERATION_INDEX = required_od("profile_deceleration").index
+    MAX_ACCELERATION_INDEX = required_od("max_acceleration").index
+    MAX_DECELERATION_INDEX = required_od("max_deceleration").index
+    SYNC_PARAMETER_INDEX = required_od("sync_mode").index
+    DEVICE_RESET_INDEX = required_od("device_reset_command").index
+    DEVICE_RESET_COMMAND_SUBINDEX = required_od("device_reset_command").subindex
+    PARAMETER_SAVE_INDEX = required_od("parameter_save_command").index
+    PARAMETER_SAVE_COMMAND_SUBINDEX = required_od("parameter_save_command").subindex
+    PARAMETER_SAVE_STATUS_SUBINDEX = required_od("parameter_save_status").subindex
+    PARAMETER_SAVE_SELECTION_SUBINDEX = required_od(
+        "parameter_save_selection"
+    ).subindex
+    PARAMETER_SAVE_RETURN_CODE_SUBINDEX = required_od(
+        "parameter_save_return_code"
+    ).subindex
+    PARAMETER_SAVE_RETURN_VALUE_SUBINDEX = required_od(
+        "parameter_save_return_value"
+    ).subindex
 
     MOTION_MODES = {
         "pp": PROFILE_POSITION_MODE,
@@ -68,21 +82,38 @@ class CMMTDeviceProfile:
 
     pdo_codec = CiA402PdoCodec
 
-    @staticmethod
-    def create_rxpdo():
-        return RxPDO()
+    def create_rxpdo(self):
+        return RxPDO(self.pdo_configuration)
 
-    @staticmethod
-    def create_txpdo():
-        return TxPDO()
+    def create_txpdo(self):
+        return TxPDO(self.pdo_configuration)
 
     def prepare_process_image(
         self,
         master,
         slave_index,
     ):
-        expected_rxpdo = RxPDO.MAPPING_ENTRIES
-        expected_txpdo = TxPDO.MAPPING_ENTRIES
+        self.validate_identity(master, slave_index)
+        self.validate_catalog_support()
+        expected_rxpdo = self.expected_rxpdo_mapping_entries()
+        expected_txpdo = self.expected_txpdo_mapping_entries()
+
+        self.write_pdo_mapping(
+            master,
+            slave_index,
+            label="RxPDO",
+            assignment_index=0x1C12,
+            pdo_index=0x1600,
+            mapping_entries=expected_rxpdo,
+        )
+        self.write_pdo_mapping(
+            master,
+            slave_index,
+            label="TxPDO",
+            assignment_index=0x1C13,
+            pdo_index=0x1A00,
+            mapping_entries=expected_txpdo,
+        )
 
         actual_rxpdo = master.read_assigned_pdo_mapping_entries(
             slave_index,
@@ -109,9 +140,152 @@ class CMMTDeviceProfile:
         master.slaves[slave_index].rxpdo.select_mapping(actual_rxpdo)
         master.slaves[slave_index].txpdo.select_mapping(actual_txpdo)
         print(
-            f"Slave {slave_index}: validated CMMT PDO mapping from device",
+            f"Slave {slave_index}: validated {self.name.upper()} "
+            f"identity and PDO mapping from device "
+            f"pdo_configuration={self.pdo_configuration.name}",
             flush=True,
         )
+
+    def write_pdo_mapping(
+        self,
+        master,
+        slave_index,
+        label,
+        assignment_index,
+        pdo_index,
+        mapping_entries,
+    ):
+        mapping_entries = [int(entry) for entry in mapping_entries]
+        master.sdo.write_uint8(slave_index, assignment_index, 0, 0)
+        master.sdo.write_uint8(slave_index, pdo_index, 0, 0)
+
+        for subindex, mapping_entry in enumerate(mapping_entries, start=1):
+            master.sdo.write_uint32(
+                slave_index,
+                pdo_index,
+                subindex,
+                mapping_entry,
+            )
+
+        master.sdo.write_uint8(
+            slave_index,
+            pdo_index,
+            0,
+            len(mapping_entries),
+        )
+        master.sdo.write_uint16(slave_index, assignment_index, 1, pdo_index)
+        master.sdo.write_uint8(slave_index, assignment_index, 0, 1)
+
+        print(
+            f"Slave {slave_index}: wrote {self.name.upper()} {label} mapping "
+            f"assignment=0x{assignment_index:04X} pdo=0x{pdo_index:04X} "
+            f"entries={len(mapping_entries)}",
+            flush=True,
+        )
+
+    def validate_identity(self, master, slave_index):
+        if self.esi_catalog is None:
+            return
+
+        identity = master.read_slave_identity(slave_index)
+        actual_product_code = identity.get("product_code")
+        if actual_product_code is None:
+            raise RuntimeError(
+                f"{self.name.upper()} identity read failed on slave {slave_index}. "
+                "Could not read product code from EtherCAT identity object."
+            )
+
+        expected_product_code = int(self.esi_catalog.product_code)
+        if int(actual_product_code) != expected_product_code:
+            raise RuntimeError(
+                f"CMMT profile mismatch on slave {slave_index}. "
+                f"Configured={self.name} "
+                f"({self.esi_catalog.type_name}, "
+                f"product_code={expected_product_code}/0x{expected_product_code:08X}) "
+                f"Actual product_code={int(actual_product_code)}/"
+                f"0x{int(actual_product_code):08X}. "
+                "Check MOTION_SERVER_BUS and use cmmt_as or cmmt_st for the "
+                "actual drive type."
+            )
+
+        actual_revision = identity.get("revision")
+        expected_revision = int(self.esi_catalog.revision)
+        revision_text = "unknown"
+        if actual_revision is not None:
+            revision_text = f"0x{int(actual_revision):08X}"
+        print(
+            f"Slave {slave_index}: {self.name.upper()} identity "
+            f"type={self.esi_catalog.type_name} "
+            f"product_code=0x{expected_product_code:08X} "
+            f"revision={revision_text} "
+            f"esi_revision=0x{expected_revision:08X}",
+            flush=True,
+        )
+
+    def validate_catalog_support(self):
+        if self.esi_catalog is None:
+            return
+
+        for role in self.pdo_configuration.od_roles():
+            self.validate_catalog_od_role(
+                role.role,
+                role.index,
+                role.subindex,
+                role.object_entry().bit_length,
+                "PDO configuration",
+            )
+
+        for role in required_od_roles():
+            self.validate_catalog_od_role(
+                role.role,
+                role.index,
+                role.subindex,
+                self.expected_data_type_bits(role.data_type),
+                "required OD",
+            )
+
+    def validate_catalog_od_role(
+        self,
+        role,
+        index,
+        subindex,
+        expected_bit_length,
+        source,
+    ):
+        try:
+            catalog_object = self.esi_catalog.object_info(index, subindex)
+        except KeyError as exc:
+            raise RuntimeError(
+                f"{self.name.upper()} {source} role {role!r} references "
+                f"0x{index:04X}:{subindex:02X}, but it is not present in "
+                f"{self.esi_catalog.path.name}."
+            ) from exc
+
+        if catalog_object.bit_size != int(expected_bit_length):
+            raise RuntimeError(
+                f"{self.name.upper()} {source} role {role!r} bit size mismatch "
+                f"at 0x{index:04X}:{subindex:02X}. "
+                f"Configured={expected_bit_length}, "
+                f"ESI={catalog_object.bit_size} "
+                f"({catalog_object.name})."
+            )
+
+    @staticmethod
+    def expected_data_type_bits(data_type):
+        from device.pdo_metadata import ObjectDictionaryEntry
+
+        return ObjectDictionaryEntry(
+            0,
+            0,
+            "",
+            data_type,
+        ).bit_length
+
+    def expected_rxpdo_mapping_entries(self):
+        return self.pdo_configuration.rxpdo_mapping_entries()
+
+    def expected_txpdo_mapping_entries(self):
+        return self.pdo_configuration.txpdo_mapping_entries()
 
     def validate_pdo_mapping(self, slave_index, label, expected, actual):
         expected = list(expected)
@@ -221,8 +395,21 @@ class CMMTDeviceProfile:
         (18, 7): "ProfiDrive",
     }
 
-    def __init__(self):
+    def __init__(self, axis_index=None, slave_index=None):
+        self.axis_index = axis_index
+        self.slave_index = slave_index
         self.error_catalog = load_cmmt_error_catalog()
+        self.esi_catalog = (
+            cmmt_catalog_by_profile_name(self.name)
+            if self.variant is not None
+            else None
+        )
+        self.pdo_configuration, self.pdo_configuration_source = (
+            pdo_configuration_from_env(
+                axis_index=axis_index,
+                slave_index=slave_index,
+            )
+        )
 
     def mode_code(self, mode_name):
         if mode_name == "homing":
@@ -619,3 +806,13 @@ class CMMTDeviceProfile:
             ),
             "command": 0,
         }
+
+
+class CMMTASDeviceProfile(CMMTDeviceProfile):
+    name = "cmmt_as"
+    variant = "as"
+
+
+class CMMTSTDeviceProfile(CMMTDeviceProfile):
+    name = "cmmt_st"
+    variant = "st"

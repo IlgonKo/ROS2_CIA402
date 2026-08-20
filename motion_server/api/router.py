@@ -1,0 +1,105 @@
+import json
+
+from motion_server.handlers.command.registry import handle_command
+from motion_server.api.specification import (
+    command_spec,
+)
+from motion_server.config import MOTION_SERVER_COMMAND_LOGS
+from motion_server.api.decoder import (
+    command_name,
+    public_command_name,
+)
+from motion_server.api.encoder import reject_command_message, send_client_message
+from motion_server.api.validator import validate_command
+from motion_server.handlers.authority import (
+    client_has_command_authority,
+    handle_authority,
+    reject_command_when_not_initialized,
+    reject_command_without_authority,
+)
+from motion_server.handlers.status import (
+    handle_advanced_status_rejection,
+    handle_status,
+)
+
+
+def reject_advanced_only_command(client, message, state):
+    command = command_name(message)
+    send_client_message(
+        client,
+        {
+            "type": "command_rejected",
+            "command": command,
+            "server_mode": state.get("server_mode"),
+            "message": (
+                f"{command} is available only in "
+                "Axis Server advanced mode."
+            ),
+        },
+    )
+
+
+def route_message(message, runtime, state, client):
+    if MOTION_SERVER_COMMAND_LOGS:
+        print(
+            "Axis Server received command: "
+            f"client={client.get('id')} "
+            f"{json.dumps(message, sort_keys=True, ensure_ascii=False)}",
+            flush=True,
+        )
+
+    raw_message_type = command_name(message)
+    message_type = public_command_name(message)
+    spec = command_spec(message_type)
+
+    validation_error = validate_command(
+        spec,
+        client,
+        state,
+        client_has_command_authority(client, state),
+    )
+    if validation_error == "unknown":
+        if raw_message_type:
+            reject_command_message(
+                client,
+                raw_message_type,
+                f"Unknown command: {raw_message_type}",
+            )
+        return
+    if validation_error == "advanced_only":
+        if spec and spec.is_status:
+            handle_advanced_status_rejection(message_type, runtime, state, client)
+        else:
+            reject_advanced_only_command(client, message, state)
+        return
+    if validation_error == "authority_required":
+        reject_command_without_authority(client, message, state)
+        return
+    if validation_error == "not_initialized":
+        reject_command_when_not_initialized(client, message, state)
+        return
+
+    if spec.is_authority:
+        handle_authority(message_type, client, state)
+        return
+
+    if spec.is_status and handle_status(
+        message_type,
+        message,
+        runtime,
+        state,
+        client,
+    ):
+        return
+
+    if handle_command(message_type, message, runtime, state, client):
+        return
+
+    reject_command_message(
+        client,
+        raw_message_type,
+        f"No handler registered for command: {raw_message_type}",
+    )
+
+
+dispatch_message = route_message

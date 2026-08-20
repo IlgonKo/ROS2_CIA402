@@ -94,19 +94,13 @@ prepare_compose_env_file() {
     echo "# Base env: ${base_env}"
     append_env_file "${base_env}"
     local device_config_root
-    device_config_root="$(env_value_from_file "${base_env}" "MOTION_SERVER_DEVICE_CONFIG_ROOT" "")"
-    if [[ -z "${device_config_root}" ]]; then
-      device_config_root="$(env_value_from_file "${base_env}" "PYSOEM_DEVICE_CONFIG_ROOT" "device")"
-    fi
+    device_config_root="$(env_value_from_file "${base_env}" "MOTION_SERVER_DEVICE_CONFIG_ROOT" "device")"
     if [[ "${device_config_root}" != /* ]]; then
       device_config_root="${project_root}/${device_config_root}"
     fi
 
     local bus
-    bus="$(env_value_from_file "${base_env}" "MOTION_SERVER_BUS" "")"
-    if [[ -z "${bus}" ]]; then
-      bus="$(env_value_from_file "${base_env}" "PYSOEM_BUS" "cmmt")"
-    fi
+    bus="$(env_value_from_file "${base_env}" "MOTION_SERVER_BUS" "cmmt_as")"
     local loaded_profiles=","
     local bus_entry profile device_env_file
     IFS=',' read -ra bus_entries <<< "${bus}"
@@ -119,6 +113,10 @@ prepare_compose_env_file() {
       profile="${bus_entry}"
       if [[ "${bus_entry}" == *:* ]]; then
         IFS=':' read -r _role profile _logical_id <<< "${bus_entry}"
+      fi
+      profile="${profile//-/_}"
+      if [[ "${profile}" == "cmmt_as" || "${profile}" == "cmmt_st" ]]; then
+        profile="cmmt"
       fi
       if [[ "${loaded_profiles}" == *",${profile},"* ]]; then
         continue
@@ -136,9 +134,6 @@ prepare_compose_env_file() {
 
     local backend
     backend="$(env_value_from_file "${base_env}" "MOTION_SERVER_BACKEND" "")"
-    if [[ -z "${backend}" ]]; then
-      backend="$(env_value_from_file "${base_env}" "AXIS_SERVER_BACKEND" "")"
-    fi
     if [[ "${backend}" == "mock" ]]; then
       local virtual_env_file
       virtual_env_file="$(env_value_from_file "${base_env}" "VIRTUAL_SERVO_DRIVE_ENV_FILE" "device/virtual_servo_drive/.env")"

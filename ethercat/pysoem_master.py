@@ -383,6 +383,65 @@ class PySOEMMaster:
             entries.extend(self.read_pdo_mapping_entries(slave_index, pdo_index))
         return entries
 
+    def read_slave_identity(self, slave_index):
+        self._require_connected()
+        slave = self._master.slaves[slave_index]
+        identity = {
+            "vendor_id": self._first_slave_attr_int(
+                slave,
+                ("man", "manufacturer", "manufacturer_id"),
+            ),
+            "product_code": self._first_slave_attr_int(
+                slave,
+                ("id", "product_code"),
+            ),
+            "revision": self._first_slave_attr_int(
+                slave,
+                ("rev", "revision", "revision_number"),
+            ),
+            "serial_number": self._first_slave_attr_int(
+                slave,
+                ("serial", "serial_number"),
+            ),
+        }
+
+        sdo_items = [
+            ("vendor_id", 0x01),
+            ("product_code", 0x02),
+            ("revision", 0x03),
+            ("serial_number", 0x04),
+        ]
+        for key, subindex in sdo_items:
+            if identity[key] is not None:
+                continue
+            try:
+                identity[key] = self.sdo.read_uint32(
+                    slave_index,
+                    0x1018,
+                    subindex,
+                )
+            except Exception:
+                pass
+        return identity
+
+    @staticmethod
+    def _first_slave_attr_int(slave, names):
+        for name in names:
+            value = PySOEMMaster._slave_attr_int(slave, name)
+            if value is not None:
+                return value
+        return None
+
+    @staticmethod
+    def _slave_attr_int(slave, name):
+        value = getattr(slave, name, None)
+        if value is None:
+            return None
+        try:
+            return int(value)
+        except (TypeError, ValueError):
+            return None
+
     def _configure_sync_parameters(self):
         if not self.dc_enabled and self.sync_mode == 0:
             print(

@@ -67,20 +67,21 @@ def normalize_trajectory_points(raw_points, axes):
 def estimate_trajectory_duration(runtime, axes, current, target):
     duration = 0.0
     for axis_index, start, end in zip(axes, current, target):
+        scale = runtime.axis_position_counts_per_api_unit(axis_index)
         distance = abs(float(end) - float(start))
         max_velocity = max(
             float(runtime.motion_limits[axis_index].max_velocity)
-            * runtime.csp_counts_per_unit,
+            * scale,
             1e-9,
         )
         acceleration_limit = max(
             float(runtime.motion_limits[axis_index].acceleration)
-            * runtime.csp_counts_per_unit,
+            * scale,
             1e-9,
         )
         deceleration_limit = max(
             float(runtime.motion_limits[axis_index].deceleration)
-            * runtime.csp_counts_per_unit,
+            * scale,
             1e-9,
         )
         accel_limit = min(acceleration_limit, deceleration_limit)
@@ -106,19 +107,20 @@ def required_segment_duration_for_axis(
     if distance <= 1e-9:
         return max(float(initial_dt), runtime.cycle_time)
 
+    scale = runtime.axis_position_counts_per_api_unit(axis_index)
     velocity_limit = max(
         float(runtime.motion_limits[axis_index].max_velocity)
-        * runtime.csp_counts_per_unit,
+        * scale,
         1e-9,
     )
     acceleration_limit = max(
         float(runtime.motion_limits[axis_index].acceleration)
-        * runtime.csp_counts_per_unit,
+        * scale,
         1e-9,
     )
     deceleration_limit = max(
         float(runtime.motion_limits[axis_index].deceleration)
-        * runtime.csp_counts_per_unit,
+        * scale,
         1e-9,
     )
     accel_limit = min(acceleration_limit, deceleration_limit)
@@ -217,19 +219,20 @@ def validate_trajectory_limits(runtime, axes, points):
             )
 
         for local_index, axis_index in enumerate(axes):
+            scale = runtime.axis_position_counts_per_api_unit(axis_index)
             start = previous["positions"][local_index]
             end = current["positions"][local_index]
             velocity_limit = (
                 float(runtime.motion_limits[axis_index].max_velocity)
-                * runtime.csp_counts_per_unit
+                * scale
             )
             acceleration_limit = (
                 float(runtime.motion_limits[axis_index].acceleration)
-                * runtime.csp_counts_per_unit
+                * scale
             )
             deceleration_limit = (
                 float(runtime.motion_limits[axis_index].deceleration)
-                * runtime.csp_counts_per_unit
+                * scale
             )
             required_dt = required_segment_duration_for_axis(
                 runtime,

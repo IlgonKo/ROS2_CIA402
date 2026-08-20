@@ -3,8 +3,8 @@ import select
 import time
 
 from motion_server.config import FEEDBACK_PERIOD, status_log
-from motion_server.api.responses import system_feedback_message
-from motion_server.api import send_client_message
+from motion_server.api.encoder import send_client_message
+from motion_server.handlers.status import system_feedback_message
 
 
 def service_client(client, runtime, state, dispatch_message):

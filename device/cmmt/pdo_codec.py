@@ -1,6 +1,6 @@
 import struct
 
-from device.common_object_dictionary import (
+from device.pdo_metadata import (
     DATA_TYPE_FORMATS,
 )
 

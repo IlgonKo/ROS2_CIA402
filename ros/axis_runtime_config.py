@@ -30,6 +30,8 @@ DEFAULT_AXIS_CONFIGS = [
 ]
 
 
+# TECH_DEBT[TD-006]: ROS has a private config and bus parser that does not share
+# the full continuation/indexed-entry behavior from config_file.py.
 def load_env_file(path):
     values = {}
     if not path.exists():
@@ -75,7 +77,7 @@ def get_axis_names():
             if name.strip()
         ]
 
-    axis_count = axis_count_from_bus(env.get("PYSOEM_BUS", "cmmt"))
+    axis_count = axis_count_from_bus(env.get("MOTION_SERVER_BUS", "cmmt_as"))
     base_names = [
         config["name"]
         for config in DEFAULT_AXIS_CONFIGS

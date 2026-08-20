@@ -43,16 +43,8 @@ class Cia402CommandBridgeNode(Node):
 
         self.axis_count = get_axis_count()
         self.axis_names = get_axis_names()
-        self.host = os.environ.get(
-            "MOTION_SERVER_HOST",
-            os.environ.get("AXIS_SERVER_HOST", DEFAULT_HOST),
-        )
-        self.port = int(
-            os.environ.get(
-                "MOTION_SERVER_PORT",
-                os.environ.get("AXIS_SERVER_PORT", DEFAULT_PORT),
-            )
-        )
+        self.host = os.environ.get("MOTION_SERVER_HOST", DEFAULT_HOST)
+        self.port = int(os.environ.get("MOTION_SERVER_PORT", DEFAULT_PORT))
         self.auto_request_authority = (
             os.environ.get("ROS_BRIDGE_AUTO_REQUEST_AUTHORITY", "1").strip() != "0"
         )
@@ -78,12 +70,6 @@ class Cia402CommandBridgeNode(Node):
         self.latest_trajectory_state = "idle"
         self.latest_trajectory_message = ""
         self.last_published_trajectory_fault = ""
-        self.position_counts_per_unit = float(
-            os.environ.get(
-                "ROS_BRIDGE_POSITION_COUNTS_PER_UNIT",
-                os.environ.get("PYSOEM_CSP_COUNTS_PER_UNIT", "1.0"),
-            )
-        )
         self.stop_event = threading.Event()
         self.motion_limits = [
             [0.0, 0.0, 0.0, 0.0]
@@ -229,7 +215,7 @@ class Cia402CommandBridgeNode(Node):
         self.get_logger().info(
             f"CIA402 bridge started. axes={self.axis_count} "
             f"target={self.host}:{self.port} "
-            f"position_counts_per_unit={self.position_counts_per_unit:g}"
+            "motion_server_api_units=direct"
         )
 
     def declare_motion_limit_parameters(self):
@@ -592,13 +578,13 @@ class Cia402CommandBridgeNode(Node):
         return converted_points
 
     def ros_position_to_axis_position(self, position):
-        return float(position) * self.position_counts_per_unit
+        return float(position)
 
     def axis_position_to_ros_position(self, position):
-        return float(position) / max(self.position_counts_per_unit, 1e-9)
+        return float(position)
 
     def ros_velocity_to_axis_velocity(self, velocity):
-        return float(velocity) * self.position_counts_per_unit
+        return float(velocity)
 
     def publish_follow_joint_feedback(self, goal_handle, desired_positions):
         with self.feedback_lock:
@@ -856,12 +842,6 @@ class Cia402CommandBridgeNode(Node):
                 self.get_logger().warn(message.get("message", "Command rejected"))
 
     def publish_feedback(self, message):
-        self.position_counts_per_unit = float(
-            message.get(
-                "position_counts_per_unit",
-                message.get("csp_counts_per_unit", self.position_counts_per_unit),
-            )
-        )
         target_positions = [
             self.axis_position_to_ros_position(value)
             for value in list(message.get("target_positions", []))[:self.axis_count]

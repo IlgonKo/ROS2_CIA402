@@ -47,7 +47,16 @@ def create_axis_runtime(args, motion_limits):
         slaves = []
         mock_user_units = parse_mock_axis_user_units(args)
         for axis_index, limits in enumerate(motion_limits):
-            servo = VirtualCiA402Servo(cycle_time=args.cycle_time)
+            device_profile = get_device_profile_for_slave(
+                device_profile_names[axis_index],
+                axis_index,
+                args.io_devices,
+                axis_slave_indices,
+            )
+            servo = VirtualCiA402Servo(
+                cycle_time=args.cycle_time,
+                device_profile=device_profile,
+            )
             servo.od.write(0x216E, mock_user_units[axis_index], 0x01)
             servo.set_motion_limits(
                 limits["max_velocity"],
@@ -55,7 +64,11 @@ def create_axis_runtime(args, motion_limits):
                 limits["deceleration"],
             )
             axis = Axis(f"A{axis_index}", servo)
-            slaves.append(MockSlave(axis))
+            slaves.append(MockSlave(
+                axis,
+                device_profile.pdo_configuration,
+                device_profile,
+            ))
             print(
                 "Mock axis user position unit: "
                 f"axis={axis_index} 0x216E:01=0x{mock_user_units[axis_index]:04X}",
@@ -70,7 +83,6 @@ def create_axis_runtime(args, motion_limits):
             args.axis_count,
             args.cycle_time,
             motion_limits=motion_limits,
-            csp_counts_per_unit=args.csp_counts_per_unit,
             csp_velocity_offset_enabled=args.csp_velocity_offset,
             csp_command_step_threshold=args.csp_command_step_threshold,
             csp_command_step_error_threshold=args.csp_command_step_error_threshold,
@@ -93,7 +105,12 @@ def create_axis_runtime(args, motion_limits):
     ethercat_master = PySOEMMaster(
         interface_name=args.interface,
         device_profiles=[
-            get_device_profile_for_slave(name, slave_index, args.io_devices)
+            get_device_profile_for_slave(
+                name,
+                slave_index,
+                args.io_devices,
+                axis_slave_indices,
+            )
             for slave_index, name in enumerate(device_profile_names)
         ],
         cycle_time=args.cycle_time,
@@ -105,7 +122,6 @@ def create_axis_runtime(args, motion_limits):
         args.axis_count,
         args.cycle_time,
         motion_limits=motion_limits,
-        csp_counts_per_unit=args.csp_counts_per_unit,
         csp_velocity_offset_enabled=args.csp_velocity_offset,
         csp_command_step_threshold=args.csp_command_step_threshold,
         csp_command_step_error_threshold=args.csp_command_step_error_threshold,
@@ -115,11 +131,30 @@ def create_axis_runtime(args, motion_limits):
     return AxisRuntime(device_manager, motion_controller)
 
 
-def get_device_profile_for_slave(profile_name, slave_index, io_devices):
+def get_device_profile_for_slave(
+    profile_name,
+    slave_index,
+    io_devices,
+    axis_slave_indices=None,
+):
     for io_device in io_devices:
         if int(io_device["slave_index"]) == int(slave_index):
             return get_device_profile(profile_name, io_id=io_device["id"])
-    return get_device_profile(profile_name)
+
+    axis_index = None
+    if axis_slave_indices is not None:
+        axis_indices = [
+            index
+            for index, current_slave_index in enumerate(axis_slave_indices)
+            if int(current_slave_index) == int(slave_index)
+        ]
+        if axis_indices:
+            axis_index = axis_indices[0]
+    return get_device_profile(
+        profile_name,
+        axis_index=axis_index,
+        slave_index=slave_index,
+    )
 
 
 def parse_mock_axis_user_units(args):
@@ -310,6 +345,8 @@ def read_axis_motion_limits(runtime):
 
 
 def initialize_drive(runtime, motion_mode, csp_interpolation_mode, startup_sdo_reader=None):
+    # TECH_DEBT[TD-004]: Startup style is inferred from method presence until
+    # runtime/backend capabilities are declared explicitly.
     staged_startup = hasattr(runtime, "enter_operational")
     startup_sdo = None
     runtime.connect(target_state="preop" if staged_startup else None)
@@ -375,6 +412,8 @@ def initialize_drive(runtime, motion_mode, csp_interpolation_mode, startup_sdo_r
 
 
 def clear_axis_restart_commands(runtime):
+    # TECH_DEBT[TD-004]: Device restart support is currently an optional profile
+    # method instead of a declared capability.
     if not hasattr(DEVICE_PROFILE, "clear_axis_restart_command"):
         return
 

@@ -15,24 +15,16 @@ if ([string]::IsNullOrWhiteSpace($Interface)) {
     $Interface = Get-AxisServerEnvValue -EnvValues $AxisEnv -Name "PYSOEM_INTERFACE" -Default "\Device\NPF_{906A65C9-C606-4B1F-8384-2625829A4D18}"
 }
 if ($Port -le 0) {
-    $Port = [int](Get-AxisServerEnvValue -EnvValues $AxisEnv -Name "MOTION_SERVER_PORT" -Default (
-        Get-AxisServerEnvValue -EnvValues $AxisEnv -Name "AXIS_SERVER_PORT" -Default "15000"
-    ))
+    $Port = [int](Get-AxisServerEnvValue -EnvValues $AxisEnv -Name "MOTION_SERVER_PORT" -Default "15000")
 }
 if ([string]::IsNullOrWhiteSpace($Backend)) {
-    $Backend = Get-AxisServerEnvValue -EnvValues $AxisEnv -Name "MOTION_SERVER_BACKEND" -Default (
-        Get-AxisServerEnvValue -EnvValues $AxisEnv -Name "AXIS_SERVER_BACKEND" -Default "pysoem"
-    )
+    $Backend = Get-AxisServerEnvValue -EnvValues $AxisEnv -Name "MOTION_SERVER_BACKEND" -Default "pysoem"
 }
 if ([string]::IsNullOrWhiteSpace($ServerMode)) {
-    $ServerMode = Get-AxisServerEnvValue -EnvValues $AxisEnv -Name "MOTION_SERVER_MODE" -Default (
-        Get-AxisServerEnvValue -EnvValues $AxisEnv -Name "AXIS_SERVER_MODE" -Default "basic"
-    )
+    $ServerMode = Get-AxisServerEnvValue -EnvValues $AxisEnv -Name "MOTION_SERVER_MODE" -Default "basic"
 }
 if ([string]::IsNullOrWhiteSpace($Bus)) {
-    $Bus = Get-AxisServerEnvValue -EnvValues $AxisEnv -Name "MOTION_SERVER_BUS" -Default (
-        Get-AxisServerEnvValue -EnvValues $AxisEnv -Name "PYSOEM_BUS" -Default "cmmt"
-    )
+    $Bus = Get-AxisServerEnvValue -EnvValues $AxisEnv -Name "MOTION_SERVER_BUS" -Default "cmmt_as"
 }
 
 $env:PYTHONPATH = "$ProjectRoot;$env:PYTHONPATH"

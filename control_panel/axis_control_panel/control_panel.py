@@ -118,8 +118,11 @@ class AxisServerControlPanel(
         self.diagnosis_index_var = tk.StringVar(value="0x607F")
         self.diagnosis_subindex_var = tk.StringVar(value="0x00")
         self.diagnosis_type_var = tk.StringVar(value="uint32")
+        self.diagnosis_length_var = tk.StringVar(value="")
         self.diagnosis_value_var = tk.StringVar(value="0")
         self.diagnosis_result_var = tk.StringVar(value="No SDO request yet.")
+        self.diagnosis_catalog_var = tk.StringVar(value="")
+        self.diagnosis_catalog_items = {}
         self.motion_mode_var = tk.StringVar(value="pp")
         self.server_motion_mode = "pp"
         self.server_mode = "basic"
@@ -442,6 +445,7 @@ class AxisServerControlPanel(
     def update_gui(self):
         connected, error, feedback, notice, diagnosis_result = self.client.get_snapshot()
         self._update_connection_feedback(connected, error, notice, diagnosis_result)
+        self.process_axis_param_catalog()
 
         update_data = self._build_gui_update_data(feedback)
         self._apply_gui_update_data(feedback, update_data)
@@ -478,10 +482,7 @@ class AxisServerControlPanel(
         statuswords = self._values(feedback, "statuswords", 0)
         motion_modes = self._motion_modes_from_feedback(feedback)
         position_counts_per_unit = float(
-            feedback.get(
-                "position_counts_per_unit",
-                feedback.get("csp_counts_per_unit", 1.0),
-            )
+            feedback.get("position_counts_per_unit", 1.0)
         )
         profile_settings = self._profile_settings(feedback)
         motion_limits = self._motion_limits(feedback)

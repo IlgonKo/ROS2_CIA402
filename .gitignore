@@ -30,5 +30,6 @@ Thumbs.db
 .env
 device/*/.env
 .runtime/
+tmp_test_logs/
 *.log
 *.tmp

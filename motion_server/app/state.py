@@ -68,10 +68,13 @@ def initial_server_state(
     axis_devices.configure_unit_conversion(
         user_position_units,
         converting_unit_exponents,
-        args.csp_counts_per_unit,
     )
     if axis_metadata is None:
         axis_metadata = axis_devices.unit_metadata()
+    axis_position_scales = axis_position_counts_per_api_units(
+        {"axis_devices": axis_devices},
+        args.axis_count,
+    )
     return {
         "axis_devices": axis_devices,
         "drive_initialized": bool(initialized),
@@ -97,12 +100,9 @@ def initial_server_state(
             for _ in range(args.axis_count)
         ],
         "position_counts_per_unit": (
-            args.csp_counts_per_unit
+            axis_position_scales[0] if axis_position_scales else 1.0
         ),
-        "axis_position_counts_per_unit": axis_position_counts_per_api_units(
-            {"axis_devices": axis_devices},
-            args.axis_count,
-        ),
+        "axis_position_counts_per_unit": axis_position_scales,
         "capabilities": {
             "position_loop_gain": args.backend == "mock",
             "profile_settings": True,

@@ -1,6 +1,9 @@
 from abc import ABC
 from abc import abstractmethod
 
+# TECH_DEBT[TD-004]: This virtual-servo-era interface does not describe backend
+# capabilities explicitly. Replace optional method probes with a complete
+# device capability contract.
 class ServoInterface(ABC):
     @abstractmethod
     def set_controlword(self, controlword):

@@ -66,9 +66,6 @@ function Import-AxisServerEnv {
 
     $deviceConfigRoot = $merged["MOTION_SERVER_DEVICE_CONFIG_ROOT"]
     if ([string]::IsNullOrWhiteSpace($deviceConfigRoot)) {
-        $deviceConfigRoot = $merged["PYSOEM_DEVICE_CONFIG_ROOT"]
-    }
-    if ([string]::IsNullOrWhiteSpace($deviceConfigRoot)) {
         $deviceConfigRoot = "device"
     }
     if (-not [System.IO.Path]::IsPathRooted($deviceConfigRoot)) {
@@ -76,10 +73,7 @@ function Import-AxisServerEnv {
     }
     $bus = $merged["MOTION_SERVER_BUS"]
     if ([string]::IsNullOrWhiteSpace($bus)) {
-        $bus = $merged["PYSOEM_BUS"]
-    }
-    if ([string]::IsNullOrWhiteSpace($bus)) {
-        $bus = "cmmt"
+        $bus = "cmmt_as"
     }
     $loadedProfiles = @{}
     foreach ($busEntry in @($bus.Split(","))) {
@@ -93,6 +87,10 @@ function Import-AxisServerEnv {
         $profile = $entry
         if ($entry.Contains(":")) {
             $profile = $entry.Split(":")[1].Trim()
+        }
+        $profile = $profile.Replace("-", "_")
+        if (($profile -eq "cmmt_as") -or ($profile -eq "cmmt_st")) {
+            $profile = "cmmt"
         }
         if ($loadedProfiles.ContainsKey($profile)) {
             continue
@@ -109,9 +107,6 @@ function Import-AxisServerEnv {
     }
 
     $backend = $merged["MOTION_SERVER_BACKEND"]
-    if ([string]::IsNullOrWhiteSpace($backend)) {
-        $backend = $merged["AXIS_SERVER_BACKEND"]
-    }
     if ($backend -eq "mock") {
         $virtualEnvFile = $merged["VIRTUAL_SERVO_DRIVE_ENV_FILE"]
         if ([string]::IsNullOrWhiteSpace($virtualEnvFile)) {

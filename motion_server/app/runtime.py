@@ -45,9 +45,8 @@ class AxisRuntime:
     def motion_limits(self):
         return self.motion_controller.motion_limits
 
-    @property
-    def csp_counts_per_unit(self):
-        return self.motion_controller.csp_counts_per_unit
+    def axis_position_counts_per_api_unit(self, axis_index):
+        return self.motion_controller.position_counts_per_api_unit(axis_index)
 
     @property
     def csp_velocity_offset_enabled(self):
@@ -142,8 +141,11 @@ class AxisRuntime:
             deceleration,
         )
 
-    def set_axis_csp_counts_per_unit(self, *args, **kwargs):
-        self.motion_controller.set_axis_csp_counts_per_unit(*args, **kwargs)
+    def set_axis_position_counts_per_api_unit(self, *args, **kwargs):
+        self.motion_controller.set_axis_position_counts_per_api_unit(
+            *args,
+            **kwargs,
+        )
 
     def hold_axes(self, target_positions, axis_indices):
         actual_positions = self.device_manager.axes.actual_positions()

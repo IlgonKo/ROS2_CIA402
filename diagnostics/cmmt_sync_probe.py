@@ -25,7 +25,7 @@ def axis_count_from_bus(bus):
     return max(1, count)
 
 
-DEFAULT_AXIS_COUNT = axis_count_from_bus(os.environ.get("PYSOEM_BUS", "cmmt"))
+DEFAULT_AXIS_COUNT = axis_count_from_bus(os.environ.get("MOTION_SERVER_BUS", "cmmt_as"))
 
 
 def parse_args():

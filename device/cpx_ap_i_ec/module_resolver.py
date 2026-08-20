@@ -1,9 +1,15 @@
+from dataclasses import replace
+
 from device.cpx_ap_i_ec.esi_module_catalog import (
     interface_module_info,
     module_info_by_ident,
     module_info_by_name,
 )
-from device.cpx_ap_i_ec.module_layout import IoLinkModuleSpec
+from device.cpx_ap_i_ec.module_layout import (
+    CPXApLayout,
+    IoLinkModuleSpec,
+    assign_process_image_offsets,
+)
 
 
 DEFAULT_MODULE_NAMES = {
@@ -74,6 +80,32 @@ def validate_layout_against_esi(layout):
                 f"configured={module.input_bytes} bytes "
                 f"esi={info.txpdo_bytes} bytes"
             )
+
+
+def layout_with_esi_pdo_sizes(layout):
+    modules = [
+        module_with_esi_pdo_size(module)
+        for module in layout.modules
+    ]
+    return CPXApLayout(
+        tuple(assign_process_image_offsets(modules)),
+        station_input_bytes=layout.station_input_bytes,
+        station_output_bytes=layout.station_output_bytes,
+    )
+
+
+def module_with_esi_pdo_size(module):
+    info = module_info(module)
+    if (
+        int(module.output_bytes) == int(info.rxpdo_bytes)
+        and int(module.input_bytes) == int(info.txpdo_bytes)
+    ):
+        return module
+    return replace(
+        module,
+        input_bytes=info.txpdo_bytes,
+        output_bytes=info.rxpdo_bytes,
+    )
 
 
 def module_info(module):

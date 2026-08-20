@@ -14,39 +14,31 @@ def load_env_defaults(env_path, override=False):
             os.environ.setdefault(key, value)
 
 
-def env_value(name, default="", legacy_name=None):
+def env_value(name, default=""):
     value = os.environ.get(name)
     if value is not None:
         return value
-    if legacy_name:
-        legacy_value = os.environ.get(legacy_name)
-        if legacy_value is not None:
-            return legacy_value
     return default
 
 
-def env_bool(name, default="0", legacy_name=None):
-    return env_value(name, default, legacy_name).strip() == "1"
+def env_bool(name, default="0"):
+    return env_value(name, default).strip() == "1"
 
 
-def env_float(name, default, legacy_name=None):
-    return float(env_value(name, default, legacy_name))
+def env_float(name, default):
+    return float(env_value(name, default))
 
 
-def env_int(name, default, legacy_name=None):
-    return int(env_value(name, default, legacy_name))
+def env_int(name, default):
+    return int(env_value(name, default))
 
 
 def bus_env_value():
-    return env_value("MOTION_SERVER_BUS", "cmmt", "PYSOEM_BUS")
+    return env_value("MOTION_SERVER_BUS", "cmmt")
 
 
 def device_config_root_env_value():
-    return env_value(
-        "MOTION_SERVER_DEVICE_CONFIG_ROOT",
-        "device",
-        "PYSOEM_DEVICE_CONFIG_ROOT",
-    )
+    return env_value("MOTION_SERVER_DEVICE_CONFIG_ROOT", "device")
 
 
 def bus_profile_names(raw_bus):
@@ -57,10 +49,17 @@ def bus_profile_names(raw_bus):
             continue
         if ":" in entry:
             parts = [part.strip() for part in entry.split(":")]
-            entry = parts[1] if len(parts) > 1 else ""
+            entry = parts[1].replace("-", "_") if len(parts) > 1 else ""
         if entry and entry not in profiles:
             profiles.append(entry)
     return profiles
+
+
+def device_config_profile_name(profile_name):
+    profile_name = str(profile_name or "").strip().lower().replace("-", "_")
+    if profile_name in {"cmmt_as", "cmmt_st"}:
+        return "cmmt"
+    return profile_name
 
 
 def load_bus_device_env_defaults(project_root):
@@ -69,7 +68,9 @@ def load_bus_device_env_defaults(project_root):
         config_root = project_root / config_root
 
     for profile_name in bus_profile_names(bus_env_value()):
-        device_env_path = config_root / profile_name / ".env"
+        device_env_path = (
+            config_root / device_config_profile_name(profile_name) / ".env"
+        )
         load_env_defaults(device_env_path)
 
 
@@ -78,7 +79,6 @@ def load_project_env_defaults():
         env_value(
             "MOTION_SERVER_PROJECT_ROOT",
             Path(__file__).resolve().parents[1],
-            "AXIS_SERVER_PROJECT_ROOT",
         )
     ).resolve()
     load_env_defaults(project_root / ".env")
@@ -87,7 +87,6 @@ def load_project_env_defaults():
     backend = env_value(
         "MOTION_SERVER_BACKEND",
         "pysoem",
-        "AXIS_SERVER_BACKEND",
     ).strip().lower()
     if backend == "mock":
         virtual_env_file = os.environ.get(
@@ -100,6 +99,8 @@ def load_project_env_defaults():
         load_env_defaults(virtual_env_path, override=True)
 
 
+# TECH_DEBT[TD-014]: Configuration loading currently mutates os.environ at
+# import time. Replace this with an explicit configuration object.
 load_project_env_defaults()
 
 
@@ -107,14 +108,12 @@ MOTION_SERVER_MODES = ("basic", "advanced")
 MOTION_SERVER_MODE = env_value(
     "MOTION_SERVER_MODE",
     "basic",
-    "AXIS_SERVER_MODE",
 ).strip().lower()
 DEFAULT_CYCLE_TIME = float(os.environ.get("PYSOEM_CYCLE_TIME", "0.01"))
 DEFAULT_SPIN_WAIT_TIME = float(os.environ.get("PYSOEM_SPIN_WAIT_TIME", "0.00015"))
 DERIVED_VELOCITY_ALPHA = env_float(
     "MOTION_SERVER_DERIVED_VELOCITY_ALPHA",
     "0.2",
-    "PYSOEM_DERIVED_VELOCITY_ALPHA",
 )
 FEEDBACK_PERIOD = float(os.environ.get("MOTION_SERVER_FEEDBACK_PERIOD", "0.05"))
 AXIS_RESTART_DISABLE_SETTLE_TIME = float(
@@ -123,42 +122,34 @@ AXIS_RESTART_DISABLE_SETTLE_TIME = float(
 STATUS_LOG_PERIOD = env_float(
     "MOTION_SERVER_STATUS_LOG_PERIOD",
     "1.0",
-    "PYSOEM_STATUS_LOG_PERIOD",
 )
-AXIS_SERVER_COMMAND_LOGS = env_value(
+MOTION_SERVER_COMMAND_LOGS = env_value(
     "MOTION_SERVER_COMMAND_LOGS",
     "0",
-    "AXIS_SERVER_COMMAND_LOGS",
 ).strip() == "1"
-AXIS_SERVER_STATUS_LOGS = env_value(
+MOTION_SERVER_STATUS_LOGS = env_value(
     "MOTION_SERVER_STATUS_LOGS",
     "0",
-    "AXIS_SERVER_STATUS_LOGS",
 ).strip() == "1"
 CYCLE_STATS_LOGS = env_bool(
     "MOTION_SERVER_CYCLE_STATS_LOGS",
     "1",
-    "PYSOEM_CYCLE_STATS_LOGS",
 )
 CYCLE_STATS_PERIOD = env_float(
     "MOTION_SERVER_CYCLE_STATS_PERIOD",
     "1.0",
-    "PYSOEM_CYCLE_STATS_PERIOD",
 )
 TX_HISTORY_LENGTH = env_int(
     "MOTION_SERVER_TX_HISTORY_LENGTH",
     "16",
-    "PYSOEM_TX_HISTORY_LENGTH",
 )
 TRAJECTORY_DEBUG_LOGS = env_value(
     "MOTION_SERVER_TRAJECTORY_DEBUG_LOGS",
     "0",
-    "PYSOEM_TRAJECTORY_DEBUG_LOGS",
 ).strip() == "1"
 TRAJECTORY_SNAPSHOT_LOGS = env_value(
     "MOTION_SERVER_TRAJECTORY_SNAPSHOT_LOGS",
     "0",
-    "PYSOEM_TRAJECTORY_SNAPSHOT_LOGS",
 ).strip() == "1"
 ROS_BRIDGE_COMMAND_LOGS = os.environ.get(
     "ROS_BRIDGE_COMMAND_LOGS",
@@ -167,47 +158,38 @@ ROS_BRIDGE_COMMAND_LOGS = os.environ.get(
 VELOCITY_ANOMALY_LOGS = env_value(
     "MOTION_SERVER_VELOCITY_ANOMALY_LOGS",
     "0",
-    "PYSOEM_VELOCITY_ANOMALY_LOGS",
 ).strip() == "1"
 CSP_COMMAND_STEP_LOGS = env_value(
     "MOTION_SERVER_CSP_COMMAND_STEP_LOGS",
     "0",
-    "PYSOEM_CSP_COMMAND_STEP_LOGS",
 ).strip() == "1"
 VELOCITY_ANOMALY_THRESHOLD = env_float(
     "MOTION_SERVER_VELOCITY_ANOMALY_THRESHOLD",
     "15.0",
-    "PYSOEM_VELOCITY_ANOMALY_THRESHOLD",
 )
 VELOCITY_JUMP_THRESHOLD = env_float(
     "MOTION_SERVER_VELOCITY_JUMP_THRESHOLD",
     "15.0",
-    "PYSOEM_VELOCITY_JUMP_THRESHOLD",
 )
 VELOCITY_ANOMALY_LOG_PERIOD = env_float(
     "MOTION_SERVER_VELOCITY_ANOMALY_LOG_PERIOD",
     "0.05",
-    "PYSOEM_VELOCITY_ANOMALY_LOG_PERIOD",
 )
 POSITION_FEEDBACK_LAG_LOGS = env_value(
     "MOTION_SERVER_POSITION_FEEDBACK_LAG_LOGS",
     "0",
-    "PYSOEM_POSITION_FEEDBACK_LAG_LOGS",
 ).strip() == "1"
 POSITION_FEEDBACK_LAG_LOG_PERIOD = env_float(
     "MOTION_SERVER_POSITION_FEEDBACK_LAG_LOG_PERIOD",
     "0.2",
-    "PYSOEM_POSITION_FEEDBACK_LAG_LOG_PERIOD",
 )
 CSP_COMMAND_STEP_THRESHOLD = env_float(
     "MOTION_SERVER_CSP_COMMAND_STEP_THRESHOLD",
     "250.0",
-    "PYSOEM_CSP_COMMAND_STEP_THRESHOLD",
 )
 CSP_COMMAND_STEP_ERROR_THRESHOLD = env_float(
     "MOTION_SERVER_CSP_COMMAND_STEP_ERROR_THRESHOLD",
     "75.0",
-    "PYSOEM_CSP_COMMAND_STEP_ERROR_THRESHOLD",
 )
 DEVICE_PROFILE = get_device_profile("cmmt")
 PROFILE_POSITION_MODE = DEVICE_PROFILE.PROFILE_POSITION_MODE
@@ -270,7 +252,6 @@ def parse_args(argv=None):
         default=env_value(
             "MOTION_SERVER_BACKEND",
             "pysoem",
-            "AXIS_SERVER_BACKEND",
         ).lower(),
         help="Device backend. pysoem drives real EtherCAT slaves; mock uses VirtualCiA402Servo.",
     )
@@ -298,7 +279,7 @@ def parse_args(argv=None):
             "Comma-separated EtherCAT bus layout. Entries without a prefix "
             "are motion axes. Use io:<profile>:<id> or device:<profile>:<id> "
             "for non-motion slaves, for example "
-            "cmmt,cmmt,io:cpx_ap_i_ec:io0."
+            "cmmt_as,cmmt_st,io:cpx_ap_i_ec:io0."
         ),
     )
     parser.add_argument(
@@ -314,7 +295,7 @@ def parse_args(argv=None):
     parser.add_argument(
         "--port",
         type=int,
-        default=int(env_value("MOTION_SERVER_PORT", "15000", "AXIS_SERVER_PORT")),
+        default=int(env_value("MOTION_SERVER_PORT", "15000")),
     )
     parser.add_argument(
         "--cycle-time",
@@ -401,7 +382,6 @@ def parse_args(argv=None):
         default=env_float(
             "MOTION_SERVER_MAX_VELOCITY",
             "50.0",
-            "PYSOEM_MAX_VELOCITY",
         ),
     )
     parser.add_argument(
@@ -410,7 +390,6 @@ def parse_args(argv=None):
         default=env_float(
             "MOTION_SERVER_ACCELERATION",
             "100.0",
-            "PYSOEM_ACCELERATION",
         ),
     )
     parser.add_argument(
@@ -419,33 +398,19 @@ def parse_args(argv=None):
         default=env_float(
             "MOTION_SERVER_DECELERATION",
             "100.0",
-            "PYSOEM_DECELERATION",
         ),
     )
     parser.add_argument(
         "--jerk",
         type=float,
-        default=env_float("MOTION_SERVER_JERK", "1000.0", "PYSOEM_JERK"),
+        default=env_float("MOTION_SERVER_JERK", "1000.0"),
         help="CSP S-curve jerk limit in user units per second cubed.",
     )
     parser.add_argument(
         "--pp-jerk",
         type=int,
-        default=env_int("MOTION_SERVER_PP_JERK", "100000", "PYSOEM_PP_JERK"),
+        default=env_int("MOTION_SERVER_PP_JERK", "100000"),
         help="Profile position jerk configured on the drive.",
-    )
-    parser.add_argument(
-        "--csp-counts-per-unit",
-        type=float,
-        default=env_float(
-            "MOTION_SERVER_CSP_COUNTS_PER_UNIT",
-            "1.0",
-            "PYSOEM_CSP_COUNTS_PER_UNIT",
-        ),
-        help=(
-            "Scale PP/user velocity units to CSP position counts. "
-            "Example: 1000 count/mm -> 1000.0."
-        ),
     )
     parser.add_argument(
         "--csp-profile",
@@ -454,7 +419,6 @@ def parse_args(argv=None):
         default=env_value(
             "MOTION_SERVER_CSP_PROFILE",
             "quintic",
-            "PYSOEM_CSP_PROFILE",
         ).strip().lower(),
         help=(
             "CSP profile used by Point Move and position-only Trajectory Move. "
@@ -489,7 +453,6 @@ def parse_args(argv=None):
         default=env_int(
             "MOTION_SERVER_CSP_INTERPOLATION_MODE",
             "1",
-            "PYSOEM_CSP_INTERPOLATION_MODE",
         ),
         help=(
             "Device CSP interpolation mode. "
@@ -502,7 +465,6 @@ def parse_args(argv=None):
         default=env_bool(
             "MOTION_SERVER_CSP_VELOCITY_OFFSET",
             "0",
-            "PYSOEM_CSP_VELOCITY_OFFSET",
         ),
         help=(
             "Send CSP command velocity as 0x60B1 velocity offset in user units. "
@@ -521,7 +483,6 @@ def parse_args(argv=None):
         default=env_value(
             "MOTION_SERVER_MOTION_MODE",
             "pp",
-            "PYSOEM_MOTION_MODE",
         ).lower(),
     )
     args = parser.parse_args(argv)
@@ -558,8 +519,10 @@ def parse_bus_config(raw_bus):
         if ":" in entry:
             parts = [part.strip() for part in entry.split(":")]
             role = parts[0]
-            profile_name = parts[1] if len(parts) > 1 else ""
+            profile_name = parts[1].replace("-", "_") if len(parts) > 1 else ""
             logical_id = parts[2] if len(parts) > 2 else None
+        else:
+            profile_name = profile_name.replace("-", "_")
 
         if role in {"axis", "drive"}:
             is_motion_axis = True
@@ -569,6 +532,12 @@ def parse_bus_config(raw_bus):
             raise ValueError(
                 f"Unsupported MOTION_SERVER_BUS role {role!r}; "
                 "use axis:<profile> or io:<profile>:<id>"
+            )
+
+        if is_motion_axis and profile_name == "cmmt":
+            raise ValueError(
+                "MOTION_SERVER_BUS must specify the detailed CMMT profile. "
+                "Use cmmt_as or cmmt_st instead of cmmt."
             )
 
         if profile_name not in available:
@@ -650,6 +619,6 @@ def require_pdo_fields(pdo, fields, context):
 
 
 def status_log(*args, **kwargs):
-    if AXIS_SERVER_STATUS_LOGS:
+    if MOTION_SERVER_STATUS_LOGS:
         kwargs.setdefault("flush", True)
         print(*args, **kwargs)

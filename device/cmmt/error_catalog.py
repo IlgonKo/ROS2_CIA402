@@ -6,7 +6,7 @@ from pathlib import Path
 
 
 PROJECT_ROOT = Path(
-    os.environ.get("AXIS_SERVER_PROJECT_ROOT", Path(__file__).resolve().parents[2])
+    os.environ.get("MOTION_SERVER_PROJECT_ROOT", Path(__file__).resolve().parents[2])
 ).resolve()
 DEFAULT_MANUAL_PATH = (
     PROJECT_ROOT / "Reference" / "CMMT-AS-_-S1_manual_2026-02o_8249086g1.pdf"

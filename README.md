@@ -72,7 +72,6 @@ MOTION_SERVER_DERIVED_VELOCITY_ALPHA=0.2
 CMMT-specific settings are stored in `device/cmmt/.env`:
 
 ```text
-MOTION_SERVER_CSP_COUNTS_PER_UNIT=1000.0
 MOTION_SERVER_MOTION_MODE=pp
 ```
 
@@ -212,14 +211,11 @@ MOCK_AXIS_TYPES=linear,linear,rotary
 Use `MOCK_AXIS_USER_UNITS` only when an exact mock `0x216E:01` value is needed,
 for example `0x0100` for linear metre or `0x4100` for rotary degree.
 
-Use `PYSOEM_CSP_COUNTS_PER_UNIT` to align linear CSP count scaling. Example:
-
-```text
-PYSOEM_CSP_COUNTS_PER_UNIT=1000.0
-```
-
-With that setting, a linear-axis API position command of `1.0` means `1 mm`,
-or `1000` internal counts.
+The Motion Server does not use a manual CSP count scale. For real CMMT drives,
+the server reads the drive user unit and converting unit exponents from OD
+objects such as `0x216E` and `0x2194`, then calculates the per-axis API-to-drive
+scale automatically. For virtual axes, the same values come from the virtual
+servo drive profile and config.
 
 For CSP testing, reduce the process-data cycle time in `.env` if the generated
 target stream is too coarse:
@@ -239,7 +235,7 @@ Server also logs and publishes `DV=...`, a derived velocity calculated from
 actual position delta over time in position-counts per second. The local panel
 shows and traces the drive's actual velocity feedback.
 
-`PYSOEM_DERIVED_VELOCITY_ALPHA` filters the derived velocity display. Smaller
+`MOTION_SERVER_DERIVED_VELOCITY_ALPHA` filters the derived velocity display. Smaller
 values are smoother; `1.0` disables filtering.
 
 The panel needs an active Linux desktop/X11 session. The boot service starts
@@ -411,11 +407,11 @@ bash scripts/ros/moveit.sh --build-workspace
 bash scripts/ros/moveit.sh --move-group
 ```
 
-The ROS Bridge Axis Server endpoint is configured in `.env`:
+The ROS Bridge Motion Server endpoint is configured in `.env`:
 
 ```text
-AXIS_SERVER_PORT=15000
-AXIS_SERVER_HOST=192.168.0.12
+MOTION_SERVER_PORT=15000
+MOTION_SERVER_HOST=192.168.0.12
 ROS_BRIDGE_AUTO_REQUEST_AUTHORITY=1
 ```
 
@@ -538,9 +534,9 @@ scripts/ros/         ROS container launch helpers
 scripts/windows/     Windows sync helper and optional direct Axis Server launcher
 ros/                 ROS bridge/control panel and trace display
 ethercat/            Mock/PySOEM EtherCAT transport, distributed clock, and WKC code
-device/common_object_dictionary/ Common EtherCAT/OD helper definitions shared by device profiles
-device/cia402/       Common CiA402 object dictionary and state machine
+device/pdo_metadata/ PDO mapping entry and data type metadata helpers
+device/cia402/       Common CiA402 state machine
 device/cmmt/         Festo CMMT profile, vendor OD extensions, PDO codec, and settings
 device/cpx_ap_i_ec/  Festo CPX-AP-I-EC I/O profile, PDO codec, and settings
-device/virtual_servo_drive/ Virtual servo-drive backend and PDO adapter
+device/virtual_servo_drive/ Virtual servo-drive model, OD model, and OD/PDO bridge
 ```

@@ -22,6 +22,8 @@ class Axis:
         self.servo.set_target_velocity(velocity)
 
     def set_profile_velocity(self, velocity):
+        # TECH_DEBT[TD-004]: Optional behavior is detected dynamically until
+        # ServoInterface/backend capabilities are made explicit.
         if hasattr(self.servo, "set_profile_velocity"):
             self.servo.set_profile_velocity(velocity)
 

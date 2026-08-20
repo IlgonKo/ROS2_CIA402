@@ -19,7 +19,6 @@ class MotionController:
         axis_count,
         cycle_time,
         motion_limits=None,
-        csp_counts_per_unit=1.0,
         csp_velocity_offset_enabled=False,
         csp_command_step_threshold=0.0,
         csp_command_step_error_threshold=0.0,
@@ -29,15 +28,14 @@ class MotionController:
         if self.axis_count < 1:
             raise ValueError("axis_count must be at least one")
         self.cycle_time = float(cycle_time)
-        self.csp_counts_per_unit = float(csp_counts_per_unit)
         self.csp_velocity_offset_enabled = bool(csp_velocity_offset_enabled)
         self.csp_command_step_threshold = float(csp_command_step_threshold)
         self.csp_command_step_error_threshold = float(
             csp_command_step_error_threshold
         )
         self.csp_profile = str(csp_profile).strip().lower()
-        self.axis_csp_counts_per_unit = [
-            self.csp_counts_per_unit for _ in range(self.axis_count)
+        self.axis_position_counts_per_api_unit = [
+            1.0 for _ in range(self.axis_count)
         ]
         self.motion_limits = [
             self._motion_limits_for_index(motion_limits, index)
@@ -79,8 +77,13 @@ class MotionController:
             float(jerk),
         )
 
-    def set_axis_csp_counts_per_unit(self, axis_index, counts_per_unit):
-        self.axis_csp_counts_per_unit[axis_index] = float(counts_per_unit)
+    def set_axis_position_counts_per_api_unit(self, axis_index, counts_per_unit):
+        self.axis_position_counts_per_api_unit[axis_index] = float(
+            counts_per_unit
+        )
+
+    def position_counts_per_api_unit(self, axis_index):
+        return self.axis_position_counts_per_api_unit[int(axis_index)]
 
     def hold_axes(self, target_positions, actual_positions, axis_indices):
         positions = list(target_positions)
@@ -161,7 +164,7 @@ class MotionController:
                 continue
 
             limits = self.motion_limits[axis_index]
-            scale = self.axis_csp_counts_per_unit[axis_index]
+            scale = self.position_counts_per_api_unit(axis_index)
             previous_command_position = float(generator.command_position)
             previous_sent_position = int(previous_target)
             command_position = float(generator.update(

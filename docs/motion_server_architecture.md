@@ -21,8 +21,8 @@ Motion Server는 상위 클라이언트가 EtherCAT 세부 구현을 직접 다�
 ```text
 Client
   -> TCP JSON line
-  -> motion_server.api.dispatcher
-  -> motion_server.commands.*
+  -> motion_server.api.router
+  -> motion_server.handlers.*
   -> motion_server.app.runtime.AxisRuntime
   -> motion_server.device_manager.DeviceManager
   -> EtherCAT master backend
@@ -36,9 +36,12 @@ Client
 motion_server/
   server.py                 Main server loop
   config.py                 CLI/env 설정과 feature mode
-  api/                      TCP API message, authority, status/feedback
+  api/                      TCP API decode, validation, routing, encoding
   app/                      Runtime loop, startup, process data cycle
-  commands/                 system/axis 명령 구현
+  handlers/                 status/authority handler
+    authority/              command authority handler
+    status/                 status/feedback handler
+    command/                system/axis/io command handler
   control/                  motion controller, unit conversion helpers
   device_manager/           EtherCAT device groups, logical selector, SDO access
 
@@ -50,8 +53,8 @@ ethercat/
 device/
   cmmt/                     Festo CMMT profile, PDO, OD, codec
   virtual_servo_drive/      Virtual CiA402 servo drive
-  cia402/                   CiA402 공통 state machine / OD
-  common_object_dictionary/ EtherCAT 공통 object dictionary
+  cia402/                   CiA402 공통 state machine
+  pdo_metadata/             PDO mapping entry와 data type metadata helper
   cpx_ap_i_ec/              CPX AP I EC profile 준비 영역
 
 control_panel/
@@ -183,13 +186,13 @@ authority/*    command authority 대상
 서버 로그는 목적별로 나누어 켜고 끈다.
 
 ```text
-AXIS_SERVER_COMMAND_LOGS=1    수신 JSON command 로그
-AXIS_SERVER_STATUS_LOGS=1     authority, mode, homing, enable/disable, stop/reset,
+MOTION_SERVER_COMMAND_LOGS=1  수신 JSON command 로그
+MOTION_SERVER_STATUS_LOGS=1   authority, mode, homing, enable/disable, stop/reset,
                               client connection, periodic Axis status 로그
 MOTION_SERVER_STATUS_LOG_PERIOD=1.0  periodic Axis status 로그 주기
 ```
 
-일반 운전에서는 `AXIS_SERVER_STATUS_LOGS=0`으로 두고, 상태 변화 추적이 필요할 때만 켠다.
+일반 운전에서는 `MOTION_SERVER_STATUS_LOGS=0`으로 두고, 상태 변화 추적이 필요할 때만 켠다.
 
 ## Basic Mode와 Advanced Mode
 

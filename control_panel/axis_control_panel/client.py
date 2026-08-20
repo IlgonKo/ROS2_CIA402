@@ -68,6 +68,7 @@ class AxisServerClient:
         self.feedback = initial_feedback(axis_count)
         self.last_notice = ""
         self.last_diagnosis_result = ""
+        self.last_axis_param_catalog = None
         self.sdo_read_results = []
         self.thread = threading.Thread(target=self._connection_loop, daemon=True)
 
@@ -158,6 +159,7 @@ class AxisServerClient:
             elif message.get("type") in {
                 "system/axis/param_read",
                 "system/axis/param_write",
+                "system/axis/param_catalog",
                 "system/axis/param_save",
                 "system/axis/restart",
                 "system/server/reset",
@@ -208,6 +210,15 @@ class AxisServerClient:
 
     def _store_diagnosis_result(self, message):
         with self.lock:
+            if message.get("type") == "system/axis/param_catalog":
+                self.last_axis_param_catalog = dict(message)
+                self.last_diagnosis_result = (
+                    "Axis parameter catalog response received: "
+                    f"ok={message.get('ok', False)} "
+                    f"axis={message.get('axis')} "
+                    f"items={len(message.get('objects', []))}"
+                )
+                return
             self.last_diagnosis_result = json.dumps(message, ensure_ascii=False)
             if message.get("type") == "system/axis/param_read" and message.get("ok"):
                 self.sdo_read_results.append(dict(message))
@@ -371,6 +382,12 @@ class AxisServerClient:
                 notice,
                 diagnosis_result,
             )
+
+    def pop_axis_param_catalog(self):
+        with self.lock:
+            catalog = self.last_axis_param_catalog
+            self.last_axis_param_catalog = None
+            return catalog
 
     def send_json(self, message, refresh_status=False):
         payload = (json.dumps(message) + "\n").encode("utf-8")
@@ -594,26 +611,36 @@ class AxisServerClient:
     def release_command_authority(self):
         self.send_json({"cmd": "system/authority/release"})
 
-    def send_param_read(self, axis_index, index, subindex, data_type):
-        self.send_json(
-            {
-                "cmd": "system/axis/param_read",
-                "axis": int(axis_index),
-                "index": str(index),
-                "subindex": str(subindex),
-                "data_type": str(data_type),
-            }
-        )
+    def send_param_read(self, axis_index, index, subindex, data_type, length=None):
+        message = {
+            "cmd": "system/axis/param_read",
+            "axis": int(axis_index),
+            "index": str(index),
+            "subindex": str(subindex),
+            "data_type": str(data_type),
+        }
+        if length is not None and str(length).strip():
+            message["length"] = str(length)
+        self.send_json(message)
 
-    def send_param_write(self, axis_index, index, subindex, data_type, value):
+    def send_param_write(self, axis_index, index, subindex, data_type, value, length=None):
+        message = {
+            "cmd": "system/axis/param_write",
+            "axis": int(axis_index),
+            "index": str(index),
+            "subindex": str(subindex),
+            "data_type": str(data_type),
+            "value": value,
+        }
+        if length is not None and str(length).strip():
+            message["length"] = str(length)
+        self.send_json(message)
+
+    def send_axis_param_catalog(self, axis_index):
         self.send_json(
             {
-                "cmd": "system/axis/param_write",
+                "cmd": "system/axis/param_catalog",
                 "axis": int(axis_index),
-                "index": str(index),
-                "subindex": str(subindex),
-                "data_type": str(data_type),
-                "value": value,
             }
         )
 

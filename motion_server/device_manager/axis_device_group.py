@@ -71,12 +71,10 @@ class AxisDeviceGroup:
         self,
         user_position_units=None,
         converting_unit_exponents=None,
-        position_counts_per_unit=1.0,
     ):
         self.unit_converter.configure(
             user_position_units,
             converting_unit_exponents,
-            position_counts_per_unit,
         )
 
     @property
