@@ -32,6 +32,7 @@
 - `remaining_tasks.md`의 RF 항목도 동일한 형식으로 통일하고 완료 조건을 검증 가능한 결과로 강화했다.
 - RF별 사용자 가치, 구현 범위, 제약과 검증 계획을 `docs/tasks/rf` 상세 문서로 분리했다.
 - Work Log를 최신 날짜 우선으로 정렬하고 당일 기록을 완료, 등록, 문서 및 운영으로 구분했다.
+- Work Log의 주요 설계 결정 요약을 `decisions.md`의 정식 DEC 항목으로 통합했다.
 
 ## 2026-08-20
 
@@ -269,24 +270,3 @@
 - Virtual EtherCAT 프로젝트 초기 구조 생성.
 - CiA402 기반 가상 EtherCAT 구동 실험을 위한 기본 코드 구성.
 - 초기 Axis Server, mock/virtual servo, ROS 연동 실험의 출발점 마련.
-
-## 주요 설계 결정 요약
-
-- Motion Server API 단위:
-  - linear axis: mm
-  - rotary axis: deg
-- Drive 단위 변환:
-  - CMMT의 user position unit과 converting unit exponent를 SDO로 읽어 API 단위와 drive 내부 단위를 변환.
-- Command authority:
-  - 다중 client 환경에서 write/motion command는 authority를 가진 client만 수행.
-  - authority가 없으면 서버 응답에서 `authority_required` 또는 `authority_busy`로 구분.
-- Feedback 정책:
-  - `system/feedback`은 주기적 lightweight feedback.
-  - full snapshot은 `system/axis/status`, `system/axes/status`, `system/io/status` 계열에서 제공.
-- Device 구조:
-  - CMMT motion drive와 CPX-AP-I-EC remote I/O를 device profile로 분리.
-  - EtherCAT bus layout에서 motion axis와 IO station을 함께 선언.
-- ESI/IODD 활용:
-  - CMMT: ESI로 identity, OD catalog, PDO support를 확인하고, 별도 PDO configuration에 따라 drive PDO를 remap.
-  - CPX-AP-I-EC: ESI로 module ident, EtherCAT OD, PDO size를 검증.
-  - IO-Link: IODD로 port별 device parameter catalog를 제공하고, 지원하지 않는 ISDU parameter는 서버에서 거부.

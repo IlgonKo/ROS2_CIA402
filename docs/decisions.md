@@ -34,7 +34,8 @@
 - 결정: 선형 축은 `mm`, `mm/s`, `mm/s^2`, 회전 축은 `deg`, `deg/s`, `deg/s^2`를
   Motion Server API 단위로 사용한다.
 - 이유: client가 drive별 object dictionary scale과 user-unit 설정을 알지 않아도 일관된 값을 사용해야 한다.
-- 영향: 실제 drive 단위와 API 단위 사이의 변환은 Motion Server가 장치 설정을 읽어 축별로 수행한다.
+- 영향: 실제 drive 단위와 API 단위 사이의 변환은 Motion Server가 CMMT user position unit과
+  converting unit exponent를 SDO로 읽어 축별로 수행한다.
 
 ## DEC-004 명령 제어권은 TCP 연결 단위로 관리
 
@@ -44,7 +45,8 @@
   command authority를 획득한 TCP 연결만 실행할 수 있다.
 - 이유: 별도 token 전달 없이 여러 GUI, ROS Bridge와 도구가 동시에 연결된 상황의 충돌을 방지한다.
 - 영향: 소유 연결이 종료되거나 명시적으로 release하면 authority를 해제한다.
-  다른 연결의 명령은 현재 소유자 정보와 함께 거부한다.
+  authority가 없는 연결은 `authority_required`, 다른 연결이 소유 중이면 현재 소유자 정보와 함께
+  `authority_busy`로 거부한다.
 
 ## DEC-005 실시간 EtherCAT 접근과 상위 client 실행 환경 분리
 
@@ -85,6 +87,41 @@
 - 이유: 요구사항과 기술 부채의 문서 식별자를 코드 변경, 검증과 병합 이력에 직접 연결한다.
 - 영향: 각 작업 브랜치는 최신 `main`에서 만들고 한 개의 RF 또는 TD만 포함한다.
   완료와 검증 후 `main`에 병합하며 병합된 단기 브랜치는 삭제한다.
+
+## DEC-009 주기 Feedback과 Full Status Snapshot 분리
+
+- 상태: `accepted`
+- 결정일: 2026-08-20
+- 결정: `system/feedback`은 주기 송신에 적합한 lightweight feedback으로 유지하고,
+  전체 상태 snapshot은 `system/axis/status`, `system/axes/status`, `system/io/status` 계열에서 제공한다.
+- 이유: 고주기 feedback payload에 변경 빈도가 낮은 설정과 상세 진단을 모두 포함하면
+  network 및 client 처리 부하가 증가하고 API 책임이 불명확해진다.
+- 영향: client는 실시간 표시에는 `system/feedback`, 초기 동기화와 상세 조회에는 status API를 사용한다.
+  새로운 상태 필드는 갱신 주기와 사용 목적에 따라 두 경계 중 하나에 배치한다.
+
+## DEC-010 Motion Axis와 Remote I/O를 Device Profile로 분리
+
+- 상태: `accepted`
+- 결정일: 2026-07-20
+- 결정: CMMT motion drive와 CPX-AP-I-EC remote I/O를 독립적인 device profile로 표현하고,
+  하나의 EtherCAT bus layout에서 motion axis와 I/O station을 함께 선언한다.
+- 이유: motion과 I/O는 PDO, parameter access 및 lifecycle 요구가 다르지만 동일한 EtherCAT master와
+  Motion Server API 경계 안에서 함께 구성되어야 한다.
+- 영향: device별 catalog, PDO codec과 parameter access는 profile 아래에 유지한다.
+  runtime은 bus layout의 axis/I/O binding을 통해 profile을 선택하고 상위 client에 공통 식별 방식을 제공한다.
+
+## DEC-011 ESI/IODD를 Device Metadata의 기준 Source로 사용
+
+- 상태: `accepted`
+- 결정일: 2026-08-20
+- 결정:
+  - CMMT는 ESI로 identity, OD catalog와 PDO support를 확인하고 별도 PDO configuration에 따라 drive를 remap한다.
+  - CPX-AP-I-EC는 ESI로 module ident, EtherCAT OD와 PDO size를 검증한다.
+  - IO-Link device는 IODD로 port별 parameter catalog를 제공하며 catalog가 지원하지 않는 ISDU parameter를 거부한다.
+- 이유: device/firmware별 metadata를 코드에 중복 기입하거나 추측하지 않고 vendor artifact에 근거해
+  startup validation과 사용자 parameter access를 제공해야 한다.
+- 영향: ESI/IODD version 선택, parsing failure와 unsupported metadata는 명시적인 startup/API 오류로 처리한다.
+  AP parameter catalog처럼 ESI/IODD가 제공하지 않는 정보는 다른 source가 확보되기 전까지 추정하지 않는다.
 
 ## 새 결정 작성 양식
 
