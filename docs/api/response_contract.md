@@ -56,7 +56,7 @@ TD-005에서 이 계약으로 migration한다.
 - `details`: 구조화된 선택 부가정보이며 없으면 생략
 
 failure code와 내부 정보 비노출 규칙은 [Failure Code](failure_codes.md)를 따른다.
-구체적인 내부 Exception 계층과 mapper는 다음 설계 단계에서 확정한다.
+내부 Exception 변환은 [Exception과 API Failure Mapping](exception_mapping.md)을 따른다.
 
 ## 비동기 명령의 Success
 

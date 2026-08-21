@@ -117,4 +117,5 @@ Diagnostic 때문에 작업이 차단되면 관련 발생 건을 연결할 수 �
 Exception과 stack trace는 서버 log에 기록하며 `str(exc)`를 그대로 외부로 보내지 않는다. 운전 상태에도
 영향이 있으면 Fail response와 별도로 Diagnostic을 생성한다.
 
-구체적인 내부 Exception 계층과 mapper는 다음 설계 단계에서 확정한다.
+중앙 mapper 구조는 [Exception과 API Failure Mapping](exception_mapping.md)을 따른다. 구체적인 내부
+Exception 하위 계층은 다음 설계 단계에서 확정한다.

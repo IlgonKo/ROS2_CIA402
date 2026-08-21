@@ -47,6 +47,8 @@
 
 ### 문서 및 운영
 
+- `DEC-019`로 내부 Exception과 API Failure를 중앙 mapping table에서 연결하고 별도
+  Failure Definition Registry 없이 FailureCode Enum과 mapper만 사용하는 구조를 확정했다.
 - `DEC-018`로 client 대응 기준의 초기 20개 API failure code와 Exception 변환·내부정보 비노출
   원칙을 확정하고 command/argument별 code 증가를 제한했다.
 - `DEC-017`로 요청과 같은 type, Success/Fail result, optional request_id 및 data/failure를 사용하는
