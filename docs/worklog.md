@@ -8,6 +8,12 @@
 
 ### 완료
 
+- `TD-005-S08A`를 완료하여 확정된 Diagnostic Definition/Source/History/Status model과 활성 lifecycle
+  저장소를 구현했다.
+- detect, acknowledge, resolve, latching/non-latching clear, clear 전 재검출과 clear 후 신규 ID 재발,
+  source별 uniqueness 및 FAULT/ALARM/NORMAL 계산을 구현했다.
+- 외부 Diagnostic API와 startup/runtime 연결은 확장하지 않았으며 S08A 테스트 13개와 전체
+  unittest 112개를 통과했다. 다음 단계는 startup Initialization Fault를 연결하는 S08B다.
 - `TD-005-S07C`를 완료하여 server/bus/axis/axes/IO status와 현재 Axis/EtherCAT/IO-Link Catalog
   handler를 공통 request boundary에 연결했다.
 - Catalog의 not-ready, 없는 axis/IO/module/port binding, selector validation과 unsupported operation을

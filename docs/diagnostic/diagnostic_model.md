@@ -154,9 +154,15 @@ def cleared_at(status):
 
 ## 후속 결정 범위
 
+S08A core 구현에서 다음 최소 정책을 사용한다.
+
+- `diagnostic_id`는 외부에서 구조를 해석하지 않는 opaque 문자열이며 기본 생성기는 UUID를 사용한다.
+- clear된 Status는 활성 저장소에서 제거하고 clear를 완료한 lifecycle 호출의 반환값으로 제공한다.
+- test와 embedding 환경은 clock과 ID factory를 주입할 수 있지만 이는 Diagnostic 데이터 계약에
+  포함되지 않는 선택 기능이다.
+
 다음 항목은 데이터 구조에 포함하지 않고 후속 단계에서 결정한다.
 
-- `diagnostic_id` 생성 형식
 - clear된 Status의 메모리·파일 보존 기간
 - recovery handler와 reset/reconnect/restart 정책
 - 외부 API Success/Fail serialization과 notification 형식

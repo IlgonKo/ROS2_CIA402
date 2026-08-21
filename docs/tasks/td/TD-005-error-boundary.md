@@ -59,10 +59,10 @@ client의 복구 판단과 장애 분석이 불안정하다.
 
 ### 작업 재개 체크포인트
 
-- 현재 완료 단계: `TD-005-S07C`
-- 다음 실행 단계: `TD-005-S08`
-- 다음 시작 위치: 확정된 Diagnostic 데이터 model과 latching lifecycle을 구현하고 startup/runtime의
-  운전 영향 Alarm/Fault 발생 지점에 연결한다.
+- 현재 완료 단계: `TD-005-S08A`
+- 다음 실행 단계: `TD-005-S08B`
+- 다음 시작 위치: startup 필수 실패를 Server source의 latching Initialization Fault로 생성하고,
+  degraded server 상태 및 기존 initialization error 표시와 함께 유지한다.
 - 현재 호환 상태: 서버는 legacy 응답만 송신한다. 신규 Success/Fail envelope는 아직 live API에 연결되지 않았다.
 - 보존할 사용자 변경: `device/cmmt/required_od.py`의 OD 기본값 및 형식 변경은 `TD-023` 범위이며
   TD-005 변경에 포함하지 않는다.
@@ -381,6 +381,43 @@ S07C 완료 증거:
 | 제외 범위 | reset/reconnect/restart recovery 정책(RF-005), 장기 영속 저장, 새로운 level 추가는 하지 않는다. |
 | 완료 조건 | lifecycle 전이, source uniqueness, 재검출/재발, startup/runtime Alarm/Fault와 API Fail 병행 테스트가 통과한다. |
 | 인계 | S09 client가 신규 Diagnostic 응답을 읽고 S10 서버 cutover 후 운전 상태를 확인할 수 있어야 한다. |
+
+S08은 운전 영향 범위를 한 번에 변경하지 않고 다음 순서로 진행한다.
+
+| 하위 단계 | 범위 | 선행 단계 | 상태 |
+| --- | --- | --- | --- |
+| `TD-005-S08A` | Diagnostic model, 활성 저장소와 lifecycle core | S07C | `complete` |
+| `TD-005-S08B` | startup 필수 실패와 Initialization Fault 연결 | S08A | `pending` |
+| `TD-005-S08C` | runtime Bus/Axis/IO Alarm·Fault producer와 API Fail 병행 | S08B | `pending` |
+| `TD-005-S08D` | 기존 status 경로의 Diagnostic 조회·직렬화 계약 연결 | S08C | `pending` |
+
+#### TD-005-S08A 계약
+
+| 구분 | 기록 내용 |
+| --- | --- |
+| 공개 계약 | `DiagnosticLevel`, `DiagnosticDefinition`, `DiagnosticSourceType`, `DiagnosticSource`, `DiagnosticHistory`, `DiagnosticStatus`, `DiagnosticManager` |
+| 필수 구현 | `(definition.code, source.type, source.index)` 활성 건 uniqueness, detect/acknowledge/resolve, latching clear, 재검출·재발, 계산된 현재 level과 `cleared_at` |
+| 선택 기능 | test에서 주입 가능한 clock와 ID factory |
+| 내부 helper | 활성 key/ID index, clear 조건 판정 |
+| 제외 범위 | startup/runtime 연결, 외부 API serialization, notification, clear 이력 영속 저장, recovery handler |
+
+S08A는 `NORMAL` Definition/Status를 생성하지 않는다. clear된 Status는 장기 보존 정책이 확정되지
+않았으므로 활성 저장소에서 제거하고 해당 lifecycle 호출의 반환값으로만 제공한다. 알 수 없는 ID의
+acknowledge와 활성 조건이 없는 resolve는 호출 계약 오류로 명확히 거부한다.
+
+S08A 완료 증거:
+
+| 계약 항목 | 구현 위치 | 검증 |
+| --- | --- | --- |
+| Level, Definition, Source, History, Status와 `cleared_at` | `motion_server/diagnostic/models.py` | NORMAL Status 금지, source type/index 식별, clear 시각 시험 |
+| 활성 key/ID uniqueness와 detect | `motion_server/diagnostic/manager.py` | 반복 검출 동일 건, source별 uniqueness, definition 불변 시험 |
+| acknowledge/resolve/latching clear | `motion_server/diagnostic/manager.py` | ack/resolve 양쪽 순서와 non-latching 자동 clear 시험 |
+| 재검출과 clear 후 재발 | `motion_server/diagnostic/manager.py` | resolved reset, 신규 ID와 occurred_at 시험 |
+| 계산된 현재 level | `motion_server/diagnostic/manager.py` | FAULT 우선, ALARM, 활성 건 부재 NORMAL 시험 |
+
+- S08A lifecycle/model 테스트 13개와 전체 unittest 112개가 통과했다.
+- startup/runtime 연결, 외부 serialization, notification, 영속 이력과 recovery는 생성하지 않았다.
+- 현재 완료 단계는 `TD-005-S08A`, 다음 실행 단계는 `TD-005-S08B`다.
 
 ### TD-005-S09 Control Panel/ROS 호환 읽기
 
