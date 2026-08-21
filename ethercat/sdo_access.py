@@ -1,5 +1,7 @@
 import struct
 
+from motion_server.failure import DeviceAccessException
+
 
 class SdoAccess:
     """Typed CoE SDO access built on a master's raw SDO transport."""
@@ -40,15 +42,7 @@ class SdoAccess:
 
     def write_string(self, slave_index, index, subindex, value):
         payload = encode_string_payload(value)
-        try:
-            self.transport.write_sdo(slave_index, index, subindex, payload)
-        except Exception as exc:
-            raise RuntimeError(
-                "SDO write failed: "
-                f"slave={slave_index} object=0x{index:04X}:{subindex:02X} "
-                f"type=string value={value!r} payload={payload.hex()} "
-                f"error={exc}"
-            ) from exc
+        self.transport.write_sdo(slave_index, index, subindex, payload)
 
     def read_int8(self, slave_index, index, subindex):
         return self._read("int8", slave_index, index, subindex)
@@ -72,51 +66,27 @@ class SdoAccess:
         return self._read("float32", slave_index, index, subindex)
 
     def read_string(self, slave_index, index, subindex, size):
-        try:
-            payload = self.transport.read_sdo(
-                slave_index,
-                index,
-                subindex,
-                int(size),
-            )
-        except Exception as exc:
-            raise RuntimeError(
-                "SDO read failed: "
-                f"slave={slave_index} object=0x{index:04X}:{subindex:02X} "
-                f"type=string size={size} error={exc}"
-            ) from exc
+        payload = self.transport.read_sdo(
+            slave_index,
+            index,
+            subindex,
+            int(size),
+        )
         return decode_string_payload(payload)
 
     def _write(self, data_type, slave_index, index, subindex, value):
         payload = struct.pack(self._FORMATS[data_type], value)
-        try:
-            self.transport.write_sdo(slave_index, index, subindex, payload)
-        except Exception as exc:
-            raise RuntimeError(
-                "SDO write failed: "
-                f"slave={slave_index} object=0x{index:04X}:{subindex:02X} "
-                f"type={data_type} value={value!r} payload={payload.hex()} "
-                f"error={exc}"
-            ) from exc
+        self.transport.write_sdo(slave_index, index, subindex, payload)
 
     def _read(self, data_type, slave_index, index, subindex):
         data_format = self._FORMATS[data_type]
         size = struct.calcsize(data_format)
-        try:
-            payload = self.transport.read_sdo(
-                slave_index, index, subindex, size
-            )
-        except Exception as exc:
-            raise RuntimeError(
-                "SDO read failed: "
-                f"slave={slave_index} object=0x{index:04X}:{subindex:02X} "
-                f"type={data_type} size={size} error={exc}"
-            ) from exc
+        payload = self.transport.read_sdo(
+            slave_index, index, subindex, size
+        )
         if len(payload) < size:
-            raise RuntimeError(
-                "SDO read returned a short payload: "
-                f"slave={slave_index} object=0x{index:04X}:{subindex:02X} "
-                f"type={data_type} expected={size} actual={len(payload)}"
+            raise DeviceAccessException(
+                operation="sdo_read_short_payload",
             )
         return struct.unpack(data_format, payload[:size])[0]
 

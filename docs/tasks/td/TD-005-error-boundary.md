@@ -45,7 +45,7 @@ client의 복구 판단과 장애 분석이 불안정하다.
 | --- | --- | --- | --- |
 | `TD-005-S01` | FailureCode, Exception 계층, Mapper, PartialFailure 기반 | 없음 | `complete` |
 | `TD-005-S02` | Response encoder, request boundary와 기존 API adapter | S01 | `complete` |
-| `TD-005-S03` | EtherCAT SDO 및 Mock/PySOEM Exception parity | S01 | `pending` |
+| `TD-005-S03` | EtherCAT SDO 및 Mock/PySOEM Exception parity | S01 | `complete` |
 | `TD-005-S04` | Axis/IO EtherCAT parameter handler | S02, S03 | `pending` |
 | `TD-005-S05` | AP parameter 경로 | S03, S04 | `pending` |
 | `TD-005-S06` | IO-Link ISDU 경로 | S03, S04 | `pending` |
@@ -59,10 +59,10 @@ client의 복구 판단과 장애 분석이 불안정하다.
 
 ### 작업 재개 체크포인트
 
-- 현재 완료 단계: `TD-005-S02`
-- 다음 실행 단계: `TD-005-S03`
-- 다음 시작 위치: MockMaster와 PySOEMMaster의 SDO read/write 오류를 전수 대조하고
-  timeout, object-not-found, device-reject와 communication failure의 공통 Exception 변환 경계를 확정한다.
+- 현재 완료 단계: `TD-005-S03`
+- 다음 실행 단계: `TD-005-S04`
+- 다음 시작 위치: `motion_server/handlers/parameter_access/ethercat.py`의 Axis/IO request validation,
+  target lookup과 SDO Exception 처리를 S02 request boundary 및 S03 backend 계약에 연결한다.
 - 현재 호환 상태: 서버는 legacy 응답만 송신한다. 신규 Success/Fail envelope는 아직 live API에 연결되지 않았다.
 - 보존할 사용자 변경: `device/cmmt/required_od.py`의 OD 기본값 및 형식 변경은 `TD-023` 범위이며
   TD-005 변경에 포함하지 않는다.
@@ -112,6 +112,7 @@ S01 완료 조건:
 | --- | --- | --- | --- |
 | `TD-005-S01` | `motion_server/failure/`의 code, model, Exception, mapping과 partial model | `tests/test_failure_contract.py` 9개 및 전체 24개 unittest | 통과 |
 | `TD-005-S02` | 기존 `api/encoder.py`의 `ResponseContext`/Success/Fail encoder와 `api/router.py`의 side-effect 없는 request boundary | `tests/test_api_response_boundary.py` 13개 및 전체 37개 unittest | 통과 |
+| `TD-005-S03` | 기존 `sdo_access.py`, Mock/PySOEM raw transport와 Virtual OD Bridge의 공통 Exception 변환 | SDO parity 10개, Virtual OD 오류 2개 및 전체 49개 unittest | 통과 |
 
 S01 명세 추적:
 
@@ -165,6 +166,33 @@ S02에서는 `route_message`, handler와 socket 송신 경로를 변경하지 �
 | 제외 범위 | handler response 변경, AP/IO-Link 변환, retry/reconnect 정책과 Diagnostic 생성은 하지 않는다. |
 | 완료 조건 | read/write 각각의 정상, timeout, object-not-found, device reject, 예상 밖 오류를 Mock/PySOEM parity 테스트로 검증하고 중간 broad catch가 programming error를 숨기지 않는다. |
 | 인계 | S04-S06이 backend 문자열을 해석하지 않고 구체 Exception을 그대로 사용할 수 있어야 한다. |
+
+S03 Exception 변환 계약:
+
+| 원인 | Mock 경로 | PySOEM 경로 | 공통 Exception |
+| --- | --- | --- | --- |
+| SDO object/subindex 없음 | Virtual OD Bridge의 OD lookup 실패 | SDO abort `0x06020000`, `0x06090011` | `SdoObjectNotFoundException` |
+| SDO protocol timeout | `TimeoutError` | `TimeoutError`, SDO abort `0x05040000` | `CommunicationTimeoutException` |
+| Device reject | Virtual OD Bridge의 read-only 판정 등 | 그 밖의 `SdoError` abort | `DeviceRejectedException` |
+| Mailbox/transport 실패 | `ConnectionError`, `OSError` | `MailboxError`, `PacketError`, `WkcError`, interface-not-open 및 OS transport 오류 | `CommunicationException` |
+| Typed read short payload | 공통 `SdoAccess` | 공통 `SdoAccess` | `DeviceAccessException` |
+| 예상하지 못한 오류 | 변환하지 않음 | 변환하지 않음 | 원래 Exception 유지 |
+
+S03 명세 추적:
+
+| 명세 항목 | 구현 위치 | 검증 테스트 | 범위 확대 여부 |
+| --- | --- | --- | --- |
+| 정상 read/write parity | `mock_master.py`, `pysoem_master.py` | `test_mock_and_pysoem_normal_read_write_match` | 없음 |
+| object-not-found parity | Virtual OD Bridge, PySOEM raw transport | `test_object_not_found_parity_for_read_and_write`, `test_virtual_od_reports_missing_sdo_object` | 없음 |
+| timeout 및 communication parity | Mock/PySOEM raw transport | `test_timeout_parity_for_read_and_write`, `test_communication_failure_parity_for_read_and_write` | 없음 |
+| device reject parity | Virtual OD Bridge, PySOEM raw transport | `test_device_rejected_parity_for_read_and_write`, `test_virtual_od_reports_read_only_write_as_device_reject` | 없음 |
+| exception chaining | backend 변환 지점 | object-not-found 및 parity 테스트의 `__cause__` 검증 | 없음 |
+| programming error 비은닉 | raw transport와 `SdoAccess` | `test_unexpected_exception_is_not_hidden`, `test_typed_sdo_access_does_not_hide_unexpected_exception` | 없음 |
+| MockMaster device 의미 제외 | `mock_master.py`, `od_bridge.py` | `test_mock_master_does_not_interpret_device_key_error` | 없음 |
+| short payload 분류 | `sdo_access.py` | `test_short_typed_payload_is_device_access_failure` | 없음 |
+
+S03에서는 기존 backend 및 Virtual OD Bridge 파일만 변경했다. Handler response, AP/IO-Link, retry,
+reconnect와 Diagnostic은 변경하지 않았다.
 
 ### TD-005-S04 Axis/IO EtherCAT parameter handler
 

@@ -1,5 +1,10 @@
 import struct
 
+from motion_server.failure import (
+    DeviceRejectedException,
+    SdoObjectNotFoundException,
+)
+
 
 _INTEGER_TYPES = {
     "BOOL": (False, 1), "USINT": (False, 1), "BYTE": (False, 1),
@@ -28,19 +33,23 @@ class VirtualOdBridge:
         self.od_model.write(index, value, subindex)
 
     def read_sdo(self, index, subindex, size):
-        definition = self.od_model.definition(index, subindex)
+        definition = self._sdo_definition(index, subindex)
         return self._encode(definition.data_type, self.read(index, subindex), size)
 
     def write_sdo(self, index, subindex, payload):
-        definition = self.od_model.definition(index, subindex)
+        definition = self._sdo_definition(index, subindex)
         if definition.access.lower() == "ro":
-            raise PermissionError(
-                f"OD object 0x{int(index):04X}:{int(subindex):02X} is read-only"
-            )
+            raise DeviceRejectedException("sdo_write")
         value = self._decode(definition.data_type, payload)
         self.write(index, value, subindex)
         self._update_rxpdo_field(definition, value)
         self._apply_write_side_effect(definition.role, value)
+
+    def _sdo_definition(self, index, subindex):
+        try:
+            return self.od_model.definition(index, subindex)
+        except KeyError as exception:
+            raise SdoObjectNotFoundException(index, subindex) from exception
 
     def _update_rxpdo_field(self, definition, value):
         if definition.rxpdo and definition.role and self.rxpdo.has_field(definition.role):
