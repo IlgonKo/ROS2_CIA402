@@ -30,6 +30,12 @@ client의 복구 판단과 장애 분석이 불안정하다.
 - timeout, unsupported object, invalid payload, initialization failure와 내부 오류를 주입한다.
 - 각 오류의 API code, 메시지, logging과 connection 유지 여부를 검증한다.
 
+## 조사 자료
+
+- [오류 발생 및 Catch 지점 전수 조사](TD-005-error-inventory.md)
+- 2026-08-21 기준 catch 144곳, broad catch 85곳, 명시적 raise 233곳과
+  generic `RuntimeError` 42곳을 migration 대상으로 추적한다.
+
 ## 완료 증거
 
 완료 시 오류 표, API 문서, broad exception 검사와 테스트 결과를 기록한다.

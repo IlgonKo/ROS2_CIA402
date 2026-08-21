@@ -47,6 +47,10 @@
 
 ### 문서 및 운영
 
+- TD-005의 Python 오류 발생·catch 지점을 전수 조사하여 catch 144곳, broad catch 85곳,
+  명시적 raise 233곳과 generic `RuntimeError` 42곳을 별도 inventory 문서에 기록했다.
+- 오류 inventory는 TD migration 자료로 유지하고, 확정된 장기 오류 계약은 추후
+  `docs/error_handling.md`로 분리하는 문서 관리 원칙을 정했다.
 - 공개 계약과 내부 helper의 경계를 `DEC-014`로 확정하고, TD 계약표·추적표 작성 규칙과
   최소 구현체/누락/내부 helper 부재 테스트 원칙을 문서 가이드에 추가했다.
 - Codex가 구현 전에 계약 범위와 제외 범위를 확인하고 합의 없는 계약 확대를 중단하도록
