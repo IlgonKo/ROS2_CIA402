@@ -1,45 +1,53 @@
 from device.cpx_ap_i_ec.esi_module_catalog import esi_module_catalog
 from device.cpx_ap_i_ec.module_resolver import module_info_for_ap_module
-from motion_server.api import parse_int, send_client_message
+from motion_server.api import parse_int
+from motion_server.api.encoder import legacy_status_request_response
+from motion_server.failure import (
+    InvalidArgumentException,
+    ResourceNotFoundException,
+    ServerNotReadyException,
+    UnsupportedOperationException,
+)
 
 
 def ethercat_param_catalog(message, runtime, client):
-    response_type = "system/io/ethercat/param_catalog"
-    try:
-        device = selected_io_device(runtime, message)
-        module_number = selected_module_number(message)
-        response = ethercat_catalog_payload(
-            response_type,
-            device,
-            module_number,
-        )
-        response["ok"] = True
-    except Exception as exc:
-        response = {
-            "type": response_type,
-            "ok": False,
-            "io": message.get("io"),
-            "module": message.get("module"),
-            "error": str(exc),
-        }
-    send_client_message(client, response)
+    return legacy_status_request_response(
+        message,
+        client,
+        lambda: ethercat_param_catalog_data(message, runtime),
+    )
+
+
+def ethercat_param_catalog_data(message, runtime):
+    device = selected_io_device(runtime, message)
+    module_number = selected_module_number(message)
+    return ethercat_catalog_payload(device, module_number)
 
 
 def selected_io_device(runtime, message):
-    return runtime.device_manager.io.selected_device(io_id=message.get("io"))
+    selector = message.get("io")
+    try:
+        return runtime.device_manager.io.selected_device(io_id=selector)
+    except AttributeError as exc:
+        raise ServerNotReadyException("I/O devices are unavailable") from exc
+    except (TypeError, ValueError) as exc:
+        raise ResourceNotFoundException("io", selector) from exc
 
 
 def selected_module_number(message):
     if "module" not in message and "slot" not in message:
         return None
-    return parse_int(message.get("module", message.get("slot")), 0)
+    value = message.get("module", message.get("slot"))
+    try:
+        return parse_int(value, 0)
+    except (TypeError, ValueError) as exc:
+        raise InvalidArgumentException("module", "must be an integer") from exc
 
 
-def ethercat_catalog_payload(response_type, device, module_number):
+def ethercat_catalog_payload(device, module_number):
     config = io_config(device)
     module_infos = selected_module_infos(config, module_number)
     return {
-        "type": response_type,
         "io": device["id"],
         "slave_index": device["slave_index"],
         "esi": str(esi_module_catalog().path),
@@ -54,7 +62,11 @@ def ethercat_catalog_payload(response_type, device, module_number):
 
 def selected_module_infos(config, module_number):
     if module_number is not None:
-        return [(module_number, module_info_for_ap_module(config.layout, module_number))]
+        try:
+            info = module_info_for_ap_module(config.layout, module_number)
+        except (TypeError, ValueError, KeyError, IndexError) as exc:
+            raise ResourceNotFoundException("io_module", module_number) from exc
+        return [(module_number, info)]
 
     infos = [(0, module_info_for_ap_module(config.layout, 0))]
     infos.extend(
@@ -68,7 +80,7 @@ def io_config(device):
     profile = getattr(device["slave"], "device_profile", None)
     config = getattr(profile, "config", None)
     if config is None:
-        raise ValueError(f"I/O device {device['id']} has no CPX configuration")
+        raise UnsupportedOperationException("io_ethercat_parameter_catalog")
     return config
 
 

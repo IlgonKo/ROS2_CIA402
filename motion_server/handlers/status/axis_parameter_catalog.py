@@ -1,44 +1,48 @@
-from motion_server.api import parse_int, send_client_message
+from motion_server.api import parse_int
+from motion_server.api.encoder import legacy_status_request_response
+from motion_server.failure import (
+    InvalidArgumentException,
+    ResourceNotFoundException,
+    ServerNotReadyException,
+    UnsupportedOperationException,
+)
 
 
 def axis_param_catalog(message, runtime, client):
-    response_type = "system/axis/param_catalog"
+    return legacy_status_request_response(
+        message,
+        client,
+        lambda: axis_param_catalog_data(message, runtime),
+    )
+
+
+def axis_param_catalog_data(message, runtime):
     try:
         axis_index = parse_int(message.get("axis", 0), 0)
-        device = selected_axis_device(runtime, axis_index)
-        profile = getattr(device, "device_profile", None)
-        catalog = getattr(profile, "esi_catalog", None)
-        if catalog is None:
-            raise ValueError(
-                f"Axis {axis_index} does not expose an ESI parameter catalog"
-            )
-        response = {
-            "type": response_type,
-            "ok": True,
-            "axis": axis_index,
-            "profile": getattr(profile, "name", ""),
-            "slave_index": slave_index_for_axis(runtime, axis_index),
-            "esi": str(catalog.path),
-            "objects": [
-                object_to_dict(obj)
-                for obj in catalog.root_object_infos()
-            ],
-        }
-    except Exception as exc:
-        response = {
-            "type": response_type,
-            "ok": False,
-            "axis": message.get("axis", 0),
-            "error": str(exc),
-        }
-    send_client_message(client, response)
+    except (TypeError, ValueError) as exc:
+        raise InvalidArgumentException("axis", "must be an integer") from exc
+    device = selected_axis_device(runtime, axis_index)
+    profile = getattr(device, "device_profile", None)
+    catalog = getattr(profile, "esi_catalog", None)
+    if catalog is None:
+        raise UnsupportedOperationException("axis_parameter_catalog")
+    return {
+        "axis": axis_index,
+        "profile": getattr(profile, "name", ""),
+        "slave_index": slave_index_for_axis(runtime, axis_index),
+        "esi": str(catalog.path),
+        "objects": [object_to_dict(obj) for obj in catalog.root_object_infos()],
+    }
 
 
 def selected_axis_device(runtime, axis_index):
-    axes = runtime.device_manager.axes
+    try:
+        axes = runtime.device_manager.axes
+    except AttributeError as exc:
+        raise ServerNotReadyException("axis devices are unavailable") from exc
     axis_index = int(axis_index)
     if axis_index < 0 or axis_index >= len(axes.devices):
-        raise ValueError(f"Invalid axis index: {axis_index}")
+        raise ResourceNotFoundException("axis", axis_index)
     return axes.devices[axis_index]
 
 

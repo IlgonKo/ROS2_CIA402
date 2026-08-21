@@ -1,23 +1,37 @@
-from motion_server.api import public_command_name, reject_command_message, send_client_message
 from motion_server.api.decoder import selected_io_device
-from motion_server.api.encoder import io_device_snapshot
+from motion_server.api.encoder import (
+    io_device_snapshot,
+    legacy_status_request_response,
+)
+from motion_server.failure import ResourceNotFoundException, ServerNotReadyException
 
 
 def input_read(message, runtime, state, client):
-    command = public_command_name(message)
+    return legacy_status_request_response(
+        message,
+        client,
+        lambda: input_read_data(message, runtime),
+        include_ok=False,
+    )
+
+
+def input_read_data(message, runtime):
+    selector = message.get("io", message.get("id"))
     try:
         device = selected_io_device(
             runtime,
-            io_id=message.get("io", message.get("id")),
+            io_id=selector,
             slave_index=message.get("slave_index"),
         )
-    except Exception as exc:
-        reject_command_message(client, command, str(exc))
-        return
+    except AttributeError as exc:
+        raise ServerNotReadyException("I/O devices are unavailable") from exc
+    except (TypeError, ValueError) as exc:
+        raise ResourceNotFoundException("io", selector) from exc
 
     response = io_device_snapshot(
         device,
         include_raw=bool(message.get("raw", False)),
     )
-    response["type"] = command
-    send_client_message(client, response)
+    response.pop("type", None)
+    response.pop("ok", None)
+    return response

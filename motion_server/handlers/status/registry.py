@@ -1,5 +1,11 @@
 from motion_server.api.decoder import selected_single_axis
-from motion_server.api.encoder import reject_command_message, send_client_message
+from motion_server.api.encoder import (
+    reject_command_message,
+    send_client_message,
+    legacy_status_request_response,
+    status_data,
+)
+from motion_server.failure import InvalidRequestException
 from motion_server.api.specification import status_message_types
 from motion_server.app.state import inactive_trajectory_state
 from motion_server.handlers.status.axis_parameter_read import read_parameter
@@ -35,46 +41,80 @@ def handle_advanced_status_rejection(message_type, runtime, state, client):
 
 
 def handle_server_status(message_type, message, runtime, state, client):
-    send_client_message(client, server_status_message(runtime, state))
+    return send_status_operation(
+        message,
+        client,
+        lambda: status_data(server_status_message(runtime, state)),
+    )
 
 
 def handle_bus_status(message_type, message, runtime, state, client):
-    send_client_message(client, bus_status_message(runtime, state))
+    return send_status_operation(
+        message,
+        client,
+        lambda: status_data(bus_status_message(runtime, state)),
+    )
 
 
 def handle_axes_status(message_type, message, runtime, state, client):
-    status = axes_status_message(runtime, state, client["id"])
-    status["type"] = message_type
-    send_client_message(client, status)
+    return send_status_operation(
+        message,
+        client,
+        lambda: status_data(axes_status_message(runtime, state, client["id"])),
+        include_ok=False,
+    )
 
 
 def handle_io_status(message_type, message, runtime, state, client):
-    send_client_message(
+    return send_status_operation(
+        message,
         client,
-        io_status_message(
-            runtime,
-            state,
-            include_raw=bool(message.get("raw", False)),
+        lambda: status_data(
+            io_status_message(
+                runtime,
+                state,
+                include_raw=bool(message.get("raw", False)),
+            ),
         ),
     )
 
 
 def handle_axis_status(message_type, message, runtime, state, client):
     if "axes" in message or "axis" not in message:
-        reject_command_message(
+        return send_status_operation(
+            message,
             client,
-            message_type,
-            f"{message_type} requires axis and does not accept axes.",
+            invalid_axis_status_request,
+            include_ok=False,
         )
-        return
-    try:
-        axis_index = selected_single_axis(message, runtime, message_type)
-    except Exception as exc:
-        reject_command_message(client, message_type, str(exc))
-        return
-    send_client_message(
+    return send_status_operation(
+        message,
         client,
-        axis_status_message(runtime, state, axis_index, client["id"]),
+        lambda: status_data(
+            axis_status_message(
+                runtime,
+                state,
+                selected_single_axis(message, runtime, message_type),
+                client["id"],
+            ),
+        ),
+        include_ok=False,
+    )
+
+
+def invalid_axis_status_request():
+    raise InvalidRequestException(
+        "Axis status requires axis and does not accept axes",
+    )
+
+
+def send_status_operation(message, client, operation, *, include_ok=True):
+    # TECH_DEBT[TD-005]: S10 sends this response directly after client migration.
+    return legacy_status_request_response(
+        message,
+        client,
+        operation,
+        include_ok=include_ok,
     )
 
 
