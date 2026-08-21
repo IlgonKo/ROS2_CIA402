@@ -8,6 +8,11 @@
 
 ### 완료
 
+- `TD-005-S06`을 완료하여 IO-Link ISDU read/write의 I/O, port binding, IODD index/subindex와 access
+  right 검증을 구체 Exception으로 구분하고 busy timeout 및 device status 처리를 통일했다.
+- ISDU SDO/transport 오류의 broad RuntimeError 포장을 제거하고 S03 backend Exception을 그대로
+  request boundary에 전달하면서 기존 `ok/error` 응답은 S10까지 유지했다.
+- S06 테스트 10개와 전체 unittest 83개를 통과했으며 제품 source 신규 파일 없이 기존 `iol.py`에서 구현했다.
 - `TD-005-S05`를 완료하여 AP parameter API와 startup write의 I/O/module validation, payload 오류,
   busy timeout, device reject 및 S03 backend Exception 전달을 공통 계약으로 migration했다.
 - AP parameter catalog가 없는 현재 범위에서는 parameter ID 사전 존재 검증을 RF-004에 유지하고,

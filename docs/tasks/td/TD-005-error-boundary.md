@@ -48,7 +48,7 @@ client의 복구 판단과 장애 분석이 불안정하다.
 | `TD-005-S03` | EtherCAT SDO 및 Mock/PySOEM Exception parity | S01 | `complete` |
 | `TD-005-S04` | Axis/IO EtherCAT parameter handler | S02, S03 | `complete` |
 | `TD-005-S05` | AP parameter 경로 | S03, S04 | `complete` |
-| `TD-005-S06` | IO-Link ISDU 경로 | S03, S04 | `pending` |
+| `TD-005-S06` | IO-Link ISDU 경로 | S03, S04 | `complete` |
 | `TD-005-S07A` | Motion/Axis command와 PartialFailure | S02-S04 | `pending` |
 | `TD-005-S07B` | IO command와 PartialFailure | S02-S06 | `pending` |
 | `TD-005-S07C` | Status/Catalog handler | S02-S06 | `pending` |
@@ -59,10 +59,10 @@ client의 복구 판단과 장애 분석이 불안정하다.
 
 ### 작업 재개 체크포인트
 
-- 현재 완료 단계: `TD-005-S05`
-- 다음 실행 단계: `TD-005-S06`
-- 다음 시작 위치: `motion_server/handlers/parameter_access/iol.py`와 IO-Link ISDU access의
-  IO/module/port/object validation, timeout 및 device status 처리를 S03-S05 패턴으로 migration한다.
+- 현재 완료 단계: `TD-005-S06`
+- 다음 실행 단계: `TD-005-S07A`
+- 다음 시작 위치: Motion/Axis command의 authority, state, limit와 대상별 실행 실패를 조사하고
+  다축 all-success/all-fail/partial-fail 결과 계약을 기존 command handler에 적용한다.
 - 현재 호환 상태: 서버는 legacy 응답만 송신한다. 신규 Success/Fail envelope는 아직 live API에 연결되지 않았다.
 - 보존할 사용자 변경: `device/cmmt/required_od.py`의 OD 기본값 및 형식 변경은 `TD-023` 범위이며
   TD-005 변경에 포함하지 않는다.
@@ -115,6 +115,7 @@ S01 완료 조건:
 | `TD-005-S03` | 기존 `sdo_access.py`, Mock/PySOEM raw transport와 Virtual OD Bridge의 공통 Exception 변환 | SDO parity 10개, Virtual OD 오류 2개 및 전체 49개 unittest | 통과 |
 | `TD-005-S04` | 기존 EtherCAT parameter handler의 operation/validation/boundary 및 임시 legacy adapter | `tests/test_ethercat_parameter_handlers.py` 12개 및 전체 61개 unittest | 통과 |
 | `TD-005-S05` | AP API/startup access의 target validation, status Exception 및 임시 legacy adapter | `tests/test_ap_parameter_handlers.py` 12개 및 전체 73개 unittest | 통과 |
+| `TD-005-S06` | IO-Link ISDU의 IODD validation, status Exception, backend 전달 및 임시 legacy adapter | `tests/test_iol_parameter_handlers.py` 10개 및 전체 83개 unittest | 통과 |
 
 S01 명세 추적:
 
@@ -280,6 +281,30 @@ S05에서는 기존 AP handler, CPX startup AP access, API package export와 S04
 | 제외 범위 | IODD catalog 확장, 자동 reconnect/retry, 지속 Diagnostic 정책은 다루지 않는다. |
 | 완료 조건 | 정상 read/write와 대표 validation/resource/communication/device 실패 테스트가 통과하고 Mock/실 backend의 공개 실패 의미가 일치한다. |
 | 인계 | S07B와 S07C가 IO-Link 실패를 별도 문자열 parsing 없이 집계할 수 있어야 한다. |
+
+S06 구현 계약:
+
+- I/O, configured IO-Link module/port binding, IODD variable와 subindex를 각각 식별한다.
+- 없는 대상은 `ResourceNotFoundException`, IODD access right 거부는
+  `PermissionDeniedException`, payload 오류는 `InvalidArgumentException`으로 구분한다.
+- ISDU busy timeout은 `OperationTimeoutException`, 그 밖의 nonzero status는 status code를 가진
+  `DeviceRejectedException`으로 처리한다.
+- SDO/transport Exception은 재포장하지 않고 S03 계약 그대로 request boundary에 전달한다.
+- S10 전까지 legacy adapter가 기존 `ok/error` 응답만 송신한다.
+
+S06 명세 추적:
+
+| 명세 항목 | 구현 위치 | 검증 테스트 | 범위 확대 여부 |
+| --- | --- | --- | --- |
+| 정상 ISDU read/write | `handlers/parameter_access/iol.py` | 정상 read/write payload 테스트 | 없음 |
+| IODD binding/index/subindex | IODD validation helpers | missing binding/index/subindex 테스트 | 없음 |
+| IODD access right | `validate_iodd_variable_access` | `test_iodd_access_denial_is_permission_denied` | 없음 |
+| timeout/device reject | ISDU status 처리 | busy/nonzero status 테스트 | 없음 |
+| S03 Exception 전달 | `isdu_sdo_step` | `test_backend_exception_is_not_wrapped` | 없음 |
+| legacy API 유지 | `legacy_isdu_response` | `test_live_handler_keeps_legacy_shape` | 임시 adapter만 추가 |
+
+S06에서는 기존 `handlers/parameter_access/iol.py`만 변경했다. 제품 source 신규 파일은 만들지 않았고,
+신규 기능, reconnect/retry와 Diagnostic은 변경하지 않았다.
 
 ### TD-005-S07A Motion/Axis command와 PartialFailure
 
