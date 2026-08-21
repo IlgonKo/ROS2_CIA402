@@ -24,6 +24,8 @@ client의 복구 판단과 장애 분석이 불안정하다.
   구현 범위를 확정한다. 전체 순서는 [Diagnostic 문서](../../diagnostic/README.md#설계-및-구현-순서)를 따른다.
 - 요청 응답은 [API Success/Fail 응답 계약](../../api/response_contract.md)의 공통 envelope로 migration한다.
 - client가 의존하는 code는 [API Failure Code](../../api/failure_codes.md)의 catalog와 변환 원칙을 따른다.
+- 내부 Exception은 [Exception과 API Failure Mapping](../../api/exception_mapping.md)의 중앙 table과
+  최상위 boundary에서 API Failure로 변환한다.
 - transport, protocol, validation과 runtime 오류 계층을 정의한다.
 - 오류 유형을 안정적인 Motion Server API failure code에 매핑한다.
 - 복구 가능한 오류만 해당 계층에서 처리하고 programming error는 숨기지 않는다.

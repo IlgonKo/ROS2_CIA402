@@ -285,6 +285,29 @@ Device Profile + ESI
   - 내부 Exception 계층과 mapper 계약을 확정한 뒤 inventory의 각 발생·catch 지점을 분류한다.
   - 새 code는 client 대응이 기존 code와 실제로 다를 때만 추가한다.
 
+## DEC-019 Exception과 API Failure를 중앙 Mapping Table로 연결
+
+- 상태: `accepted`
+- 결정일: 2026-08-21
+- 결정:
+  - 내부 예외는 `MotionServerException`을 기준으로 `Exception` suffix를 사용한다.
+  - 내부 계층은 API failure code 문자열을 직접 포함하지 않고 중앙 `EXCEPTION_FAILURE_MAPPINGS`가
+    Exception type을 `FailureCode`와 안전한 기본 message에 연결한다.
+  - mapper는 정확한 type, 가장 가까운 등록 상위 type, `INTERNAL_FAILURE` 순서로 mapping한다.
+  - 별도의 `FailureDefinitionRegistry`는 두지 않고 유효 code는 `FailureCode` Enum이 보장한다.
+  - 예상 가능한 실패만 MotionServerException 계층을 사용하고 programming error는 최상위 API
+    boundary까지 전달하여 log 후 `INTERNAL_FAILURE`로 변환한다.
+- 이유: mapping을 발생 지점에 하드코딩하면 동일 Exception의 API 표현이 달라질 수 있다. 반대로 별도
+  Definition Registry까지 두면 Enum과 mapping table의 책임을 중복한다.
+- 검토한 대안:
+  - Exception이 failure code를 직접 보유하는 방식은 내부 계층과 외부 API 계약을 결합하므로 채택하지 않는다.
+  - 별도 Failure Definition Registry는 현재 필요한 code 검증과 기본 message 관리가 기존 두 구성요소로
+    충족되므로 도입하지 않는다.
+- 영향:
+  - 상세 mapper 계약은 [Exception과 API Failure Mapping](api/exception_mapping.md)을 따른다.
+  - 다음 설계에서 구체적인 Exception 하위 계층과 public details 계약을 확정한다.
+  - handler별 broad catch는 inventory 분류 후 최상위 boundary 중심으로 migration한다.
+
 ## 새 결정 작성 양식
 
 ```text
