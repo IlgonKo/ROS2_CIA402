@@ -3,6 +3,11 @@ import time
 from ethercat.distributed_clock import DistributedClock
 from ethercat.sdo_access import SdoAccess
 from ethercat.working_counter import WorkingCounter
+from motion_server.failure import (
+    CommunicationException,
+    CommunicationTimeoutException,
+    MotionServerException,
+)
 
 
 class MockMaster:
@@ -54,10 +59,26 @@ class MockMaster:
         return self.working_counter.get_expected()
 
     def write_sdo(self, slave_index, index, subindex, payload):
-        self.slaves[int(slave_index)].write_sdo(index, subindex, payload)
+        try:
+            self.slaves[int(slave_index)].write_sdo(index, subindex, payload)
+        except Exception as exception:
+            self._raise_sdo_exception(exception, "sdo_write")
 
     def read_sdo(self, slave_index, index, subindex, size):
-        return self.slaves[int(slave_index)].read_sdo(index, subindex, size)
+        try:
+            return self.slaves[int(slave_index)].read_sdo(index, subindex, size)
+        except Exception as exception:
+            self._raise_sdo_exception(exception, "sdo_read")
+
+    @staticmethod
+    def _raise_sdo_exception(exception, operation):
+        if isinstance(exception, MotionServerException):
+            raise exception
+        if isinstance(exception, TimeoutError):
+            raise CommunicationTimeoutException(operation) from exception
+        if isinstance(exception, (ConnectionError, OSError)):
+            raise CommunicationException(operation) from exception
+        raise exception
 
     def send_processdata(self):
         if not self._processdata_prepared:

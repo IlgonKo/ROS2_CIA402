@@ -8,6 +8,12 @@
 
 ### 완료
 
+- `TD-005-S03`을 완료하여 Mock/PySOEM SDO read/write의 object-not-found, timeout, device reject와
+  communication failure를 공통 MotionServerException으로 통일하고 원래 원인을 chaining으로 보존했다.
+- Generic MockMaster는 device-specific `KeyError`를 해석하지 않고 Virtual OD Bridge가 OD lookup과
+  read-only 의미를 명시적 Exception으로 변환하도록 TD-016 책임 경계를 유지했다.
+- SDO parity 테스트 10개, Virtual OD 오류 테스트 2개와 전체 unittest 49개를 통과했으며 예상하지
+  못한 backend 및 typed-access 오류가 broad RuntimeError로 숨겨지지 않음을 검증했다.
 - S02의 별도 `api/response.py`, `api/boundary.py`가 TD-017의 기존 module 책임과 중복됨을 확인해
   response 기능은 `encoder.py`, request boundary는 `router.py`로 통합하고 두 파일을 제거했다.
 - 후속 TD-005 단계는 구현 전에 기존 module 책임과 변경 위치를 대조하고 독립 개념이 아닌 신규

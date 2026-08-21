@@ -4,6 +4,10 @@ from device.cmmt.profile import CMMTASDeviceProfile
 from device.virtual_servo_drive.servo_model import VirtualCiA402Servo
 from ethercat.mock_master import MockMaster
 from ethercat.mock_slave import MockSlave
+from motion_server.failure import (
+    DeviceRejectedException,
+    SdoObjectNotFoundException,
+)
 
 
 def create_virtual_axis_slave(axis_index=0):
@@ -73,6 +77,22 @@ class MockMasterSdoTest(unittest.TestCase):
         self.assertEqual(master.sdo.read_uint8(0, 0x2005, 0x02), 0)
         self.assertEqual(master.sdo.read_uint16(0, 0x2005, 0x04), 0)
         self.assertEqual(master.sdo.read_uint16(0, 0x2005, 0x05), 1)
+
+    def test_virtual_od_reports_missing_sdo_object(self):
+        master = MockMaster([create_virtual_axis_slave()])
+
+        with self.assertRaises(SdoObjectNotFoundException) as caught:
+            master.sdo.read_uint16(0, 0x7777, 3)
+
+        self.assertEqual(caught.exception.index, 0x7777)
+        self.assertEqual(caught.exception.subindex, 3)
+        self.assertIsInstance(caught.exception.__cause__, KeyError)
+
+    def test_virtual_od_reports_read_only_write_as_device_reject(self):
+        master = MockMaster([create_virtual_axis_slave()])
+
+        with self.assertRaises(DeviceRejectedException):
+            master.sdo.write_int32(0, 0x6064, 0, 1)
 
 
 if __name__ == "__main__":

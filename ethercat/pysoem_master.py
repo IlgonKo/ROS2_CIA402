@@ -6,6 +6,13 @@ import time
 from ethercat.distributed_clock import DistributedClock
 from ethercat.sdo_access import SdoAccess
 from ethercat.working_counter import WorkingCounter
+from motion_server.failure import (
+    CommunicationException,
+    CommunicationTimeoutException,
+    DeviceRejectedException,
+    MotionServerException,
+    SdoObjectNotFoundException,
+)
 
 
 AL_STATUS_DESCRIPTIONS = {
@@ -13,6 +20,8 @@ AL_STATUS_DESCRIPTIONS = {
     0x001E: "Invalid input configuration",
     0x001F: "Invalid watchdog configuration",
 }
+SDO_OBJECT_NOT_FOUND_ABORT_CODES = frozenset({0x06020000, 0x06090011})
+SDO_TIMEOUT_ABORT_CODES = frozenset({0x05040000})
 
 
 class PySOEMPdoSlave:
@@ -218,13 +227,56 @@ class PySOEMMaster:
 
     def write_sdo(self, slave_index, index, subindex, payload):
         self._require_connected()
-        self._master.slaves[slave_index].sdo_write(index, subindex, payload)
+        try:
+            self._master.slaves[slave_index].sdo_write(index, subindex, payload)
+        except Exception as exception:
+            self._raise_sdo_exception(exception, "sdo_write", index, subindex)
 
     def read_sdo(self, slave_index, index, subindex, size):
         self._require_connected()
-        return self._master.slaves[slave_index].sdo_read(
-            index, subindex, size=size
+        try:
+            return self._master.slaves[slave_index].sdo_read(
+                index, subindex, size=size
+            )
+        except Exception as exception:
+            self._raise_sdo_exception(exception, "sdo_read", index, subindex)
+
+    def _raise_sdo_exception(self, exception, operation, index, subindex):
+        if isinstance(exception, MotionServerException):
+            raise exception
+        if isinstance(exception, TimeoutError):
+            raise CommunicationTimeoutException(operation) from exception
+
+        sdo_error_type = getattr(self._pysoem, "SdoError", ())
+        if isinstance(exception, sdo_error_type):
+            abort_code = int(exception.abort_code)
+            if abort_code in SDO_OBJECT_NOT_FOUND_ABORT_CODES:
+                raise SdoObjectNotFoundException(index, subindex) from exception
+            if abort_code in SDO_TIMEOUT_ABORT_CODES:
+                raise CommunicationTimeoutException(operation) from exception
+            raise DeviceRejectedException(
+                operation,
+                device_code=abort_code,
+            ) from exception
+
+        communication_types = tuple(
+            exception_type
+            for name in (
+                "MailboxError",
+                "PacketError",
+                "WkcError",
+                "NetworkInterfaceNotOpenError",
+            )
+            if isinstance(
+                exception_type := getattr(self._pysoem, name, None),
+                type,
+            )
         )
+        if isinstance(exception, communication_types):
+            raise CommunicationException(operation) from exception
+        if isinstance(exception, (ConnectionError, OSError)):
+            raise CommunicationException(operation) from exception
+        raise exception
 
     def _register_emergency_callbacks(self):
         self._emergency_callbacks = []
