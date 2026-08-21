@@ -13,6 +13,7 @@ class CPXApIEcDeviceProfile:
     name = "cpx_ap_i_ec"
     is_motion_axis = False
     pdo_codec = CPXPdoCodec
+    capabilities = frozenset()
 
     def __init__(self, io_id=None):
         self.io_id = io_id

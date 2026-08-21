@@ -1,5 +1,7 @@
 import time
 
+from device.capabilities import DeviceCapability
+
 from motion_server.handlers.command.homing import finish_homing
 from motion_server.app.cycle import exchange
 from motion_server.handlers.status import axes_status_message
@@ -188,6 +190,13 @@ def keep_pdo_alive_for_seconds(runtime, seconds):
 
 def restart_axis(message, runtime, state, client):
     command = public_command_name(message)
+    if DeviceCapability.AXIS_RESTART not in DEVICE_PROFILE.capabilities:
+        reject_command_message(
+            client,
+            command,
+            f"Device profile {DEVICE_PROFILE.name!r} does not support axis restart.",
+        )
+        return
     try:
         axes = selected_axes(message, runtime, command)
     except Exception as exc:
@@ -226,7 +235,7 @@ def restart_axis(message, runtime, state, client):
         keep_pdo_alive_for_seconds(runtime, disable_settle_time)
         disabled_controlword = int(runtime.slaves[axis_index].rxpdo.controlword)
         disabled_statusword = int(runtime.slaves[axis_index].txpdo.statusword)
-        result = DEVICE_PROFILE.restart_axis(runtime, axis_index)
+        result = DEVICE_PROFILE.request_axis_restart(runtime, axis_index)
         result["disabled_controlword"] = f"0x{disabled_controlword:04X}"
         result["disabled_statusword"] = f"0x{disabled_statusword:04X}"
         result["disable_settle_time"] = disable_settle_time

@@ -1,5 +1,7 @@
 import time
 
+from device.capabilities import DeviceCapability
+
 from motion_server.config import (
     DEVICE_PROFILE,
     require_pdo_fields_for_mode,
@@ -8,7 +10,6 @@ from motion_server.config import (
 from motion_server.app.cycle import exchange
 from motion_server.control.axis_operations import (
     axis_count,
-    configure_motion_mode,
     faulted_axes,
     pv_reject_message,
 )
@@ -19,7 +20,6 @@ from device.virtual_servo_drive import VirtualCiA402Servo
 from ethercat.mock_master import MockMaster
 from ethercat.mock_slave import MockSlave
 from ethercat.pysoem_master import PySOEMMaster
-from motion_server.control.axis import Axis
 from motion_server.control.motion_controller import MotionController
 
 MOCK_AXIS_TYPE_USER_UNITS = {
@@ -63,10 +63,8 @@ def create_axis_runtime(args, motion_limits):
                 limits["acceleration"],
                 limits["deceleration"],
             )
-            axis = Axis(f"A{axis_index}", servo)
             slaves.append(MockSlave(
-                axis,
-                device_profile.pdo_configuration,
+                servo,
                 device_profile,
             ))
             print(
@@ -345,11 +343,8 @@ def read_axis_motion_limits(runtime):
 
 
 def initialize_drive(runtime, motion_mode, csp_interpolation_mode, startup_sdo_reader=None):
-    # TECH_DEBT[TD-004]: Startup style is inferred from method presence until
-    # runtime/backend capabilities are declared explicitly.
-    staged_startup = hasattr(runtime, "enter_operational")
     startup_sdo = None
-    runtime.connect(target_state="preop" if staged_startup else None)
+    runtime.connect(target_state="preop")
     require_txpdo_fields(runtime)
     clear_axis_restart_commands(runtime)
     if startup_sdo_reader is not None:
@@ -377,11 +372,8 @@ def initialize_drive(runtime, motion_mode, csp_interpolation_mode, startup_sdo_r
                     blocked_axes,
                 )
             )
-    if staged_startup:
-        configure_motion_mode_without_exchange(runtime, motion_mode)
-        runtime.enter_operational()
-    else:
-        configure_motion_mode(runtime, motion_mode)
+    configure_motion_mode_without_exchange(runtime, motion_mode)
+    runtime.enter_operational()
 
     exchange(runtime, cycles=10)
     runtime.sync_trajectory_to_actual_positions()
@@ -412,14 +404,12 @@ def initialize_drive(runtime, motion_mode, csp_interpolation_mode, startup_sdo_r
 
 
 def clear_axis_restart_commands(runtime):
-    # TECH_DEBT[TD-004]: Device restart support is currently an optional profile
-    # method instead of a declared capability.
-    if not hasattr(DEVICE_PROFILE, "clear_axis_restart_command"):
+    if DeviceCapability.AXIS_RESTART not in DEVICE_PROFILE.capabilities:
         return
 
     for axis_index in range(axis_count(runtime)):
         try:
-            result = DEVICE_PROFILE.clear_axis_restart_command(runtime, axis_index)
+            result = DEVICE_PROFILE.clear_axis_restart_request(runtime, axis_index)
             print(
                 "Axis restart command cleared: "
                 f"axis={axis_index} result={result}",

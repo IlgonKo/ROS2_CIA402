@@ -130,16 +130,6 @@ class AxisRuntime:
 
     def set_axis_motion_limits(self, *args, **kwargs):
         self.motion_controller.set_axis_motion_limits(*args, **kwargs)
-        axis_index = int(args[0] if args else kwargs["axis_index"])
-        max_velocity = args[1] if len(args) > 1 else kwargs["max_velocity"]
-        acceleration = args[2] if len(args) > 2 else kwargs["acceleration"]
-        deceleration = args[3] if len(args) > 3 else kwargs["deceleration"]
-        self.device_manager.axes.set_mock_motion_limits(
-            axis_index,
-            max_velocity,
-            acceleration,
-            deceleration,
-        )
 
     def set_axis_position_counts_per_api_unit(self, *args, **kwargs):
         self.motion_controller.set_axis_position_counts_per_api_unit(

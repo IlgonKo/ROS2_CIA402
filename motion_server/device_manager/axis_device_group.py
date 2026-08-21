@@ -162,21 +162,6 @@ class AxisDeviceGroup:
         for axis in self.devices:
             axis.rxpdo.mode_of_operation = mode_of_operation
 
-    def set_mock_motion_limits(
-        self,
-        axis_index,
-        max_velocity,
-        acceleration,
-        deceleration,
-    ):
-        axis = getattr(self.devices[axis_index], "axis", None)
-        if axis is not None:
-            axis.set_motion_limits(
-                self.motion_api_to_drive(axis_index, max_velocity),
-                self.motion_api_to_drive(axis_index, acceleration, "acceleration"),
-                self.motion_api_to_drive(axis_index, deceleration, "deceleration"),
-            )
-
     def _validate_bindings(self):
         axis_indices = [binding.axis_index for binding in self.axis_bindings]
         if axis_indices != list(range(len(self.axis_bindings))):

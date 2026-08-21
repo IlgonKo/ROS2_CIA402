@@ -1,13 +1,14 @@
 from motion_server.device_manager.axis_device_group import AxisDeviceGroup
 from motion_server.device_manager.io_device_group import IoDeviceGroup
 from motion_server.device_manager.sdo_access import LogicalSdoAccess
+from ethercat.backend_contract import validate_staged_backend
 
 
 class DeviceManager:
     """Owns EtherCAT devices and exposes logical axis/io groups."""
 
     def __init__(self, ethercat_master, axis_bindings):
-        self.ethercat_master = ethercat_master
+        self.ethercat_master = validate_staged_backend(ethercat_master)
         self.axes = AxisDeviceGroup(ethercat_master, axis_bindings)
         self.io = IoDeviceGroup(ethercat_master)
         self.sdo = LogicalSdoAccess(self.axes.sdo, self.io.sdo)
@@ -125,17 +126,3 @@ class DeviceManager:
 
     def set_mode_of_operation_all(self, mode_of_operation):
         return self.axes.set_mode_of_operation_all(mode_of_operation)
-
-    def set_mock_motion_limits(
-        self,
-        axis_index,
-        max_velocity,
-        acceleration,
-        deceleration,
-    ):
-        return self.axes.set_mock_motion_limits(
-            axis_index,
-            max_velocity,
-            acceleration,
-            deceleration,
-        )

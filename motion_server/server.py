@@ -407,13 +407,10 @@ def run_main_once():
                 args.axis_count,
             )
             for axis_index, scale in enumerate(axis_position_scales):
-                # TECH_DEBT[TD-004]: Runtime unit-update capability is still
-                # detected dynamically across backend implementations.
-                if hasattr(runtime, "set_axis_position_counts_per_api_unit"):
-                    runtime.set_axis_position_counts_per_api_unit(
-                        axis_index,
-                        scale,
-                    )
+                runtime.set_axis_position_counts_per_api_unit(
+                    axis_index,
+                    scale,
+                )
             default_profile_settings = [
                 [
                     axis_motion_api_to_drive(unit_state, axis_index, args.max_velocity),

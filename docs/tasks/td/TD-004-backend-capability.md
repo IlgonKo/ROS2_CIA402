@@ -110,4 +110,16 @@ DeviceCapability.AXIS_RESTART
 
 ## 완료 증거
 
-완료 시 interface 정의, migration 결과와 자동 테스트 링크를 기록한다.
+- `ethercat/backend_contract.py`에 staged backend lifecycle Protocol과 필수 method 검증을 추가했다.
+- MockMaster와 PySOEMMaster가 `connect(PRE-OP) -> enter_operational()` 계약을 구현하고,
+  Motion Server와 PySOEM smoke test가 동일한 순서로 호출한다.
+- MockMaster는 PRE-OP 연결 없이 OP 진입을 거부하며 lifecycle 호출 순서를 테스트로 검증한다.
+- `DeviceCapability.AXIS_RESTART`와 capability-method validation을 추가했다.
+- CMMT restart 동작을 `request_axis_restart()`, `clear_axis_restart_request()`,
+  `write_axis_restart_command()`로 통일하고 request의 `0 -> 1` 전이를 검증했다.
+- `Axis` forwarding wrapper와 `ServoInterface`를 제거하고 MockSlave가 Virtual Servo 및
+  OD Model/Bridge를 직접 사용하도록 변경했다.
+- runtime staged startup과 position scale 갱신의 `hasattr()` fallback을 제거했다.
+- `python -m unittest discover -s tests -v`: Mock/PySOEM 계약 테스트를 포함한 14개 테스트 통과.
+- CMMT-AS 1축 mock 전체 초기화에서 `connect:preop -> enter_operational` 순서와
+  CiA402 `Operation Enabled(0x0027)` 진입을 확인했다.

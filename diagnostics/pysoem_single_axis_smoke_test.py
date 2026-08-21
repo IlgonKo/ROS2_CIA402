@@ -182,7 +182,7 @@ def main():
     runtime = AxisRuntime(drive_manager, motion_controller)
 
     try:
-        runtime.connect()
+        runtime.connect(target_state="preop")
         runtime.set_mode_of_operation_all(8)
 
         if not args.skip_sdo_mode:
@@ -190,6 +190,7 @@ def main():
             mode_display = runtime.sdo.read_int8(0, 0x6061, 0)
             print(f"Mode display after SDO 0x6060=8: {mode_display}")
 
+        runtime.enter_operational()
         exchange(runtime, cycles=10)
         runtime.sync_trajectory_to_actual_positions()
         print_feedback("Connected:", runtime)

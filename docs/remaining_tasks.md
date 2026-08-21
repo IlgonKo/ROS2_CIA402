@@ -172,7 +172,7 @@ Tech Debt 상태 값은 `open`, `in_progress`, `complete`를 사용한다.
 
 ### TD-004 Backend Capability Fallback과 오래된 Servo Interface
 
-- 상태: `open`
+- 상태: `complete`
 - 우선순위: 보통
 - 요약: backend와 device profile의 선택 기능을 명시적인 capability 계약으로 표현한다.
 - 완료 조건:

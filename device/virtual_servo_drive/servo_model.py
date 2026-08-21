@@ -1,17 +1,12 @@
-from interfaces.servo_interface import ServoInterface
 from device.virtual_servo_drive.od_model import VirtualObjectDictionary
 from device.cia402 import CiA402StateMachine
 
 
-class VirtualCiA402Servo(ServoInterface):
+class VirtualCiA402Servo:
     def __init__(self, cycle_time=0.001, device_profile=None):
         self.cycle_time = cycle_time
-        # TECH_DEBT[TD-004]: Direct construction still guesses CMMT-AS when no
-        # profile is supplied. Require an explicit profile after callers migrate.
         if device_profile is None:
-            from device import get_device_profile
-
-            device_profile = get_device_profile("cmmt_as", axis_index=0, slave_index=0)
+            raise ValueError("VirtualCiA402Servo requires an explicit device_profile")
         self.device_profile = device_profile
 
         self.od = VirtualObjectDictionary(device_profile)
@@ -37,9 +32,26 @@ class VirtualCiA402Servo(ServoInterface):
 
         #self.init_object_dictionary()
 
-    # ---------------------------------
-    # Servo Interface
-    # ---------------------------------
+    def apply_rxpdo(self, rxpdo):
+        self.set_controlword(rxpdo.controlword)
+        self.set_mode(rxpdo.mode_of_operation)
+        if rxpdo.has_field("target_position"):
+            self.set_target_position(rxpdo.target_position)
+        if rxpdo.has_field("profile_velocity"):
+            self.set_profile_velocity(rxpdo.profile_velocity)
+        if rxpdo.has_field("target_velocity"):
+            self.set_target_velocity(rxpdo.target_velocity)
+        handled = {
+            "controlword",
+            "mode_of_operation",
+            "target_position",
+            "profile_velocity",
+            "target_velocity",
+        }
+        for obj in rxpdo.mapping:
+            if obj.index != 0 and obj.field is not None and obj.field not in handled:
+                self.od.write(obj.index, getattr(rxpdo, obj.field), obj.subindex)
+
     def set_controlword(self, controlword):
         self.od.write(0x6040, int(controlword))
 

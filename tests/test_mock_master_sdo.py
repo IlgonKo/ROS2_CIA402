@@ -4,13 +4,12 @@ from device.cmmt.profile import CMMTASDeviceProfile
 from device.virtual_servo_drive.servo_model import VirtualCiA402Servo
 from ethercat.mock_master import MockMaster
 from ethercat.mock_slave import MockSlave
-from motion_server.control.axis import Axis
 
 
 def create_virtual_axis_slave(axis_index=0):
     profile = CMMTASDeviceProfile(axis_index=axis_index, slave_index=axis_index)
     servo = VirtualCiA402Servo(device_profile=profile)
-    return MockSlave(Axis(f"A{axis_index}", servo), profile.pdo_configuration, profile)
+    return MockSlave(servo, profile)
 
 
 class GenericSlave:
@@ -43,10 +42,10 @@ class MockMasterSdoTest(unittest.TestCase):
         master = MockMaster([slave])
 
         master.sdo.write_int32(0, 0x607A, 0, 12345)
-        self.assertEqual(slave.axis.servo.od.read(0x607A), 12345)
+        self.assertEqual(slave.servo.od.read(0x607A), 12345)
         self.assertEqual(slave.rxpdo.target_position, 12345)
 
-        slave.axis.servo.od.write(0x6064, -2345)
+        slave.servo.od.write(0x6064, -2345)
         slave.od_bridge.od_to_txpdo()
         self.assertEqual(master.sdo.read_int32(0, 0x6064, 0), -2345)
         self.assertEqual(slave.txpdo.actual_position, -2345)

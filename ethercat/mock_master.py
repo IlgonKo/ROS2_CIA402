@@ -23,19 +23,32 @@ class MockMaster:
         self._outputs_sent = False
         self._processdata_prepared = False
         self._connected = False
+        self._state = "closed"
+        self.lifecycle_events = []
         self.last_diagnostics = []
         self.sdo = SdoAccess(self)
         for _ in self.slaves:
             self.working_counter.add_slave()
 
     def connect(self, target_state=None):
+        normalized_state = str(target_state or "").strip().lower()
+        if normalized_state not in {"preop", "pre_op"}:
+            raise ValueError("MockMaster staged startup requires target_state='preop'")
         self._connected = True
+        self._state = "preop"
+        self.lifecycle_events.append("connect:preop")
 
     def enter_operational(self):
+        if self._state != "preop":
+            raise RuntimeError("MockMaster must connect in PRE-OP before entering OP")
         self._connected = True
+        self._state = "op"
+        self.lifecycle_events.append("enter_operational")
 
     def close(self):
         self._connected = False
+        self._state = "closed"
+        self.lifecycle_events.append("close")
 
     def expected_wkc(self):
         return self.working_counter.get_expected()
