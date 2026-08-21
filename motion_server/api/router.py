@@ -1,7 +1,6 @@
 import json
 import logging
 
-from motion_server.handlers.command.registry import handle_command
 from motion_server.api.specification import (
     command_spec,
 )
@@ -18,17 +17,7 @@ from motion_server.api.encoder import (
     success_response,
 )
 from motion_server.api.validator import validate_command
-from motion_server.handlers.authority import (
-    client_has_command_authority,
-    handle_authority,
-    reject_command_when_not_initialized,
-    reject_command_without_authority,
-)
-from motion_server.handlers.status import (
-    handle_advanced_status_rejection,
-    handle_status,
-)
-from motion_server.failure import map_exception
+from motion_server.failure import MotionServerException, map_exception
 
 
 _LOGGER = logging.getLogger(__name__)
@@ -38,6 +27,15 @@ def request_response(request, operation, *, logger=None):
     context = ResponseContext.from_request(request)
     try:
         return success_response(context, operation())
+    except MotionServerException as exception:
+        active_logger = logger or _LOGGER
+        active_logger.warning(
+            "Motion Server request failed: type=%s request_id=%r failure=%s",
+            context.response_type,
+            context.request_id if context.has_request_id else None,
+            type(exception).__name__,
+        )
+        return fail_response(context, map_exception(exception))
     except Exception as exception:
         active_logger = logger or _LOGGER
         active_logger.exception(
@@ -46,6 +44,19 @@ def request_response(request, operation, *, logger=None):
             context.request_id if context.has_request_id else None,
         )
         return fail_response(context, map_exception(exception))
+
+
+from motion_server.handlers.authority import (  # noqa: E402
+    client_has_command_authority,
+    handle_authority,
+    reject_command_when_not_initialized,
+    reject_command_without_authority,
+)
+from motion_server.handlers.command.registry import handle_command  # noqa: E402
+from motion_server.handlers.status import (  # noqa: E402
+    handle_advanced_status_rejection,
+    handle_status,
+)
 
 
 def reject_advanced_only_command(client, message, state):

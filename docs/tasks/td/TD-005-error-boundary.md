@@ -46,7 +46,7 @@ client의 복구 판단과 장애 분석이 불안정하다.
 | `TD-005-S01` | FailureCode, Exception 계층, Mapper, PartialFailure 기반 | 없음 | `complete` |
 | `TD-005-S02` | Response encoder, request boundary와 기존 API adapter | S01 | `complete` |
 | `TD-005-S03` | EtherCAT SDO 및 Mock/PySOEM Exception parity | S01 | `complete` |
-| `TD-005-S04` | Axis/IO EtherCAT parameter handler | S02, S03 | `pending` |
+| `TD-005-S04` | Axis/IO EtherCAT parameter handler | S02, S03 | `complete` |
 | `TD-005-S05` | AP parameter 경로 | S03, S04 | `pending` |
 | `TD-005-S06` | IO-Link ISDU 경로 | S03, S04 | `pending` |
 | `TD-005-S07A` | Motion/Axis command와 PartialFailure | S02-S04 | `pending` |
@@ -59,10 +59,10 @@ client의 복구 판단과 장애 분석이 불안정하다.
 
 ### 작업 재개 체크포인트
 
-- 현재 완료 단계: `TD-005-S03`
-- 다음 실행 단계: `TD-005-S04`
-- 다음 시작 위치: `motion_server/handlers/parameter_access/ethercat.py`의 Axis/IO request validation,
-  target lookup과 SDO Exception 처리를 S02 request boundary 및 S03 backend 계약에 연결한다.
+- 현재 완료 단계: `TD-005-S04`
+- 다음 실행 단계: `TD-005-S05`
+- 다음 시작 위치: `motion_server/handlers/parameter_access/ap.py`와 기존 AP access 계층의
+  module/parameter validation, SDO 단계 오류와 protocol 결과를 S03/S04 패턴으로 migration한다.
 - 현재 호환 상태: 서버는 legacy 응답만 송신한다. 신규 Success/Fail envelope는 아직 live API에 연결되지 않았다.
 - 보존할 사용자 변경: `device/cmmt/required_od.py`의 OD 기본값 및 형식 변경은 `TD-023` 범위이며
   TD-005 변경에 포함하지 않는다.
@@ -113,6 +113,7 @@ S01 완료 조건:
 | `TD-005-S01` | `motion_server/failure/`의 code, model, Exception, mapping과 partial model | `tests/test_failure_contract.py` 9개 및 전체 24개 unittest | 통과 |
 | `TD-005-S02` | 기존 `api/encoder.py`의 `ResponseContext`/Success/Fail encoder와 `api/router.py`의 side-effect 없는 request boundary | `tests/test_api_response_boundary.py` 13개 및 전체 37개 unittest | 통과 |
 | `TD-005-S03` | 기존 `sdo_access.py`, Mock/PySOEM raw transport와 Virtual OD Bridge의 공통 Exception 변환 | SDO parity 10개, Virtual OD 오류 2개 및 전체 49개 unittest | 통과 |
+| `TD-005-S04` | 기존 EtherCAT parameter handler의 operation/validation/boundary 및 임시 legacy adapter | `tests/test_ethercat_parameter_handlers.py` 12개 및 전체 61개 unittest | 통과 |
 
 S01 명세 추적:
 
@@ -204,6 +205,33 @@ reconnect와 Diagnostic은 변경하지 않았다.
 | 제외 범위 | AP와 IO-Link 경로, Control Panel 호환 읽기, 전체 서버 envelope 전환은 하지 않는다. |
 | 완료 조건 | Axis/IO별 정상 read/write와 대표 실패 주입 테스트가 통과하고 handler 내부의 응답 문자열 조립 및 불필요한 broad catch가 제거된다. |
 | 인계 | S05-S07이 동일한 parameter/handler 패턴을 복제하지 않고 재사용할 수 있어야 한다. |
+
+S04 구현 계약:
+
+- Axis/IO read/write operation은 socket에 직접 접근하지 않고 성공 data를 반환하거나 구체
+  MotionServerException을 발생시킨다.
+- 필수 field와 숫자/data type/value 오류는 `InvalidRequestException` 또는
+  `InvalidArgumentException`, 없는 axis/IO는 `ResourceNotFoundException`으로 구분한다.
+- 일반 EtherCAT parameter command로 IO-Link ISDU object에 접근하면
+  `UnsupportedOperationException`을 발생시킨다.
+- S03 backend Exception은 handler에서 문자열로 합치거나 다시 분류하지 않고 request boundary까지 전달한다.
+- S10 전까지 `TECH_DEBT[TD-005]` legacy adapter가 신규 envelope를 기존 `ok/error` 응답으로 변환한다.
+  서버는 legacy와 신규 필드를 동시에 송신하지 않는다.
+
+S04 명세 추적:
+
+| 명세 항목 | 구현 위치 | 검증 테스트 | 범위 확대 여부 |
+| --- | --- | --- | --- |
+| Axis 정상 read/write | `parameter_access/ethercat.py` | `test_axis_read_operation_returns_parameter_data`, `test_axis_write_operation_returns_written_value` | 없음 |
+| IO selector 및 정상 read/write | `ethercat.py` | `test_io_read_and_write_operations_use_validated_selector` | 없음 |
+| request/argument/resource 분류 | parse/validation helpers | missing index/value, invalid axis 및 unknown IO 테스트 | 없음 |
+| unsupported ISDU 분류 | `validate_io_parameter_access` | `test_direct_iolink_object_access_is_unsupported` | 없음 |
+| S03 Exception 전달 | 순수 operation과 S02 boundary | `test_backend_exception_reaches_request_boundary`, `test_unexpected_backend_error_is_not_reclassified_by_handler` | 없음 |
+| legacy API 유지 | `_send_legacy_parameter_response` | live success/failure legacy shape 테스트 | 임시 adapter만 추가 |
+| 예상/예상 밖 logging 분리 | `api/router.py` | S02 expected/unexpected logging 테스트 | 계약 명확화 |
+
+S04에서는 기존 `api/router.py`와 `handlers/parameter_access/ethercat.py`만 변경했다. 제품 source 신규
+파일은 만들지 않았다. AP, IO-Link, parameter save, 전체 router cutover와 client는 변경하지 않았다.
 
 ### TD-005-S05 AP parameter 경로
 
