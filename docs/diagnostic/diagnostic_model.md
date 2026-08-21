@@ -3,7 +3,7 @@
 ## 목적과 범위
 
 이 문서는 Motion Server와 장치의 Alarm/Fault를 표현하는 공통 데이터 구조를 정의한다.
-API 요청의 Success/Error와 내부 Python Exception은 이 모델에 포함하지 않는다.
+API 요청의 Success/Fail과 내부 Python Exception은 이 모델에 포함하지 않는다.
 
 ## 객체 구성
 
@@ -159,4 +159,4 @@ def cleared_at(status):
 - `diagnostic_id` 생성 형식
 - clear된 Status의 메모리·파일 보존 기간
 - recovery handler와 reset/reconnect/restart 정책
-- 외부 API serialization과 notification 형식
+- 외부 API Success/Fail serialization과 notification 형식

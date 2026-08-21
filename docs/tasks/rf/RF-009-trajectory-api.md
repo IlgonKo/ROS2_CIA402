@@ -11,7 +11,7 @@
 ## 구현 범위
 
 - `system/axes/trajectory`와 `system/axes/trajectory_stop` payload 및 단위를 정의한다.
-- acceptance, progress, completion, cancel, stop와 error response를 정의한다.
+- acceptance, progress, completion, cancel, stop와 Fail response를 정의한다.
 - PP/PV/CSP별 지원 범위와 제한 조건을 정의한다.
 - 반복 동작, 단축 move와 ROS trajectory 입력의 책임 경계를 결정한다.
 

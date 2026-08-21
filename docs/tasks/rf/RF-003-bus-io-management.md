@@ -18,7 +18,7 @@
 
 ## 구현 범위
 
-결정된 계약에 따라 specification, validation, handler, error response와 공개 문서를 구현한다.
+결정된 계약에 따라 specification, validation, handler, Fail response와 공개 문서를 구현한다.
 
 ## 검증 계획
 

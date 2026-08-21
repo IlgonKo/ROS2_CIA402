@@ -192,7 +192,7 @@ Tech Debt 상태 값은 `open`, `in_progress`, `complete`를 사용한다.
 - 요약: 계층별 오류 유형과 Motion Server API 오류 응답 형식을 통일한다.
 - 완료 조건:
   - transport, protocol, validation과 runtime 오류 유형이 구분된다.
-  - 오류 유형별 API error code와 응답 형식이 문서화된다.
+  - 오류 유형별 API failure code와 Fail 응답 형식이 문서화된다.
   - broad exception은 승인된 최상위 경계로 제한되고 허용 위치가 검사된다.
   - 대표 오류와 복구 가능 여부를 검증하는 자동 테스트가 통과한다.
 - 상세: [TD-005 기술 명세](tasks/td/TD-005-error-boundary.md)

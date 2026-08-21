@@ -20,10 +20,10 @@ client의 복구 판단과 장애 분석이 불안정하다.
 
 ## 목표 구조 및 구현 범위
 
-- Diagnostic 데이터 모델, API Success/Error 계약, exception 지점 분류 순으로 선행 설계를 완료한 뒤
+- Diagnostic 데이터 모델, API Success/Fail 계약, exception 지점 분류 순으로 선행 설계를 완료한 뒤
   구현 범위를 확정한다. 전체 순서는 [Diagnostic 문서](../../diagnostic/README.md#설계-및-구현-순서)를 따른다.
 - transport, protocol, validation과 runtime 오류 계층을 정의한다.
-- 오류 유형을 안정적인 Motion Server API error code에 매핑한다.
+- 오류 유형을 안정적인 Motion Server API failure code에 매핑한다.
 - 복구 가능한 오류만 해당 계층에서 처리하고 programming error는 숨기지 않는다.
 - 최상위 process/client boundary의 broad exception 허용 정책을 문서화한다.
 
