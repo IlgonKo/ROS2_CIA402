@@ -1,5 +1,10 @@
 import time
 
+from motion_server.failure import (
+    DeviceRejectedException,
+    OperationTimeoutException,
+)
+
 
 AP_PARAMETER_ACCESS_INDEX = 0x27F0
 AP_DIRECTION_WRITE = 1
@@ -32,14 +37,16 @@ def write_ap_uint32_parameter(
         AP_DIRECTION_WRITE,
     )
     status = poll_ap_status(master, slave_index)
-    if int(status) != 0:
-        raise RuntimeError(
-            "AP parameter write failed: "
-            f"status=0x{int(status):04X} "
-            f"module={request['module']} "
-            f"ap_access_module={request['ap_access_module']} "
-            f"parameter_id=0x{request['parameter_id']:08X} "
-            f"instance={request['instance']}"
+    status = int(status)
+    if status == AP_STATUS_BUSY:
+        raise OperationTimeoutException(
+            "ap_parameter_write",
+            timeout_seconds=AP_STATUS_POLL_TIMEOUT,
+        )
+    if status != 0:
+        raise DeviceRejectedException(
+            "ap_parameter_write",
+            device_code=status,
         )
     return status
 

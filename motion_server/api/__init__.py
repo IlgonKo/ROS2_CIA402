@@ -20,7 +20,6 @@ from motion_server.api.encoder import (
     send_client_message,
     success_response,
 )
-from motion_server.api.router import request_response
 
 __all__ = [
     "command_name",
@@ -28,7 +27,6 @@ __all__ = [
     "parse_int",
     "parse_axis_indices",
     "public_command_name",
-    "request_response",
     "reject_command_message",
     "ResponseContext",
     "require_int32",

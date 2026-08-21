@@ -1,11 +1,15 @@
 import struct
 import time
 
-from motion_server.api import (
-    command_name,
-    parse_int,
-    public_command_name,
-    send_client_message,
+from motion_server.api.encoder import send_client_message
+from motion_server.api.validator import parse_int
+from motion_server.failure import (
+    DeviceAccessException,
+    DeviceRejectedException,
+    InvalidArgumentException,
+    InvalidRequestException,
+    OperationTimeoutException,
+    ResourceNotFoundException,
 )
 
 
@@ -30,113 +34,75 @@ AP_DATA_FORMATS = {
 
 
 def read_ap_parameter(message, runtime, client):
-    response_type = command_name(message) or "system/io/ap/param_read"
-    try:
-        request = parse_ap_parameter_request(message, require_value=False)
-        slave_index = runtime.device_manager.io.slave_index(request["io"])
-        write_ap_access_header(
-            runtime,
-            slave_index,
-            request,
-            direction=AP_DIRECTION_READ,
-            write_length=False,
-        )
-        status = poll_ap_status(
-            runtime,
-            slave_index,
-            request,
-        )
-        require_ap_success(status, request)
-        data_length = ap_sdo_step(
-            "read data length",
-            request,
-            runtime.ethercat_master.sdo.read_uint16,
-            slave_index,
-            AP_PARAMETER_ACCESS_INDEX,
-            6,
-        )
-        read_length = min(
-            request["length"],
-            max(0, int(data_length)),
-            AP_MAX_DATA_BYTES,
-        )
-        payload = read_ap_data_payload(
-            runtime,
-            slave_index,
-            request,
-            read_length,
-        )
-        value = decode_ap_payload(payload, request["data_type"])
-    except Exception as exc:
-        send_client_message(
-            client,
-            ap_parameter_error_response(response_type, message, exc),
-        )
-        return
-
-    response = ap_parameter_response(response_type, request)
-    response.update({
-        "ok": True,
-        "status": status,
-        "length": data_length,
-        "data": bytes(payload).hex(),
-        "value": value,
-    })
-    send_client_message(client, response)
+    response = parameter_request_response(
+        message,
+        lambda: _read_ap_parameter(message, runtime),
+    )
+    send_client_message(client, legacy_ap_parameter_response(message, response))
 
 
 def write_ap_parameter(message, runtime, client):
-    response_type = public_command_name(message)
-    try:
-        request = parse_ap_parameter_request(message, require_value=True)
-        slave_index = runtime.device_manager.io.slave_index(request["io"])
-        payload = encode_ap_payload(message["value"], request["data_type"])
-        if len(payload) > AP_MAX_DATA_BYTES:
-            raise ValueError(
-                f"AP parameter payload too large: {len(payload)} bytes; "
-                f"max {AP_MAX_DATA_BYTES}"
-        )
-        request = dict(request)
-        payload = ap_write_payload(message, request, payload)
-        request["length"] = len(payload)
-        write_ap_access_header(
-            runtime,
-            slave_index,
-            request,
-            direction=None,
-            write_length=True,
-        )
-        write_ap_data_payload(runtime, slave_index, request, payload)
-        ap_sdo_step(
-            "write direction",
-            request,
-            runtime.ethercat_master.sdo.write_uint8,
-            slave_index,
-            AP_PARAMETER_ACCESS_INDEX,
-            1,
-            AP_DIRECTION_WRITE,
-        )
-        status = poll_ap_status(
-            runtime,
-            slave_index,
-            request,
-        )
-        require_ap_success(status, request)
-    except Exception as exc:
-        send_client_message(
-            client,
-            ap_parameter_error_response(response_type, message, exc),
-        )
-        return
+    response = parameter_request_response(
+        message,
+        lambda: _write_ap_parameter(message, runtime),
+    )
+    send_client_message(client, legacy_ap_parameter_response(message, response))
 
-    response = ap_parameter_response(response_type, request)
-    response.update({
-        "ok": True,
-        "status": status,
-        "length": request["length"],
-        "data": bytes(payload).hex(),
-    })
-    send_client_message(client, response)
+
+def parameter_request_response(message, operation):
+    # TECH_DEBT[TD-005]: Router owns this boundary after the S10 cutover.
+    from motion_server.api.router import request_response
+
+    return request_response(message, operation)
+
+
+def _read_ap_parameter(message, runtime):
+    request = parse_ap_parameter_request(message, require_value=False)
+    slave_index = validate_ap_target(runtime, request)
+    write_ap_access_header(
+        runtime, slave_index, request, direction=AP_DIRECTION_READ,
+        write_length=False,
+    )
+    status = poll_ap_status(runtime, slave_index, request)
+    require_ap_success(status, request)
+    data_length = ap_sdo_step(
+        "read data length", request,
+        runtime.ethercat_master.sdo.read_uint16,
+        slave_index, AP_PARAMETER_ACCESS_INDEX, 6,
+    )
+    read_length = min(request["length"], max(0, int(data_length)), AP_MAX_DATA_BYTES)
+    payload = read_ap_data_payload(runtime, slave_index, request, read_length)
+    value = decode_ap_payload(payload, request["data_type"])
+    return ap_parameter_data(
+        request, status=status, length=data_length,
+        data=bytes(payload).hex(), value=value,
+    )
+
+
+def _write_ap_parameter(message, runtime):
+    request = parse_ap_parameter_request(message, require_value=True)
+    slave_index = validate_ap_target(runtime, request)
+    payload = encode_ap_payload(message["value"], request["data_type"])
+    if len(payload) > AP_MAX_DATA_BYTES:
+        raise InvalidArgumentException("value", "exceeds the AP payload limit")
+    request = dict(request)
+    payload = ap_write_payload(message, request, payload)
+    request["length"] = len(payload)
+    write_ap_access_header(
+        runtime, slave_index, request, direction=None, write_length=True,
+    )
+    write_ap_data_payload(runtime, slave_index, request, payload)
+    ap_sdo_step(
+        "write direction", request,
+        runtime.ethercat_master.sdo.write_uint8,
+        slave_index, AP_PARAMETER_ACCESS_INDEX, 1, AP_DIRECTION_WRITE,
+    )
+    status = poll_ap_status(runtime, slave_index, request)
+    require_ap_success(status, request)
+    return ap_parameter_data(
+        request, status=status, length=request["length"],
+        data=bytes(payload).hex(),
+    )
 
 
 def write_ap_access_header(
@@ -200,13 +166,14 @@ def require_ap_success(status, request):
     status = int(status)
     if status == 0:
         return
-    raise RuntimeError(
-        "AP parameter access failed: "
-        f"status=0x{status:04X} "
-        f"module={request['module']} "
-        f"ap_access_module={request['ap_access_module']} "
-        f"parameter_id=0x{request['parameter_id']:08X} "
-        f"instance={request['instance']}"
+    if status == AP_STATUS_BUSY:
+        raise OperationTimeoutException(
+            "ap_parameter_access",
+            timeout_seconds=AP_STATUS_POLL_TIMEOUT,
+        )
+    raise DeviceRejectedException(
+        "ap_parameter_access",
+        device_code=status,
     )
 
 
@@ -230,31 +197,27 @@ def poll_ap_status(runtime, slave_index, request):
 
 def parse_ap_parameter_request(message, require_value):
     if "io" not in message:
-        raise ValueError("AP parameter commands require io")
+        raise InvalidRequestException("AP parameter commands require io")
     if "module" not in message and "slot" not in message:
-        raise ValueError("AP parameter commands require module")
+        raise InvalidRequestException("AP parameter commands require module")
     if "parameter_id" not in message:
-        raise ValueError("AP parameter commands require parameter_id")
+        raise InvalidArgumentException("parameter_id", "is required")
     if require_value and "value" not in message:
-        raise ValueError("system/io/ap/param_write requires value")
+        raise InvalidArgumentException("value", "is required")
 
     data_type = str(message.get("data_type", "bytes")).strip().lower()
-    module = parse_int(message.get("module", message.get("slot")), 0)
-    parameter_id = parse_int(message.get("parameter_id"), 0)
-    instance = parse_int(message.get("instance", 0), 0)
+    module = parse_ap_int(message, "module", alias="slot")
+    parameter_id = parse_ap_int(message, "parameter_id")
+    instance = parse_ap_int(message, "instance", default=0)
     length = parse_ap_length(message, data_type)
     if module < 0 or module > 0xFFFF:
-        raise ValueError(
-            f"Invalid AP module: {module}. "
-            "Use 0 for the CPX-AP-I-EC base/interface module, "
-            "or 1..N for AP modules declared in MOTION_SERVER_IO_<io>_MODULES."
-        )
+        raise InvalidArgumentException("module", "is outside uint16 range")
     if parameter_id < 0 or parameter_id > 0xFFFFFFFF:
-        raise ValueError(f"Invalid AP parameter_id: {parameter_id}")
+        raise InvalidArgumentException("parameter_id", "is outside uint32 range")
     if instance < 0 or instance > 0xFFFF:
-        raise ValueError(f"Invalid AP parameter instance: {instance}")
+        raise InvalidArgumentException("instance", "is outside uint16 range")
     if length < 0 or length > AP_MAX_DATA_BYTES:
-        raise ValueError(f"Invalid AP parameter length: {length}")
+        raise InvalidArgumentException("length", "is outside the AP payload range")
     validate_ap_length(data_type, length)
     validate_raw_ap_length(message, data_type, length)
 
@@ -269,19 +232,43 @@ def parse_ap_parameter_request(message, require_value):
     }
 
 
-def ap_sdo_step(step, request, operation, *args, **kwargs):
+def parse_ap_int(message, field, *, alias=None, default=None):
+    key = field if field in message else alias
+    if key is None or key not in message:
+        if default is not None:
+            return default
+        raise InvalidArgumentException(field, "is required")
     try:
-        return operation(*args, **kwargs)
-    except Exception as exc:
-        raise RuntimeError(
-            "AP parameter SDO step failed: "
-            f"step={step} "
-            f"module={request.get('module')} "
-            f"ap_access_module={request.get('ap_access_module')} "
-            f"parameter_id=0x{request['parameter_id']:08X} "
-            f"instance={request['instance']} "
-            f"error={exc}"
-        ) from exc
+        return parse_int(message.get(key), 0)
+    except (TypeError, ValueError) as exception:
+        raise InvalidArgumentException(
+            field,
+            "must be an integer",
+            public_value=message.get(key),
+        ) from exception
+
+
+def validate_ap_target(runtime, request):
+    try:
+        slave_index = runtime.device_manager.io.slave_index(request["io"])
+        device = runtime.device_manager.io.selected_device(slave_index=slave_index)
+    except (TypeError, ValueError) as exception:
+        raise ResourceNotFoundException("io", request["io"]) from exception
+
+    module = request["module"]
+    if module == 0:
+        return slave_index
+    layout = device["slave"].rxpdo.config.layout
+    if not any(int(item.slot) == module for item in layout.modules):
+        raise ResourceNotFoundException(
+            "ap_module",
+            f"{request['io']}:{module}",
+        )
+    return slave_index
+
+
+def ap_sdo_step(step, request, operation, *args, **kwargs):
+    return operation(*args, **kwargs)
 
 
 def ap_access_module_number(module):
@@ -318,7 +305,7 @@ def write_ap_data_payload(runtime, slave_index, request, payload):
 
 def parse_ap_length(message, data_type):
     if "length" in message:
-        return parse_int(message.get("length"), 0)
+        return parse_ap_int(message, "length")
     data_format = AP_DATA_FORMATS.get(data_type)
     if data_format is not None:
         return struct.calcsize(data_format)
@@ -331,9 +318,9 @@ def validate_ap_length(data_type, length):
         return
     expected = struct.calcsize(data_format)
     if int(length) != expected:
-        raise ValueError(
-            f"AP parameter length mismatch for {data_type}: "
-            f"expected {expected}, got {length}"
+        raise InvalidArgumentException(
+            "length",
+            f"must be {expected} for {data_type}",
         )
 
 
@@ -341,22 +328,35 @@ def validate_raw_ap_length(message, data_type, length):
     if data_type not in {"bytes", "hex", "byte_array", "char", "string", "ascii"}:
         return
     if "length" not in message and "value" not in message:
-        raise ValueError("AP raw byte parameter read requires length")
+        raise InvalidArgumentException("length", "is required for raw AP reads")
     if int(length) <= 0 and "value" not in message:
-        raise ValueError("AP raw byte parameter length must be greater than 0")
+        raise InvalidArgumentException("length", "must be greater than 0")
 
 
 def encode_ap_payload(value, data_type):
-    if data_type in {"bytes", "hex", "byte_array"}:
-        return parse_hex_payload(value)
-    if data_type in {"char", "string", "ascii"}:
-        return str(value).encode("ascii")
-    data_format = AP_DATA_FORMATS.get(data_type)
-    if data_format is None:
-        raise ValueError(f"Unsupported AP parameter data_type: {data_type}")
-    if data_type == "float32":
-        return struct.pack(data_format, float(value))
-    return struct.pack(data_format, int(str(value), 0))
+    try:
+        if data_type in {"bytes", "hex", "byte_array"}:
+            return parse_hex_payload(value)
+        if data_type in {"char", "string", "ascii"}:
+            return str(value).encode("ascii")
+        data_format = AP_DATA_FORMATS.get(data_type)
+        if data_format is None:
+            raise InvalidArgumentException(
+                "data_type",
+                "is not a supported AP parameter data type",
+                public_value=data_type,
+            )
+        if data_type == "float32":
+            return struct.pack(data_format, float(value))
+        return struct.pack(data_format, int(str(value), 0))
+    except InvalidArgumentException:
+        raise
+    except (TypeError, ValueError, OverflowError, struct.error) as exception:
+        raise InvalidArgumentException(
+            "value",
+            f"is invalid for {data_type}",
+            public_value=value,
+        ) from exception
 
 
 def ap_write_payload(message, request, payload):
@@ -368,9 +368,9 @@ def ap_write_payload(message, request, payload):
         return payload
     length = int(request["length"])
     if len(payload) > length:
-        raise ValueError(
-            f"AP parameter payload too long for requested length: "
-            f"payload={len(payload)} length={length}"
+        raise InvalidArgumentException(
+            "value",
+            "is longer than the requested AP payload length",
         )
     return payload + bytes(length - len(payload))
 
@@ -383,13 +383,14 @@ def decode_ap_payload(payload, data_type):
         return payload.rstrip(b"\x00").decode("ascii", errors="replace")
     data_format = AP_DATA_FORMATS.get(data_type)
     if data_format is None:
-        raise ValueError(f"Unsupported AP parameter data_type: {data_type}")
+        raise InvalidArgumentException(
+            "data_type",
+            "is not a supported AP parameter data type",
+            public_value=data_type,
+        )
     size = struct.calcsize(data_format)
     if len(payload) < size:
-        raise ValueError(
-            f"AP parameter payload too short for {data_type}: "
-            f"expected {size}, actual {len(payload)}"
-        )
+        raise DeviceAccessException("ap_parameter_short_payload")
     value = struct.unpack(data_format, payload[:size])[0]
     if data_type == "float32":
         return float(value)
@@ -407,9 +408,8 @@ def parse_hex_payload(value):
     return bytes(int(item) & 0xFF for item in value)
 
 
-def ap_parameter_response(response_type, request):
-    return {
-        "type": response_type,
+def ap_parameter_data(request, **values):
+    data = {
         "io": request["io"],
         "object_index": f"0x{AP_PARAMETER_ACCESS_INDEX:04X}",
         "module": request["module"],
@@ -419,21 +419,26 @@ def ap_parameter_response(response_type, request):
         "instance": request["instance"],
         "data_type": request["data_type"],
     }
+    data.update(values)
+    return data
 
 
-def ap_parameter_error_response(response_type, message, exc):
+def legacy_ap_parameter_response(message, response):
+    # TECH_DEBT[TD-005]: Remove this adapter when S10 enables envelopes.
+    if response["result"] == "success":
+        return {"type": response["type"], "ok": True, **response["data"]}
     parameter_id = message.get("parameter_id")
     module = message.get("module", message.get("slot"))
     try:
         parameter_id_hex = f"0x{parse_int(parameter_id, 0):08X}"
-    except Exception:
+    except (TypeError, ValueError):
         parameter_id_hex = None
     try:
         ap_access_module = ap_access_module_number(parse_int(module, 0))
-    except Exception:
+    except (TypeError, ValueError):
         ap_access_module = None
     return {
-        "type": response_type,
+        "type": response["type"],
         "ok": False,
         "io": message.get("io"),
         "object_index": f"0x{AP_PARAMETER_ACCESS_INDEX:04X}",
@@ -443,5 +448,5 @@ def ap_parameter_error_response(response_type, message, exc):
         "parameter_id_hex": parameter_id_hex,
         "instance": message.get("instance", 0),
         "data_type": str(message.get("data_type", "bytes")).strip().lower(),
-        "error": str(exc),
+        "error": response["failure"]["message"],
     }

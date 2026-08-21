@@ -5,9 +5,9 @@ from unittest.mock import Mock
 from motion_server.api import (
     ResponseContext,
     fail_response,
-    request_response,
     success_response,
 )
+from motion_server.api.router import request_response
 from motion_server.failure import (
     Failure,
     FailureCode,
@@ -94,11 +94,13 @@ class ApiResponseContractTests(unittest.TestCase):
         self.assertFalse(hasattr(api, "_add_request_id"))
 
     def test_response_contract_uses_existing_api_modules(self):
+        import motion_server.api as api
         import motion_server.api.encoder as encoder
         import motion_server.api.router as router
 
         self.assertIs(ResponseContext, encoder.ResponseContext)
         self.assertIs(request_response, router.request_response)
+        self.assertFalse(hasattr(api, "request_response"))
         api_directory = Path(encoder.__file__).parent
         self.assertFalse((api_directory / "response.py").exists())
         self.assertFalse((api_directory / "boundary.py").exists())

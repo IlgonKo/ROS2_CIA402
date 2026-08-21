@@ -47,7 +47,7 @@ client의 복구 판단과 장애 분석이 불안정하다.
 | `TD-005-S02` | Response encoder, request boundary와 기존 API adapter | S01 | `complete` |
 | `TD-005-S03` | EtherCAT SDO 및 Mock/PySOEM Exception parity | S01 | `complete` |
 | `TD-005-S04` | Axis/IO EtherCAT parameter handler | S02, S03 | `complete` |
-| `TD-005-S05` | AP parameter 경로 | S03, S04 | `pending` |
+| `TD-005-S05` | AP parameter 경로 | S03, S04 | `complete` |
 | `TD-005-S06` | IO-Link ISDU 경로 | S03, S04 | `pending` |
 | `TD-005-S07A` | Motion/Axis command와 PartialFailure | S02-S04 | `pending` |
 | `TD-005-S07B` | IO command와 PartialFailure | S02-S06 | `pending` |
@@ -59,10 +59,10 @@ client의 복구 판단과 장애 분석이 불안정하다.
 
 ### 작업 재개 체크포인트
 
-- 현재 완료 단계: `TD-005-S04`
-- 다음 실행 단계: `TD-005-S05`
-- 다음 시작 위치: `motion_server/handlers/parameter_access/ap.py`와 기존 AP access 계층의
-  module/parameter validation, SDO 단계 오류와 protocol 결과를 S03/S04 패턴으로 migration한다.
+- 현재 완료 단계: `TD-005-S05`
+- 다음 실행 단계: `TD-005-S06`
+- 다음 시작 위치: `motion_server/handlers/parameter_access/iol.py`와 IO-Link ISDU access의
+  IO/module/port/object validation, timeout 및 device status 처리를 S03-S05 패턴으로 migration한다.
 - 현재 호환 상태: 서버는 legacy 응답만 송신한다. 신규 Success/Fail envelope는 아직 live API에 연결되지 않았다.
 - 보존할 사용자 변경: `device/cmmt/required_od.py`의 OD 기본값 및 형식 변경은 `TD-023` 범위이며
   TD-005 변경에 포함하지 않는다.
@@ -114,6 +114,7 @@ S01 완료 조건:
 | `TD-005-S02` | 기존 `api/encoder.py`의 `ResponseContext`/Success/Fail encoder와 `api/router.py`의 side-effect 없는 request boundary | `tests/test_api_response_boundary.py` 13개 및 전체 37개 unittest | 통과 |
 | `TD-005-S03` | 기존 `sdo_access.py`, Mock/PySOEM raw transport와 Virtual OD Bridge의 공통 Exception 변환 | SDO parity 10개, Virtual OD 오류 2개 및 전체 49개 unittest | 통과 |
 | `TD-005-S04` | 기존 EtherCAT parameter handler의 operation/validation/boundary 및 임시 legacy adapter | `tests/test_ethercat_parameter_handlers.py` 12개 및 전체 61개 unittest | 통과 |
+| `TD-005-S05` | AP API/startup access의 target validation, status Exception 및 임시 legacy adapter | `tests/test_ap_parameter_handlers.py` 12개 및 전체 73개 unittest | 통과 |
 
 S01 명세 추적:
 
@@ -243,6 +244,31 @@ S04에서는 기존 `api/router.py`와 `handlers/parameter_access/ethercat.py`�
 | 제외 범위 | AP catalog 기능(RF-004), 재시도 정책, Diagnostic runtime은 구현하지 않는다. |
 | 완료 조건 | 정상 read/write 및 invalid payload, module-not-found, parameter-not-found, timeout, device reject 테스트와 Failure details allowlist 검증이 통과한다. |
 | 인계 | IO command와 Status/Catalog 작업이 AP 오류를 중앙 boundary에서 일관되게 처리할 수 있어야 한다. |
+
+S05 구현 계약:
+
+- API read/write는 순수 operation으로 실행하고 I/O와 AP module을 실제 runtime 구성에서 확인한다.
+- module `0`은 CPX-AP-I-EC interface module, 그 밖의 번호는 구성된 AP module slot과 일치해야 한다.
+- AP parameter catalog 기반 parameter ID 사전 검증은 RF-004 범위이므로 수행하지 않고 장치 status로 판정한다.
+- AP busy status가 timeout까지 유지되면 `OperationTimeoutException`, 그 밖의 nonzero status는
+  status code를 가진 `DeviceRejectedException`으로 처리한다.
+- SDO/transport Exception은 `ap_sdo_step`에서 다시 포장하지 않고 S03 계약 그대로 전달한다.
+- S10 전까지 `TECH_DEBT[TD-005]` legacy adapter가 기존 `ok/error` 응답만 송신한다.
+
+S05 명세 추적:
+
+| 명세 항목 | 구현 위치 | 검증 테스트 | 범위 확대 여부 |
+| --- | --- | --- | --- |
+| AP 정상 read/write | `handlers/parameter_access/ap.py` | `test_ap_read_returns_structured_data`, `test_ap_write_returns_payload_metadata` | 없음 |
+| I/O/module lookup | `validate_ap_target` | unknown IO/module 및 interface module 0 테스트 | 없음 |
+| request/payload validation | parse/encode helpers | invalid parameter ID/payload 테스트 | 없음 |
+| timeout/device reject | API 및 startup AP status 처리 | busy/nonzero status와 startup 공통 Exception 테스트 | 없음 |
+| S03 Exception 전달 | `ap_sdo_step` | `test_backend_exception_is_not_wrapped` | 없음 |
+| legacy API 유지 | `legacy_ap_parameter_response` | `test_live_handler_keeps_legacy_shape` | 임시 adapter만 추가 |
+| import 책임 | `api/__init__.py`, parameter handler 지연 연결 | 전체 module import 및 73개 회귀 테스트 | 없음 |
+
+S05에서는 기존 AP handler, CPX startup AP access, API package export와 S04 handler의 boundary 연결만
+변경했다. 제품 source 신규 파일은 만들지 않았다. AP catalog, retry/reconnect와 Diagnostic은 변경하지 않았다.
 
 ### TD-005-S06 IO-Link ISDU 경로
 
