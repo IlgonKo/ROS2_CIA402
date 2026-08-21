@@ -55,4 +55,12 @@ Device Profile + ESI
 
 ## 완료 증거
 
-완료 시 profile contract, 제거된 직접 의존과 OD/PDO 선택 테스트 결과를 기록한다.
+- `CMMTDeviceProfile`이 `object_dictionary_entries()`, `required_od_roles()`,
+  `pdo_configuration`을 제공하며 Virtual Servo는 CMMT 구현 모듈을 직접 참조하지 않는다.
+- `VirtualObjectDictionary`가 ESI의 전체 OD definition과 runtime value를 함께 관리하고
+  required OD 및 RxPDO/TxPDO metadata를 profile 기준으로 병합한다.
+- `VirtualOdBridge`의 direct OD, RxPDO와 TxPDO 접근이 동일 OD Model runtime value를 사용한다.
+- mock axis도 실제 CMMT profile과 동일한 축별 PDO configuration 환경변수 및 기본값을 사용한다.
+- 잘못된 PDO configuration 이름은 기본값으로 대체하지 않고 `ValueError`로 시작을 중단한다.
+- `python -m unittest discover -s tests -v`: 4개 자동 테스트 통과.
+- CMMT-AS mock runtime smoke test: 1축, `motion_server_default`, ESI OD 7,392개 구성 확인.

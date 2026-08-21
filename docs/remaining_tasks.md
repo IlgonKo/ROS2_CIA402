@@ -271,7 +271,7 @@ Tech Debt 상태 값은 `open`, `in_progress`, `complete`를 사용한다.
 
 ### TD-015 Virtual Servo Device Profile 기반 OD/PDO 구성 정리
 
-- 상태: `open`
+- 상태: `complete`
 - 우선순위: 보통
 - 요약: Virtual Servo의 OD/PDO 구성을 선택된 device profile 계약에 연결한다.
 - 완료 조건:

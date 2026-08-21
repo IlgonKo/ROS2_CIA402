@@ -184,14 +184,11 @@ def get_pdo_configuration(name=None, *, context="CMMT PDO configuration"):
     )
     try:
         return CMMT_PDO_CONFIGURATIONS[requested_name]
-    except KeyError:
-        print(
-            f"Unsupported {context}: {name!r}; "
-            f"using {DEFAULT_PDO_CONFIGURATION}. "
-            f"Supported: {', '.join(pdo_configuration_names())}",
-            flush=True,
-        )
-        return CMMT_PDO_CONFIGURATIONS[DEFAULT_PDO_CONFIGURATION]
+    except KeyError as exc:
+        raise ValueError(
+            f"Unsupported {context}: {name!r}. "
+            f"Supported: {', '.join(pdo_configuration_names())}"
+        ) from exc
 
 
 def pdo_configuration_from_env(axis_index=None, slave_index=None):
