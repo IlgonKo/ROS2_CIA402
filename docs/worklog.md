@@ -49,7 +49,7 @@
 
 - TD-005의 Python 오류 발생·catch 지점을 전수 조사하여 catch 144곳, broad catch 85곳,
   명시적 raise 233곳과 generic `RuntimeError` 42곳을 별도 inventory 문서에 기록했다.
-- 오류 inventory를 `docs/alarm_handling/alarm_list.md`에서 TD migration 자료로 유지하고,
+- 오류 inventory를 `docs/alarm_handling/alarm_point_list.md`에서 TD migration 자료로 유지하고,
   확정된 장기 alarm/error 계약도 같은 폴더의 별도 설계 문서로 분리하는 관리 원칙을 정했다.
 - 공개 계약과 내부 helper의 경계를 `DEC-014`로 확정하고, TD 계약표·추적표 작성 규칙과
   최소 구현체/누락/내부 helper 부재 테스트 원칙을 문서 가이드에 추가했다.
