@@ -23,3 +23,49 @@ field는 현재 client 호환을 위해 유지하며 S08D의 Diagnostic 직렬�
 서버 reset과 bus reconnect는 같은 프로세스의 `DiagnosticManager`를 새 runtime에 전달한다. 따라서
 재초기화 성공은 이 Fault를 resolve하지만 acknowledge 없이 제거하지 않는다. 전체 프로세스 재시작을
 넘는 영속 저장은 현재 범위에 포함하지 않는다.
+
+## Bus
+
+### BUS_PROCESS_DATA_INCOMPLETE
+
+| 항목 | 값 |
+| --- | --- |
+| Level | `FAULT` |
+| Source | `BUS:0` |
+| Latching | `true` |
+| 발생 조건 | EtherCAT WKC가 expected WKC와 3 cycle 연속 불일치함 |
+| Resolve 조건 | WKC가 expected WKC와 다시 일치함 |
+| Clear 조건 | resolve와 사용자 acknowledge가 모두 완료됨 |
+
+한 cycle의 WKC 불일치는 단발성 process-data 이상으로 보고 Diagnostic을 생성하지 않는다. 정상 cycle이
+한 번 관측되면 발생 전 연속 불일치 count를 초기화한다. 이미 발생한 Fault는 정상 cycle에서 resolve되지만
+latching이므로 acknowledge 전에는 clear되지 않는다.
+
+## Axis
+
+### AXIS_DRIVE_FAULT
+
+| 항목 | 값 |
+| --- | --- |
+| Level | `FAULT` |
+| Source | `AXIS:<configured index>` |
+| Latching | `true` |
+| 발생 조건 | CiA 402 statusword fault bit 3이 set됨 |
+| Resolve 조건 | statusword fault bit 3이 clear됨 |
+| Clear 조건 | resolve와 사용자 acknowledge가 모두 완료됨 |
+
+### AXIS_DRIVE_WARNING
+
+| 항목 | 값 |
+| --- | --- |
+| Level | `ALARM` |
+| Source | `AXIS:<configured index>` |
+| Latching | `false` |
+| 발생 조건 | CiA 402 statusword warning bit 7이 set됨 |
+| Resolve/Clear 조건 | statusword warning bit 7이 clear됨 |
+
+## IO
+
+현재 CPX-AP/IO-Link runtime PDO model에는 장치 health 또는 fault를 판정할 공통 신호가 없다. Bus WKC
+불일치만으로 특정 IO source를 추정하지 않으며, IO Diagnostic은 S08C2에서 device-profile별 health
+source와 판정 계약을 확정한 후 추가한다.

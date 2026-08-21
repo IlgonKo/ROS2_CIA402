@@ -1,5 +1,8 @@
 from motion_server.diagnostic.manager import DiagnosticManager
 from motion_server.diagnostic.definitions import (
+    AXIS_DRIVE_FAULT,
+    AXIS_DRIVE_WARNING,
+    BUS_PROCESS_DATA_INCOMPLETE,
     SERVER_INITIALIZATION_FAILED,
     SERVER_SOURCE,
 )
@@ -21,6 +24,9 @@ __all__ = [
     "DiagnosticSource",
     "DiagnosticSourceType",
     "DiagnosticStatus",
+    "AXIS_DRIVE_FAULT",
+    "AXIS_DRIVE_WARNING",
+    "BUS_PROCESS_DATA_INCOMPLETE",
     "SERVER_INITIALIZATION_FAILED",
     "SERVER_SOURCE",
     "cleared_at",

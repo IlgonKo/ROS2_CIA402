@@ -8,6 +8,12 @@
 
 ### 완료
 
+- `TD-005-S08C1`을 완료하여 정상 process-data cycle 직후 Bus WKC와 Axis statusword를 평가하는
+  runtime Diagnostic monitor를 연결했다.
+- 3회 연속 WKC 불일치는 latching Bus Fault, Axis fault bit는 latching Axis Fault, warning bit는
+  non-latching Axis Alarm으로 생성하고 조건 해제 시 resolve하도록 구현했다.
+- 단발성 WKC 누락과 API timeout은 Diagnostic으로 승격하지 않았으며 runtime 시험 8개와 전체
+  unittest 129개를 통과했다. IO health source 판정은 S08C2로 분리했다.
 - `TD-005-S08B`를 완료하여 startup 필수 초기화 실패를 latching
   `SERVER_INITIALIZATION_FAILED` Fault와 `SERVER:0` source로 연결했다.
 - DiagnosticManager를 runtime 원시 장치 진단과 분리하고 같은 프로세스의 reset/reconnect 재초기화 동안
