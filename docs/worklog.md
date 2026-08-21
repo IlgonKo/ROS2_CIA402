@@ -39,6 +39,9 @@
 
 ### 문서 및 운영
 
+- TD-023의 MotionController 제한 기준을 device OD readback으로 확정하고 기존
+  `MOTION_SERVER_MAX_VELOCITY`, `ACCELERATION`, `DECELERATION` fallback 제거와
+  필수 readback 실패의 initialization error 처리를 완료 조건에 반영했다.
 - profile/ESI 기반 OD Model을 SDO, PDO와 Virtual Servo의 단일 상태 경계로 사용하는 구조를
   `DEC-013`으로 확정하고 TD-004/015/016의 공통 정리 방향으로 연결했다.
 - staged startup을 모든 backend의 필수 lifecycle 계약으로, device별 선택 기능만 capability로 다루는
