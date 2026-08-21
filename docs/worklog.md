@@ -30,6 +30,7 @@
 
 ### 등록
 
+- 가상축 생성 직후 서버 motion limit 설정이 required OD 초기값을 덮어쓰는 실축과의 startup 정책 비대칭을 `TD-023`으로 등록했다.
 - 프로젝트·설치 경로 migration을 `TD-019`, legacy 실행 식별자 migration을 `TD-020`으로 등록했다.
 - ROS package 식별자는 `RF-008`, 사용자 노출 Axis Server 명칭은 `TD-003`에서 처리하도록 범위를 분리했다.
 - Windows launcher의 `PYTHONPATH` 중복 누적과 과도한 진단 출력을 `TD-021`로 등록했다.
