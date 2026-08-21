@@ -23,4 +23,3 @@ def request_response(request, operation, *, logger=None):
             context.request_id if context.has_request_id else None,
         )
         return fail_response(context, map_exception(exception))
-
