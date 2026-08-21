@@ -45,4 +45,11 @@ MockMaster -> MockSlave -> OD Bridge -> OD Model <-> Virtual Device Model
 
 ## 완료 증거
 
-완료 시 object access interface, MockMaster 의존성 검사와 회귀 테스트 결과를 기록한다.
+- `MockMaster.write_sdo()`/`read_sdo()`는 slave index routing과 raw payload 전달만 수행한다.
+- `MockSlave`가 object access interface를 제공하고 `VirtualOdBridge`에 위임한다.
+- SDO datatype 변환은 OD metadata를 기준으로 수행하며 RxPDO/TxPDO와 동일한 OD runtime value를 사용한다.
+- reset과 parameter save 부작용은 OD index가 아니라 profile의 OD role을 기준으로 Virtual OD Bridge가 처리한다.
+- `ethercat/mock_master.py`와 `ethercat/mock_slave.py`에서 device-specific OD index와 CMMT 의존을 제거했다.
+- 서로 다른 generic virtual slave routing, signed/float SDO, PDO 상태 공유와 parameter save 회귀 테스트를 추가했다.
+- `python -m unittest discover -s tests -v`: 기존 TD-015 테스트를 포함한 8개 자동 테스트 통과.
+- CMMT-AS 1축 mock의 전체 drive initialization과 CiA402 `Operation Enabled(0x0027)` 진입을 확인했다.

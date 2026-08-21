@@ -284,7 +284,7 @@ Tech Debt 상태 값은 `open`, `in_progress`, `complete`를 사용한다.
 
 ### TD-016 MockMaster의 Device-specific SDO 처리
 
-- 상태: `open`
+- 상태: `complete`
 - 우선순위: 높음
 - 요약: MockMaster에서 device-specific SDO 의미를 제거하고 virtual device에 위임한다.
 - 완료 조건:

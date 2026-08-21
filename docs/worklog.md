@@ -8,6 +8,13 @@
 
 ### 완료
 
+- TD-016을 완료하여 MockMaster의 device-specific SDO index, datatype 및 reset/save 처리를 제거하고
+  slave routing과 raw payload 전달만 담당하도록 정리했다.
+- MockSlave object access를 Virtual OD Bridge에 위임하고, SDO/PDO가 동일 OD runtime value를
+  공유하도록 통일했다.
+- SDO datatype 변환과 reset/parameter save 부작용을 profile OD metadata와 role 기반으로 처리하고
+  generic slave routing 및 Virtual Servo 회귀 테스트를 포함한 자동 테스트 8개를 통과했다.
+- CMMT-AS 1축 mock 전체 초기화에서 CiA402 Operation Enabled 상태 진입을 확인했다.
 - TD-015를 완료하여 Virtual Servo의 OD Model을 선택된 profile/ESI 기반의 전체 OD definition과
   runtime value 단일 저장소로 전환했다.
 - required OD와 RxPDO/TxPDO metadata 공급을 device profile 계약으로 이동하고 Virtual Servo의
