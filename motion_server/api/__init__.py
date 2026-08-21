@@ -13,16 +13,14 @@ from motion_server.api.decoder import (
     selected_single_axis,
 )
 from motion_server.api.encoder import (
-    reject_command_message,
-    send_client_message,
-)
-from motion_server.api.boundary import request_response
-from motion_server.api.response import (
     ResponseContext,
     fail_response,
     failure_value,
+    reject_command_message,
+    send_client_message,
     success_response,
 )
+from motion_server.api.router import request_response
 
 __all__ = [
     "command_name",

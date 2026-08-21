@@ -1,4 +1,5 @@
 import json
+import logging
 
 from motion_server.handlers.command.registry import handle_command
 from motion_server.api.specification import (
@@ -9,7 +10,13 @@ from motion_server.api.decoder import (
     command_name,
     public_command_name,
 )
-from motion_server.api.encoder import reject_command_message, send_client_message
+from motion_server.api.encoder import (
+    ResponseContext,
+    fail_response,
+    reject_command_message,
+    send_client_message,
+    success_response,
+)
 from motion_server.api.validator import validate_command
 from motion_server.handlers.authority import (
     client_has_command_authority,
@@ -21,6 +28,24 @@ from motion_server.handlers.status import (
     handle_advanced_status_rejection,
     handle_status,
 )
+from motion_server.failure import map_exception
+
+
+_LOGGER = logging.getLogger(__name__)
+
+
+def request_response(request, operation, *, logger=None):
+    context = ResponseContext.from_request(request)
+    try:
+        return success_response(context, operation())
+    except Exception as exception:
+        active_logger = logger or _LOGGER
+        active_logger.exception(
+            "Motion Server request failed: type=%s request_id=%r",
+            context.response_type,
+            context.request_id if context.has_request_id else None,
+        )
+        return fail_response(context, map_exception(exception))
 
 
 def reject_advanced_only_command(client, message, state):
