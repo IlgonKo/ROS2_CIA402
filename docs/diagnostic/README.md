@@ -1,0 +1,25 @@
+# Diagnostic 문서
+
+이 폴더는 Motion Server와 장치의 현재 운전 상태 및 그 수명 주기를 관리한다.
+용어와 API 결과의 경계는 [DEC-015](../decisions.md#dec-015-api-결과와-diagnostic-상태를-분리)를 따른다.
+
+`DiagnosticLevel`은 다음 세 값만 사용한다.
+
+- `NORMAL`: 활성 Alarm이나 Fault 없이 정상 운전 가능한 상태
+- `ALARM`: 확인이나 대응이 필요하지만 정상 운전을 계속할 수 있는 상태
+- `FAULT`: 운전이 제한·중단되거나 degraded 또는 unavailable인 상태
+
+API 요청의 `Success`와 `Error`는 Diagnostic에 포함하지 않는다. Python `Exception`은 내부 전달
+수단이며, 처리 결과와 운전 영향에 따라 API Error 또는 Alarm/Fault Diagnostic으로 각각 변환한다.
+
+## 현재 문서
+
+- [error_point_inventory.md](error_point_inventory.md): 현재 Python exception 발생·catch 지점과 migration inventory
+
+## 추가 예정 문서
+
+- Diagnostic model과 event/condition 수명 주기
+- Alarm/Fault 판정, acknowledge, clear 및 recovery 정책
+- Diagnostic code와 source/context 계약
+
+확정 전 설계안은 현재 동작처럼 기록하지 않는다.
