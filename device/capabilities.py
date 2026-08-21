@@ -9,7 +9,6 @@ _CAPABILITY_METHODS = {
     DeviceCapability.AXIS_RESTART: (
         "request_axis_restart",
         "clear_axis_restart_request",
-        "write_axis_restart_command",
     ),
 }
 

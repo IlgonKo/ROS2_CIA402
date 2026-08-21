@@ -11,11 +11,11 @@
 - TD-004를 완료하여 backend staged lifecycle과 device capability 계약을 명시적으로 정의했다.
 - MockMaster와 PySOEMMaster startup을 PRE-OP 설정 후 OP 진입 순서로 통일하고 method 존재 여부에
   따른 startup fallback을 제거했다.
-- CMMT axis restart를 `AXIS_RESTART` capability와 request/clear-request/write-command 계층으로
-  정리하고 `0 -> 1` request 전이를 자동 테스트로 고정했다.
+- CMMT axis restart의 `AXIS_RESTART` capability 계약을 request/clear-request로 정리하고,
+  write-command는 profile 내부 저수준 helper로 분리하여 `0 -> 1` request 전이를 자동 테스트로 고정했다.
 - mock 전용 Axis wrapper와 공통 계약이 아니었던 ServoInterface를 제거하고 MockSlave가
   Virtual Servo 및 OD Model/Bridge를 직접 사용하도록 변경했다.
-- backend/capability 자동 테스트를 포함한 14개 테스트와 CMMT-AS mock 전체 초기화를 통과했다.
+- backend/capability 자동 테스트를 포함한 15개 테스트와 CMMT-AS mock 전체 초기화를 통과했다.
 - TD-016을 완료하여 MockMaster의 device-specific SDO index, datatype 및 reset/save 처리를 제거하고
   slave routing과 raw payload 전달만 담당하도록 정리했다.
 - MockSlave object access를 Virtual OD Bridge에 위임하고, SDO/PDO가 동일 OD runtime value를

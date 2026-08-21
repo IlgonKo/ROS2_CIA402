@@ -62,6 +62,22 @@ class BackendCapabilityTest(unittest.TestCase):
         with self.assertRaisesRegex(TypeError, "request_axis_restart"):
             validate_device_capabilities(InvalidProfile())
 
+    def test_axis_restart_contract_does_not_require_write_helper(self):
+        class RestartProfile:
+            name = "restart"
+            capabilities = frozenset({DeviceCapability.AXIS_RESTART})
+
+            def request_axis_restart(self, master, axis_index):
+                pass
+
+            def clear_axis_restart_request(self, master, axis_index):
+                pass
+
+        self.assertEqual(
+            validate_device_capabilities(RestartProfile()),
+            frozenset({DeviceCapability.AXIS_RESTART}),
+        )
+
     def test_axis_restart_request_writes_zero_then_one(self):
         profile = CMMTASDeviceProfile(axis_index=0, slave_index=0)
         master = RecordingMaster()
