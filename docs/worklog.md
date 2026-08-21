@@ -8,6 +8,12 @@
 
 ### 완료
 
+- `TD-005-S04`를 완료하여 Axis/IO EtherCAT parameter read/write를 순수 operation, 구체 validation
+  Exception, S03 backend Exception 전달과 S02 request boundary 구조로 migration했다.
+- S10 전까지 기존 `ok/error` 응답만 보내는 추적 가능한 legacy adapter를 유지하고, 예상 가능한
+  MotionServerException은 간단한 warning으로, 예상 밖 오류만 stack trace로 기록하도록 구분했다.
+- S04 테스트 12개와 전체 unittest 61개를 통과했으며 제품 source 신규 파일 없이 기존
+  `api/router.py`와 `handlers/parameter_access/ethercat.py` 안에서 구현했다.
 - `TD-005-S03`을 완료하여 Mock/PySOEM SDO read/write의 object-not-found, timeout, device reject와
   communication failure를 공통 MotionServerException으로 통일하고 원래 원인을 chaining으로 보존했다.
 - Generic MockMaster는 device-specific `KeyError`를 해석하지 않고 Virtual OD Bridge가 OD lookup과

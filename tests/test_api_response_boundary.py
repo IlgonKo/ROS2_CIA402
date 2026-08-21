@@ -136,7 +136,8 @@ class RequestBoundaryTests(unittest.TestCase):
                 "details": {"resource_type": "axis", "resource_id": 3},
             },
         )
-        logger.exception.assert_called_once()
+        logger.warning.assert_called_once()
+        logger.exception.assert_not_called()
 
     def test_unexpected_exception_is_logged_and_hidden(self):
         logger = Mock()

@@ -1,9 +1,13 @@
 from motion_server.config import DEVICE_PROFILE
-from motion_server.api import (
-    command_name,
-    parse_int,
-    public_command_name,
-    send_client_message,
+from motion_server.api.decoder import public_command_name
+from motion_server.api.encoder import send_client_message
+from motion_server.api.router import request_response
+from motion_server.api.validator import parse_int
+from motion_server.failure import (
+    InvalidArgumentException,
+    InvalidRequestException,
+    ResourceNotFoundException,
+    UnsupportedOperationException,
 )
 
 
@@ -32,20 +36,18 @@ SDO_WRITERS = {
 }
 
 
-def sdo_response_type(message, default_type):
-    return command_name(message) or default_type
-
-
 def parse_sdo_request(message, runtime):
     data_type = normalize_sdo_data_type(message.get("data_type", "uint32"))
     if "axes" in message or "axis" not in message:
-        raise ValueError("Parameter commands require axis and do not accept axes")
-    axis_index = parse_int(message.get("axis", 0))
-    index = parse_int(message.get("index"), 0)
-    subindex = parse_int(message.get("subindex", 0))
+        raise InvalidRequestException(
+            "Parameter commands require axis and do not accept axes",
+        )
+    axis_index = parse_sdo_int(message, "axis")
+    index = parse_sdo_int(message, "index")
+    subindex = parse_sdo_int(message, "subindex", default=0)
 
     if axis_index < 0 or axis_index >= len(runtime.slaves):
-        raise ValueError(f"Invalid axis index: {axis_index}")
+        raise ResourceNotFoundException("axis", axis_index)
     length = parse_sdo_length(message, data_type)
     return axis_index, index, subindex, data_type, length
 
@@ -53,12 +55,27 @@ def parse_sdo_request(message, runtime):
 def parse_io_sdo_request(message):
     data_type = normalize_sdo_data_type(message.get("data_type", "uint32"))
     if "io" not in message:
-        raise ValueError("I/O parameter commands require io")
+        raise InvalidRequestException("I/O parameter commands require io")
     io_selector = message.get("io")
-    index = parse_int(message.get("index"), 0)
-    subindex = parse_int(message.get("subindex", 0))
+    index = parse_sdo_int(message, "index")
+    subindex = parse_sdo_int(message, "subindex", default=0)
     length = parse_sdo_length(message, data_type)
     return io_selector, index, subindex, data_type, length
+
+
+def parse_sdo_int(message, field, *, default=None):
+    if field not in message:
+        if default is not None:
+            return default
+        raise InvalidArgumentException(field, "is required")
+    try:
+        return parse_int(message.get(field), 0)
+    except (TypeError, ValueError) as exception:
+        raise InvalidArgumentException(
+            field,
+            "must be an integer",
+            public_value=message.get(field),
+        ) from exception
 
 
 def selected_single_axis(message, runtime, command):
@@ -78,208 +95,125 @@ def selected_single_axis(message, runtime, command):
 
 
 def read_parameter(message, runtime, client):
-    response_type = sdo_response_type(message, "system/axis/param_read")
-    try:
-        axis_index, index, subindex, data_type, length = parse_sdo_request(
-            message,
-            runtime,
-        )
-        value = read_sdo_value(runtime.sdo, axis_index, index, subindex, data_type, length)
-    except (TypeError, ValueError) as exc:
-        send_client_message(
-            client,
-            {
-                "type": response_type,
-                "ok": False,
-                "axis": message.get("axis", 0),
-                "index": message.get("index"),
-                "subindex": message.get("subindex", 0),
-                "data_type": normalize_sdo_data_type(
-                    message.get("data_type", "uint32")
-                ),
-                "error": str(exc),
-            },
-        )
-        return
-    except Exception as exc:
-        send_client_message(
-            client,
-            {
-                "type": response_type,
-                "ok": False,
-                "axis": axis_index,
-                "index": index,
-                "subindex": subindex,
-                "data_type": data_type,
-                "length": length,
-                "error": str(exc),
-            },
-        )
-        return
-
-    send_client_message(
+    _send_legacy_parameter_response(
         client,
-        {
-            "type": response_type,
-            "ok": True,
-            "axis": axis_index,
-            "index": index,
-            "subindex": subindex,
-            "data_type": data_type,
-            "length": length,
-            **sdo_value_response(data_type, value),
-        },
+        message,
+        request_response(message, lambda: _read_axis_parameter(message, runtime)),
+        "axis",
     )
 
 
 def write_parameter(message, runtime, client):
-    response_type = public_command_name(message)
-    try:
-        axis_index, index, subindex, data_type, _length = parse_sdo_request(
-            message,
-            runtime,
-        )
-        if "value" not in message:
-            raise ValueError("param_write requires value")
-        value = write_sdo_value(
-            runtime.sdo,
-            axis_index,
-            index,
-            subindex,
-            data_type,
-            message["value"],
-        )
-    except Exception as exc:
-        send_client_message(
-            client,
-            {
-                "type": response_type,
-                "ok": False,
-                "axis": message.get("axis", 0),
-                "index": message.get("index"),
-                "subindex": message.get("subindex", 0),
-                "data_type": str(message.get("data_type", "uint32")).strip().lower(),
-                "error": str(exc),
-            },
-        )
-        return
-
-    send_client_message(
+    _send_legacy_parameter_response(
         client,
-        {
-            "type": response_type,
-            "ok": True,
-            "axis": axis_index,
-            "index": index,
-            "subindex": subindex,
-            "data_type": data_type,
-            "value": value,
-        },
+        message,
+        request_response(message, lambda: _write_axis_parameter(message, runtime)),
+        "axis",
     )
 
 
 def read_io_parameter(message, runtime, client):
-    response_type = sdo_response_type(message, "system/io/param_read")
-    try:
-        io_selector, index, subindex, data_type, length = parse_io_sdo_request(message)
-        validate_io_parameter_access(index, subindex)
-        value = read_sdo_value(
-            runtime.sdo.io,
-            io_selector,
-            index,
-            subindex,
-            data_type,
-            length,
-        )
-    except (TypeError, ValueError) as exc:
-        send_client_message(
-            client,
-            {
-                "type": response_type,
-                "ok": False,
-                "io": message.get("io"),
-                "index": message.get("index"),
-                "subindex": message.get("subindex", 0),
-                "data_type": normalize_sdo_data_type(
-                    message.get("data_type", "uint32")
-                ),
-                "error": str(exc),
-            },
-        )
-        return
-    except Exception as exc:
-        send_client_message(
-            client,
-            {
-                "type": response_type,
-                "ok": False,
-                "io": io_selector,
-                "index": index,
-                "subindex": subindex,
-                "data_type": data_type,
-                "length": length,
-                "error": str(exc),
-            },
-        )
-        return
-
-    send_client_message(
+    _send_legacy_parameter_response(
         client,
-        {
-            "type": response_type,
-            "ok": True,
-            "io": io_selector,
-            "index": index,
-            "subindex": subindex,
-            "data_type": data_type,
-            "length": length,
-            **sdo_value_response(data_type, value),
-        },
+        message,
+        request_response(message, lambda: _read_io_parameter(message, runtime)),
+        "io",
     )
 
 
 def write_io_parameter(message, runtime, client):
-    response_type = public_command_name(message)
-    try:
-        io_selector, index, subindex, data_type, _length = parse_io_sdo_request(message)
-        validate_io_parameter_access(index, subindex)
-        if "value" not in message:
-            raise ValueError("param_write requires value")
-        value = write_sdo_value(
-            runtime.sdo.io,
-            io_selector,
-            index,
-            subindex,
-            data_type,
-            message["value"],
-        )
-    except Exception as exc:
-        send_client_message(
-            client,
-            {
-                "type": response_type,
-                "ok": False,
-                "io": message.get("io"),
-                "index": message.get("index"),
-                "subindex": message.get("subindex", 0),
-                "data_type": str(message.get("data_type", "uint32")).strip().lower(),
-                "error": str(exc),
-            },
-        )
-        return
-
-    send_client_message(
+    _send_legacy_parameter_response(
         client,
-        {
-            "type": response_type,
-            "ok": True,
-            "io": io_selector,
-            "index": index,
-            "subindex": subindex,
-            "data_type": data_type,
-            "value": value,
-        },
+        message,
+        request_response(message, lambda: _write_io_parameter(message, runtime)),
+        "io",
     )
+
+
+def _read_axis_parameter(message, runtime):
+    axis, index, subindex, data_type, length = parse_sdo_request(message, runtime)
+    value = read_sdo_value(runtime.sdo, axis, index, subindex, data_type, length)
+    data = _parameter_data("axis", axis, index, subindex, data_type, value)
+    data["length"] = length
+    return data
+
+
+def _write_axis_parameter(message, runtime):
+    axis, index, subindex, data_type, _length = parse_sdo_request(message, runtime)
+    value = required_sdo_write_value(message)
+    written = write_sdo_value(
+        runtime.sdo, axis, index, subindex, data_type, value,
+    )
+    return _parameter_data("axis", axis, index, subindex, data_type, written)
+
+
+def _read_io_parameter(message, runtime):
+    io_selector, index, subindex, data_type, length = parse_io_sdo_request(message)
+    validate_io_selector(runtime, io_selector)
+    validate_io_parameter_access(index, subindex)
+    value = read_sdo_value(
+        runtime.sdo.io, io_selector, index, subindex, data_type, length,
+    )
+    data = _parameter_data(
+        "io", io_selector, index, subindex, data_type, value,
+    )
+    data["length"] = length
+    return data
+
+
+def _write_io_parameter(message, runtime):
+    io_selector, index, subindex, data_type, _length = parse_io_sdo_request(message)
+    validate_io_selector(runtime, io_selector)
+    validate_io_parameter_access(index, subindex)
+    value = required_sdo_write_value(message)
+    written = write_sdo_value(
+        runtime.sdo.io, io_selector, index, subindex, data_type, value,
+    )
+    return _parameter_data(
+        "io", io_selector, index, subindex, data_type, written,
+    )
+
+
+def _parameter_data(target_name, target, index, subindex, data_type, value):
+    return {
+        target_name: target,
+        "index": index,
+        "subindex": subindex,
+        "data_type": data_type,
+        **sdo_value_response(data_type, value),
+    }
+
+
+def required_sdo_write_value(message):
+    if "value" not in message:
+        raise InvalidArgumentException("value", "is required")
+    return message["value"]
+
+
+def validate_io_selector(runtime, io_selector):
+    try:
+        runtime.device_manager.io.slave_index(io_selector)
+    except (TypeError, ValueError) as exception:
+        raise ResourceNotFoundException("io", io_selector) from exception
+
+
+def _send_legacy_parameter_response(client, message, response, target_name):
+    # TECH_DEBT[TD-005]: Remove this adapter when S10 enables envelopes.
+    if response["result"] == "success":
+        legacy = {"type": response["type"], "ok": True, **response["data"]}
+    else:
+        legacy = {
+            "type": response["type"],
+            "ok": False,
+            target_name: message.get(target_name),
+            "index": message.get("index"),
+            "subindex": message.get("subindex", 0),
+            "data_type": normalize_sdo_data_type(
+                message.get("data_type", "uint32"),
+            ),
+            "error": response["failure"]["message"],
+        }
+    send_client_message(client, legacy)
 
 
 def normalize_sdo_data_type(data_type):
@@ -297,13 +231,28 @@ def parse_sdo_length(message, data_type):
     if data_type != "string":
         return None
     if "length" in message:
-        return parse_int(message.get("length"), 0)
+        length = parse_sdo_int(message, "length")
+        if length <= 0:
+            raise InvalidArgumentException("length", "must be greater than 0")
+        return length
     raw_type = str(message.get("data_type", "")).strip().lower()
     if raw_type.startswith("string(") and raw_type.endswith(")"):
-        return parse_int(raw_type[len("string("):-1], 0)
-    raise ValueError(
-        "String SDO access requires length, for example "
-        "'length': 12 or data_type 'STRING(12)'."
+        try:
+            length = parse_int(raw_type[len("string("):-1], 0)
+        except (TypeError, ValueError) as exception:
+            raise InvalidArgumentException(
+                "data_type",
+                "contains an invalid string length",
+            ) from exception
+        if length <= 0:
+            raise InvalidArgumentException(
+                "data_type",
+                "string length must be greater than 0",
+            )
+        return length
+    raise InvalidArgumentException(
+        "length",
+        "is required for string SDO access",
     )
 
 
@@ -312,7 +261,11 @@ def read_sdo_value(sdo, selector, index, subindex, data_type, length):
         return sdo.read_string(selector, index, subindex, length)
     reader_name = SDO_READERS.get(data_type)
     if reader_name is None:
-        raise ValueError(f"Unsupported SDO data type: {data_type}")
+        raise InvalidArgumentException(
+            "data_type",
+            "is not a supported SDO data type",
+            public_value=data_type,
+        )
     return getattr(sdo, reader_name)(selector, index, subindex)
 
 
@@ -323,8 +276,23 @@ def write_sdo_value(sdo, selector, index, subindex, data_type, raw_value):
         return value
     writer_name = SDO_WRITERS.get(data_type)
     if writer_name is None:
-        raise ValueError(f"Unsupported SDO data type: {data_type}")
-    value = float(raw_value) if data_type == "float32" else int(str(raw_value), 0)
+        raise InvalidArgumentException(
+            "data_type",
+            "is not a supported SDO data type",
+            public_value=data_type,
+        )
+    try:
+        value = (
+            float(raw_value)
+            if data_type == "float32"
+            else int(str(raw_value), 0)
+        )
+    except (TypeError, ValueError, OverflowError) as exception:
+        raise InvalidArgumentException(
+            "value",
+            f"is invalid for {data_type}",
+            public_value=raw_value,
+        ) from exception
     getattr(sdo, writer_name)(selector, index, subindex, value)
     return value
 
@@ -348,12 +316,9 @@ def sdo_value_response(data_type, value):
 
 def validate_io_parameter_access(index, subindex):
     if is_cpx_isdu_access_object(index):
-        raise ValueError(
-            "Direct SDO access to CPX IO-Link ISDU objects "
-            f"0x{int(index):04X}:xx is blocked. "
-            "Use a dedicated IO-Link ISDU command instead; generic "
-            "system/io/param_read and param_write are only for ordinary "
-            "EtherCAT OD objects."
+        raise UnsupportedOperationException(
+            "io_ethercat_parameter_access",
+            "Use the dedicated IO-Link ISDU command for this object",
         )
 
 
