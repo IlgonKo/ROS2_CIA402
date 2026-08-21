@@ -22,6 +22,7 @@
 - `diagnostics/check_legacy_names.py`를 추가해 허용 목록 밖의 과거 명칭이 다시 추가되지 않게 했다.
 - Windows launcher의 `PYTHONPATH` 중복 누적과 과도한 진단 출력을 `TD-021`로 등록했다.
 - Motion Server 초기화 로그의 조건부 설정 출력과 device 상태 분리를 `TD-022`로 등록했다.
+- Windows Service 자동 실행과 운영 로그 파일 보존 옵션을 `RF-011`로 등록했다.
 
 ## 2026-06-25
 

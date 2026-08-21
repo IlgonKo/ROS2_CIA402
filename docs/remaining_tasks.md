@@ -145,6 +145,18 @@ Tech Debt 상태 값은 `open`, `in_progress`, `complete`를 사용한다.
   - 신규 사용자가 문서만으로 두 환경의 Basic mode 설치와 smoke test를 재현한다.
 - 상세: [RF-010 기능 명세](tasks/rf/RF-010-user-documentation.md)
 
+### RF-011 Windows Service 실행 및 파일 로그 옵션
+
+- 상태: `planned`
+- 우선순위: 보통
+- 요약: Windows에서 Motion Server를 선택적으로 service로 자동 실행하고 운영 로그를 파일로 보존한다.
+- 완료 조건:
+  - Windows Service 설치, 제거, 시작, 중지, 재시작과 상태 확인 절차가 제공된다.
+  - 기존 foreground/console 실행과 service 실행이 동일한 Motion Server 설정을 사용한다.
+  - service 로그의 저장 경로, level, rotation, retention과 오류 시 fallback 정책이 설정 가능하다.
+  - clean Windows PC에서 부팅 자동 시작, 정상 종료, 장애 후 재시작과 로그 보존 검증이 통과한다.
+- 상세: [RF-011 기능 명세](tasks/rf/RF-011-windows-service-logging.md)
+
 ## Tech Debt
 
 ### TD-003 Axis Server 과거 명칭 잔존
