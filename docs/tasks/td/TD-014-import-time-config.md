@@ -30,4 +30,3 @@
 ## 완료 증거
 
 완료 시 configuration object, dependency graph와 격리 테스트 결과를 기록한다.
-

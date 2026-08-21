@@ -30,4 +30,3 @@ GUI toolkit object는 domain/state 계층으로 전달하지 않으며, packagin
 ## 완료 증거
 
 완료 시 모듈 책임 표, 중복 제거 결과와 panel 검증 결과를 기록한다.
-

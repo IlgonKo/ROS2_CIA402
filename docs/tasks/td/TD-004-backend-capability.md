@@ -32,4 +32,3 @@ device profile과 transport capability의 책임이 섞인다.
 ## 완료 증거
 
 완료 시 interface 정의, migration 결과와 자동 테스트 링크를 기록한다.
-

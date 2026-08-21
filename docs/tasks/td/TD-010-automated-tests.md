@@ -30,4 +30,3 @@ EtherCAT timing과 실제 drive behavior 검증은 CI mock test로 대체하지 
 ## 완료 증거
 
 완료 시 CI workflow, test inventory, 실행 시간과 hardware smoke-test 결과를 기록한다.
-

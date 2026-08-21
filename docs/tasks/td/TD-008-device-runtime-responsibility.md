@@ -30,4 +30,3 @@ CMMT profile, CPX module layout, virtual servo, PySOEM master와 server가 각�
 ## 완료 증거
 
 완료 시 책임 구조도, public interface, 회귀 및 실장치 시험 결과를 기록한다.
-

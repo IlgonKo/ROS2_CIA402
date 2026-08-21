@@ -16,4 +16,3 @@
 구현 중 발견한 세부사항은 해당 TD 문서에 기록한다. 여러 작업에 지속적으로 적용될 결정은
 [Design Decisions](../../decisions.md), 구현 완료 후의 현재 구조는 architecture/API 문서,
 실제 완료 결과는 [Work Log](../../worklog.md)에 반영한다.
-

@@ -30,4 +30,3 @@ continuation, indexed entry, explicit `axis:`/`io:` 형식이 실행 경로에 �
 ## 완료 증거
 
 완료 시 제거한 parser 목록, 공통 model과 fixture 테스트 결과를 기록한다.
-
