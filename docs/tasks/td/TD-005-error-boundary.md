@@ -59,10 +59,10 @@ client의 복구 판단과 장애 분석이 불안정하다.
 
 ### 작업 재개 체크포인트
 
-- 현재 완료 단계: `TD-005-S08A`
-- 다음 실행 단계: `TD-005-S08B`
-- 다음 시작 위치: startup 필수 실패를 Server source의 latching Initialization Fault로 생성하고,
-  degraded server 상태 및 기존 initialization error 표시와 함께 유지한다.
+- 현재 완료 단계: `TD-005-S08B`
+- 다음 실행 단계: `TD-005-S08C`
+- 다음 시작 위치: runtime Bus/Axis/IO 운전 영향 지점을 code와 source별 producer로 연결하되,
+  단발성 API 실패와 지속되는 Alarm/Fault 조건을 분리한다.
 - 현재 호환 상태: 서버는 legacy 응답만 송신한다. 신규 Success/Fail envelope는 아직 live API에 연결되지 않았다.
 - 보존할 사용자 변경: `device/cmmt/required_od.py`의 OD 기본값 및 형식 변경은 `TD-023` 범위이며
   TD-005 변경에 포함하지 않는다.
@@ -387,7 +387,7 @@ S08은 운전 영향 범위를 한 번에 변경하지 않고 다음 순서로 �
 | 하위 단계 | 범위 | 선행 단계 | 상태 |
 | --- | --- | --- | --- |
 | `TD-005-S08A` | Diagnostic model, 활성 저장소와 lifecycle core | S07C | `complete` |
-| `TD-005-S08B` | startup 필수 실패와 Initialization Fault 연결 | S08A | `pending` |
+| `TD-005-S08B` | startup 필수 실패와 Initialization Fault 연결 | S08A | `complete` |
 | `TD-005-S08C` | runtime Bus/Axis/IO Alarm·Fault producer와 API Fail 병행 | S08B | `pending` |
 | `TD-005-S08D` | 기존 status 경로의 Diagnostic 조회·직렬화 계약 연결 | S08C | `pending` |
 
@@ -418,6 +418,19 @@ S08A 완료 증거:
 - S08A lifecycle/model 테스트 13개와 전체 unittest 112개가 통과했다.
 - startup/runtime 연결, 외부 serialization, notification, 영속 이력과 recovery는 생성하지 않았다.
 - 현재 완료 단계는 `TD-005-S08A`, 다음 실행 단계는 `TD-005-S08B`다.
+
+#### TD-005-S08B 완료 증거
+
+- `SERVER_INITIALIZATION_FAILED`는 `SERVER:0`, `FAULT`, latching Definition으로 catalog에 등록했다.
+- `AxisRuntime.last_diagnostics` 원시 장치 readback과 별도로 `diagnostic_manager`를 소유한다.
+- server reset/bus reconnect의 runtime 재생성 동안 같은 manager를 유지하여 Fault 발생 건과 ID를
+  보존한다. 재초기화 성공은 resolve만 수행하며 acknowledge 전에는 clear하지 않는다.
+- startup 실패의 Exception 문자열은 Diagnostic `detail/context`에 저장하지 않고 기존 degraded server와
+  `initialization_error` 호환 상태는 유지한다.
+- 일반 운전 command의 `SERVER_NOT_READY` API Fail은 Initialization Fault를 clear하지 않으며,
+  reset/reconnect 계열 recovery command는 기존처럼 허용된다.
+- S08B startup Diagnostic 테스트 9개와 전체 unittest 121개가 통과했다.
+- 현재 완료 단계는 `TD-005-S08B`, 다음 실행 단계는 `TD-005-S08C`다.
 
 ### TD-005-S09 Control Panel/ROS 호환 읽기
 

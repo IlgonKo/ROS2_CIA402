@@ -8,6 +8,12 @@
 
 ### 완료
 
+- `TD-005-S08B`를 완료하여 startup 필수 초기화 실패를 latching
+  `SERVER_INITIALIZATION_FAILED` Fault와 `SERVER:0` source로 연결했다.
+- DiagnosticManager를 runtime 원시 장치 진단과 분리하고 같은 프로세스의 reset/reconnect 재초기화 동안
+  유지하여 성공 시 resolve, acknowledge 후 clear되는 lifecycle을 보존했다.
+- 기존 degraded server와 `initialization_error`, recovery command 허용을 유지하고 API Fail과
+  Diagnostic 독립성을 포함한 S08B 테스트 9개와 전체 unittest 121개를 통과했다.
 - `TD-005-S08A`를 완료하여 확정된 Diagnostic Definition/Source/History/Status model과 활성 lifecycle
   저장소를 구현했다.
 - detect, acknowledge, resolve, latching/non-latching clear, clear 전 재검출과 clear 후 신규 ID 재발,

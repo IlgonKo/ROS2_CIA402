@@ -34,6 +34,11 @@ from motion_server.app.cycle_diagnostics import (
     record_tx_history,
 )
 from motion_server.device_manager.axis_diagnostics import default_diagnostics
+from motion_server.diagnostic import DiagnosticManager
+from motion_server.diagnostic.startup import (
+    detect_initialization_fault,
+    resolve_initialization_fault,
+)
 from motion_server.app.startup import (
     create_axis_runtime,
     initialize_drive,
@@ -313,7 +318,7 @@ def restart_current_process():
     os.execv(sys.executable, [sys.executable, *sys.argv])
 
 
-def run_main_once():
+def run_main_once(diagnostic_manager=None):
     args = parse_args()
     if args.list_adapters:
         list_adapters()
@@ -332,6 +337,8 @@ def run_main_once():
         for _ in range(args.axis_count)
     ]
     runtime = create_axis_runtime(args, motion_limits)
+    if diagnostic_manager is not None:
+        runtime.diagnostic_manager = diagnostic_manager
 
     try:
         drive_initialized = False
@@ -344,6 +351,7 @@ def run_main_once():
             )
             drive_initialized = True
         except Exception as exc:
+            detect_initialization_fault(runtime)
             initialization_error = str(exc)
             print(
                 "Drive initialization failed; keeping Motion Server online: "
@@ -531,6 +539,7 @@ def run_main_once():
                 if axis_position_scales
                 else 1.0
             )
+            resolve_initialization_fault(runtime)
 
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as server:
             server.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
@@ -558,9 +567,10 @@ def run_main_once():
 
 
 def main():
+    diagnostic_manager = DiagnosticManager()
     while True:
         try:
-            run_main_once()
+            run_main_once(diagnostic_manager)
             return
         except ServerResetRequested:
             print(

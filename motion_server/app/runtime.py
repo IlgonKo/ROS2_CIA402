@@ -1,9 +1,18 @@
+from motion_server.diagnostic import DiagnosticManager
+
+
 class AxisRuntime:
     """Coordinates an EtherCAT master with an independent motion controller."""
 
-    def __init__(self, device_manager, motion_controller):
+    def __init__(
+        self,
+        device_manager,
+        motion_controller,
+        diagnostic_manager=None,
+    ):
         self.device_manager = device_manager
         self.motion_controller = motion_controller
+        self.diagnostic_manager = diagnostic_manager or DiagnosticManager()
         if len(self.device_manager.axis_devices) != self.motion_controller.axis_count:
             raise ValueError(
                 "axis device count must match MotionController axis_count"

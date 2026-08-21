@@ -1,4 +1,8 @@
 from motion_server.diagnostic.manager import DiagnosticManager
+from motion_server.diagnostic.definitions import (
+    SERVER_INITIALIZATION_FAILED,
+    SERVER_SOURCE,
+)
 from motion_server.diagnostic.models import (
     DiagnosticDefinition,
     DiagnosticHistory,
@@ -17,5 +21,7 @@ __all__ = [
     "DiagnosticSource",
     "DiagnosticSourceType",
     "DiagnosticStatus",
+    "SERVER_INITIALIZATION_FAILED",
+    "SERVER_SOURCE",
     "cleared_at",
 ]
