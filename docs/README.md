@@ -25,6 +25,7 @@
 | `tasks/td/TD-*.md` | TD별 현재 구조, 위험, 구현 범위와 검증 계획 | 전체 작업의 상태 요약 |
 | `api/README.md` | API 요청의 Success/Fail 결과 계약과 Diagnostic 경계 | 지속되는 서버·장치 운전 상태 |
 | `api/response_contract.md` | 공통 Success/Fail envelope와 request/notification 경계 | failure code taxonomy와 현재 구현 완료 주장 |
+| `api/failure_codes.md` | 안정적인 failure code catalog와 Exception 변환 원칙 | 내부 Exception 구현과 발생 지점별 migration 상태 |
 | `diagnostic/README.md` | NORMAL/ALARM/FAULT 운전 상태와 문서 구조 | 개별 API 요청의 성공·실패 결과 |
 | `diagnostic/diagnostic_model.md` | Diagnostic Definition, Source, History, Status와 clear 규칙 | API Fail 응답과 recovery 구현 정책 |
 | `diagnostic/error_point_inventory.md` | exception 발생·catch 지점의 현행 inventory와 migration 추적 | 미분류 지점을 확정된 API Fail이나 Diagnostic처럼 표현하는 내용 |
