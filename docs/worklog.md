@@ -6,6 +6,23 @@
 
 ## 2026-08-21
 
+### 완료
+
+- TD-003을 완료하고 server, Control Panel, ROS, script와 현재 문서의 사용자 노출 명칭을
+  `Motion Server` 또는 `Axis Control Panel`로 통일했다.
+- 기존 Linux 설치 호환성을 위해 `ros-cia402-axis-server.service` 식별자는 유지하고 TD-020에서 추적하게 했다.
+- `diagnostics/check_legacy_names.py`를 추가해 허용 목록 밖의 과거 명칭이 다시 추가되지 않게 했다.
+
+### 등록
+
+- 프로젝트·설치 경로 migration을 `TD-019`, legacy 실행 식별자 migration을 `TD-020`으로 등록했다.
+- ROS package 식별자는 `RF-008`, 사용자 노출 Axis Server 명칭은 `TD-003`에서 처리하도록 범위를 분리했다.
+- Windows launcher의 `PYTHONPATH` 중복 누적과 과도한 진단 출력을 `TD-021`로 등록했다.
+- Motion Server 초기화 로그의 조건부 설정 출력과 device 상태 분리를 `TD-022`로 등록했다.
+- Windows Service 자동 실행과 운영 로그 파일 보존 옵션을 `RF-011`로 등록했다.
+
+### 문서 및 운영
+
 - `docs/README.md`를 추가하여 프로젝트 문서의 진입점, 문서별 책임과 갱신 규칙을 정리했다.
 - `decisions.md`를 추가하여 기존 구현과 문서에서 확인되는 핵심 설계 결정을 `DEC-###` 형식으로 기록했다.
 - 프로젝트 README에서 설계, API, 시험, 결정, 작업 목록과 작업 이력 문서로 바로 이동할 수 있게 연결했다.
@@ -14,163 +31,7 @@
 - TD별 현재 구조, 위험, 구현 범위와 검증 계획을 `docs/tasks/td` 상세 문서로 분리했다.
 - `remaining_tasks.md`의 RF 항목도 동일한 형식으로 통일하고 완료 조건을 검증 가능한 결과로 강화했다.
 - RF별 사용자 가치, 구현 범위, 제약과 검증 계획을 `docs/tasks/rf` 상세 문서로 분리했다.
-- 프로젝트·설치 경로 migration을 `TD-019`, legacy 실행 식별자 migration을 `TD-020`으로 등록했다.
-- ROS package 식별자는 `RF-008`, 사용자 노출 Axis Server 명칭은 `TD-003`에서 처리하도록 범위를 분리했다.
-- TD-003을 완료하고 server, Control Panel, ROS, script와 현재 문서의 사용자 노출 명칭을
-  `Motion Server` 또는 `Axis Control Panel`로 통일했다.
-- 기존 Linux 설치 호환성을 위해 `ros-cia402-axis-server.service` 식별자는 유지하고 TD-020에서 추적하게 했다.
-- `diagnostics/check_legacy_names.py`를 추가해 허용 목록 밖의 과거 명칭이 다시 추가되지 않게 했다.
-- Windows launcher의 `PYTHONPATH` 중복 누적과 과도한 진단 출력을 `TD-021`로 등록했다.
-- Motion Server 초기화 로그의 조건부 설정 출력과 device 상태 분리를 `TD-022`로 등록했다.
-- Windows Service 자동 실행과 운영 로그 파일 보존 옵션을 `RF-011`로 등록했다.
-
-## 2026-06-25
-
-- Virtual EtherCAT 프로젝트 초기 구조 생성.
-- CiA402 기반 가상 EtherCAT 구동 실험을 위한 기본 코드 구성.
-- 초기 Axis Server, mock/virtual servo, ROS 연동 실험의 출발점 마련.
-
-## 2026-06-26
-
-- Axis Server와 ROS Docker control stack 구조 정리.
-- Axis Control Panel과 ROS 관련 실행 흐름을 Docker 기준으로 정리.
-- 초기 GUI 기반 축 설정/명령/피드백 표시 구조를 다듬기 시작.
-
-## 2026-06-29
-
-- Axis Control Panel에 motion limit 관련 기능 추가.
-- CSP feedback 표시 및 trace 관련 기능 보강.
-- 실제 EtherCAT/CMMT-AS 연결 테스트를 진행하며 PDO mapping, CiA402 state transition, fault reset, mode display 관련 문제를 조사.
-- Festo CMMT-AS-C4의 RxPDO/TxPDO mapping을 실제 장치에서 확인하고 서버 쪽 PDO codec/parser를 맞춤.
-
-## 2026-07-02
-
-- EtherCAT sync 및 ROS Bridge configuration 보강.
-- CSP 동작 안정성, interpolation 설정, DC/free-run 운용 관련 실험 진행.
-- Linux Docker 및 Windows 실행 환경을 오가며 EtherCAT master 실행 구조를 정리.
-
-## 2026-07-06
-
-- EtherCAT CSP diagnostics와 setpoint feedback 개선.
-- CMMT device profile과 runtime environment 설정 구조를 리팩토링.
-- CMMT 단위 변환 관련 SDO read, user position unit, converting unit exponent 처리 방향 정리.
-- API 단위 정책을 linear=mm, rotary=deg 기준으로 잡고 drive unit과 API unit 사이 변환 로직을 조정.
-
-## 2026-07-07
-
-- Axis Server command API와 motion module 구조 리팩토링.
-- 기존 axis/control 흐름을 보다 명확한 command handler 구조로 나눔.
-- command authority 구조에 대해 논의하고, 다중 client 상황에서 제어권 개념을 정리.
-
-## 2026-07-08
-
-- Axis Server motion control 개선.
-- PP/PV/CSP mode 처리 보강.
-- PV mode 지원을 Axis Control Panel에 추가.
-- Basic mode에서는 CSP를 숨기고, PP/PV 중심의 실축 운용 흐름을 정리.
-- Virtual Servo에서 homing, referenced bit, software limit, stop/jog 동작을 실제 servo에 가깝게 조정.
-
-## 2026-07-09
-
-- Windows runtime packaging 작업 시작.
-- Windows 실행 패키지에 Motion Server와 Axis Control Panel 실행 파일을 포함하는 방향으로 구성.
-- Npcap installer와 NIC discovery tool 추가.
-- Windows EtherCAT NIC 이름 지정 방식 정리.
-- Connection 기반 command authority API로 변경.
-- Client가 command authority를 request/release하고, 권한이 없을 때 명령이 거부되는 흐름 정리.
-
-## 2026-07-16
-
-- Motion Server architecture 리팩토링.
-- Axis Server라는 이름에서 Motion Server 개념으로 확장하는 방향을 정리.
-- Server, runtime, device manager, command routing, API response 구조를 더 명확히 분리.
-- Axis Control Panel 설정 파일과 Motion Server 설정 파일을 분리하는 방향으로 정리.
-
-## 2026-07-20
-
-- Device profile 구조 리팩토링.
-- CPX-AP-I-EC remote I/O 지원의 초기 기반 추가.
-- CMMT와 CPX-AP-I-EC를 device profile로 분리.
-- EtherCAT bus layout에서 motion axis와 I/O device를 함께 선언하는 구조 도입.
-- CPX-AP-I-EC ESI 기반 module ident 검증 방향을 정리.
-
-## 2026-07-21
-
-- Motion Server API와 Virtual Servo 동작 보강.
-- Virtual Servo software limit, warning bit, moving bit, homing 상태 동작을 개선.
-- `system/feedback`, `system/axis/status`, `system/axes/status`의 역할을 정리.
-- Feedback message는 주기적으로 TxPDO 대응 값 중심으로 보내고, full snapshot은 status command로 요청하는 방향을 정리.
-
-## 2026-07-22
-
-- Windows Motion Server package 개선.
-- 설정 파일명을 `.env` 대신 Windows 사용자에게 더 익숙한 `config.txt`로 사용하는 방향으로 변경.
-- 패키지 산출물 폴더 이름을 `Motion Server`로 정리.
-- Manual 문서를 패키지에 포함하는 규칙을 정리.
-
-## 2026-07-23
-
-- Axis Control Panel 리팩토링.
-- 거대한 단일 모듈을 client, diagnosis, motion, motion_limits, trace, panel_update_data, ui_builders 등으로 분리.
-- Single-axis view, panel layout, connection 관련 UI builder를 분리.
-- Update GUI 흐름을 보조 메서드로 나누어 유지보수성을 개선.
-- Packaging docs와 사용자 문서 갱신.
-
-## 2026-07-27
-
-- Axis Panel config formatting 정리.
-- Motion Server feedback period 설정 추가.
-- 전체 API namespace를 `system/*` 구조로 재정리.
-- API command 구조를 다음 방향으로 정리:
-  - `system/authority/*`
-  - `system/server/*`
-  - `system/bus/*`
-  - `system/axis/*`
-  - `system/axes/*`
-  - `system/io/*`
-- `axis/*`는 단축 명령, `axes/*`는 다축 명령으로 분리.
-- `system/server/reset`, `system/server/restart`, `system/bus/reconnect`, `system/axis/restart` 구현 및 Panel 버튼 추가.
-
-## 2026-08-13
-
-- CPX-AP-I-EC remote I/O 지원 추가.
-- `.env`에서 EtherCAT bus layout과 CPX-AP-I-EC I/O station 구성을 선언하는 구조 도입.
-- CPX AP module layout parser 구현.
-- DI/DO/AI/AO/IO-Link 모듈 선언을 기반으로 CPX RxPDO/TxPDO layout을 생성하는 구조 구현.
-- IO Control Panel 초기 구조 추가.
-- IO 상태를 `system/feedback`에 포함하고, IO Panel은 주기적 `system/io/status` polling 대신 feedback을 수신해 표시하는 방향으로 정리.
-
-## 2026-08-14
-
-- CPX IO-Link parameter support 추가.
-- AP Parameter Access와 IO-Link ISDU Access API 구현.
-- `system/io/ap/param_read`, `system/io/ap/param_write` 구현.
-- `system/io/iolink/isdu_read`, `system/io/iolink/isdu_write` 구현.
-- IO Control Panel에 EC Parameter, AP Parameter, IOL Parameter UI를 분리.
-- IO-Link IODD 기반 parameter catalog 방향을 정리.
-- IO-Link port별 IODD device binding 구조 추가.
-
-## 2026-08-18
-
-- CPX IO catalog configuration support 추가.
-- CPX-AP-I-EC ESI 파일을 device 폴더 아래로 이동하고, ESI 파일명 matching 규칙을 정리.
-- ESI 파일명은 대소문자, underscore, dash 차이를 구분하지 않고 prefix matching하도록 정리.
-- CPX module catalog와 ESI parser를 정리.
-- CPX-AP-I-EC interface ident와 AP module ident를 비교하여 실제 구성과 설정 구성이 맞는지 검증.
-- IO-Link variant 설정과 IOL process data size 관련 처리를 개선.
-- IO Control Panel에서 module 구성 표시, IOL channel 표시, parameter catalog dropdown 표시를 개선.
-
-## 2026-08-19
-
-- CMMT 관련 hard-coded OD/PDO 설정을 ESI + device 설정 기반으로 전환하는 작업 시작.
-- CMMT-AS / CMMT-ST ESI catalog parser 추가.
-- `.env`와 `device/cmmt/.env`에서 CMMT variant와 축별 PDO configuration을 읽는 구조 추가.
-- CMMT profile identity를 실제 slave identity와 비교하는 로직 추가.
-- Motion Server가 CMMT PDO mapping을 항상 remap하고, remap 후 실제 PDO mapping을 다시 읽어 설정과 비교하는 정책으로 변경.
-- CMMT PDO configuration을 `motion_server_default`, `profile_position_basic`, `csp_basic` 등의 predefined configuration으로 분리.
-- `required_od.py`를 추가하여 PDO가 아닌 Motion Server 필수 OD를 별도 관리하는 방향으로 변경.
-- 기존 `device/cia402/object_dictionary.py`, `device/common_object_dictionary/ethercat.py`, `device/cmmt/object_dictionary.py`, `device/cpx_ap_i_ec/object_dictionary.py` 제거 방향으로 정리.
-- Virtual Servo도 CMMT 설정과 ESI/PDO configuration을 따라가도록 구조 조정.
+- Work Log를 최신 날짜 우선으로 정렬하고 당일 기록을 완료, 등록, 문서 및 운영으로 구분했다.
 
 ## 2026-08-20
 
@@ -260,6 +121,154 @@
     현재는 Motion Server 프로세스가 종료되는 문제를 기록.
   - 향후 설정/profile/catalog 검증 실패도 degraded server 상태로 노출하여 Panel/API에서 확인하고
     reset/restart/reconnect 명령을 보낼 수 있도록 정리 예정.
+
+## 2026-08-19
+
+- CMMT 관련 hard-coded OD/PDO 설정을 ESI + device 설정 기반으로 전환하는 작업 시작.
+- CMMT-AS / CMMT-ST ESI catalog parser 추가.
+- `.env`와 `device/cmmt/.env`에서 CMMT variant와 축별 PDO configuration을 읽는 구조 추가.
+- CMMT profile identity를 실제 slave identity와 비교하는 로직 추가.
+- Motion Server가 CMMT PDO mapping을 항상 remap하고, remap 후 실제 PDO mapping을 다시 읽어 설정과 비교하는 정책으로 변경.
+- CMMT PDO configuration을 `motion_server_default`, `profile_position_basic`, `csp_basic` 등의 predefined configuration으로 분리.
+- `required_od.py`를 추가하여 PDO가 아닌 Motion Server 필수 OD를 별도 관리하는 방향으로 변경.
+- 기존 `device/cia402/object_dictionary.py`, `device/common_object_dictionary/ethercat.py`, `device/cmmt/object_dictionary.py`, `device/cpx_ap_i_ec/object_dictionary.py` 제거 방향으로 정리.
+- Virtual Servo도 CMMT 설정과 ESI/PDO configuration을 따라가도록 구조 조정.
+
+## 2026-08-18
+
+- CPX IO catalog configuration support 추가.
+- CPX-AP-I-EC ESI 파일을 device 폴더 아래로 이동하고, ESI 파일명 matching 규칙을 정리.
+- ESI 파일명은 대소문자, underscore, dash 차이를 구분하지 않고 prefix matching하도록 정리.
+- CPX module catalog와 ESI parser를 정리.
+- CPX-AP-I-EC interface ident와 AP module ident를 비교하여 실제 구성과 설정 구성이 맞는지 검증.
+- IO-Link variant 설정과 IOL process data size 관련 처리를 개선.
+- IO Control Panel에서 module 구성 표시, IOL channel 표시, parameter catalog dropdown 표시를 개선.
+
+## 2026-08-14
+
+- CPX IO-Link parameter support 추가.
+- AP Parameter Access와 IO-Link ISDU Access API 구현.
+- `system/io/ap/param_read`, `system/io/ap/param_write` 구현.
+- `system/io/iolink/isdu_read`, `system/io/iolink/isdu_write` 구현.
+- IO Control Panel에 EC Parameter, AP Parameter, IOL Parameter UI를 분리.
+- IO-Link IODD 기반 parameter catalog 방향을 정리.
+- IO-Link port별 IODD device binding 구조 추가.
+
+## 2026-08-13
+
+- CPX-AP-I-EC remote I/O 지원 추가.
+- `.env`에서 EtherCAT bus layout과 CPX-AP-I-EC I/O station 구성을 선언하는 구조 도입.
+- CPX AP module layout parser 구현.
+- DI/DO/AI/AO/IO-Link 모듈 선언을 기반으로 CPX RxPDO/TxPDO layout을 생성하는 구조 구현.
+- IO Control Panel 초기 구조 추가.
+- IO 상태를 `system/feedback`에 포함하고, IO Panel은 주기적 `system/io/status` polling 대신 feedback을 수신해 표시하는 방향으로 정리.
+
+## 2026-07-27
+
+- Axis Panel config formatting 정리.
+- Motion Server feedback period 설정 추가.
+- 전체 API namespace를 `system/*` 구조로 재정리.
+- API command 구조를 다음 방향으로 정리:
+  - `system/authority/*`
+  - `system/server/*`
+  - `system/bus/*`
+  - `system/axis/*`
+  - `system/axes/*`
+  - `system/io/*`
+- `axis/*`는 단축 명령, `axes/*`는 다축 명령으로 분리.
+- `system/server/reset`, `system/server/restart`, `system/bus/reconnect`, `system/axis/restart` 구현 및 Panel 버튼 추가.
+
+## 2026-07-23
+
+- Axis Control Panel 리팩토링.
+- 거대한 단일 모듈을 client, diagnosis, motion, motion_limits, trace, panel_update_data, ui_builders 등으로 분리.
+- Single-axis view, panel layout, connection 관련 UI builder를 분리.
+- Update GUI 흐름을 보조 메서드로 나누어 유지보수성을 개선.
+- Packaging docs와 사용자 문서 갱신.
+
+## 2026-07-22
+
+- Windows Motion Server package 개선.
+- 설정 파일명을 `.env` 대신 Windows 사용자에게 더 익숙한 `config.txt`로 사용하는 방향으로 변경.
+- 패키지 산출물 폴더 이름을 `Motion Server`로 정리.
+- Manual 문서를 패키지에 포함하는 규칙을 정리.
+
+## 2026-07-21
+
+- Motion Server API와 Virtual Servo 동작 보강.
+- Virtual Servo software limit, warning bit, moving bit, homing 상태 동작을 개선.
+- `system/feedback`, `system/axis/status`, `system/axes/status`의 역할을 정리.
+- Feedback message는 주기적으로 TxPDO 대응 값 중심으로 보내고, full snapshot은 status command로 요청하는 방향을 정리.
+
+## 2026-07-20
+
+- Device profile 구조 리팩토링.
+- CPX-AP-I-EC remote I/O 지원의 초기 기반 추가.
+- CMMT와 CPX-AP-I-EC를 device profile로 분리.
+- EtherCAT bus layout에서 motion axis와 I/O device를 함께 선언하는 구조 도입.
+- CPX-AP-I-EC ESI 기반 module ident 검증 방향을 정리.
+
+## 2026-07-16
+
+- Motion Server architecture 리팩토링.
+- Axis Server라는 이름에서 Motion Server 개념으로 확장하는 방향을 정리.
+- Server, runtime, device manager, command routing, API response 구조를 더 명확히 분리.
+- Axis Control Panel 설정 파일과 Motion Server 설정 파일을 분리하는 방향으로 정리.
+
+## 2026-07-09
+
+- Windows runtime packaging 작업 시작.
+- Windows 실행 패키지에 Motion Server와 Axis Control Panel 실행 파일을 포함하는 방향으로 구성.
+- Npcap installer와 NIC discovery tool 추가.
+- Windows EtherCAT NIC 이름 지정 방식 정리.
+- Connection 기반 command authority API로 변경.
+- Client가 command authority를 request/release하고, 권한이 없을 때 명령이 거부되는 흐름 정리.
+
+## 2026-07-08
+
+- Axis Server motion control 개선.
+- PP/PV/CSP mode 처리 보강.
+- PV mode 지원을 Axis Control Panel에 추가.
+- Basic mode에서는 CSP를 숨기고, PP/PV 중심의 실축 운용 흐름을 정리.
+- Virtual Servo에서 homing, referenced bit, software limit, stop/jog 동작을 실제 servo에 가깝게 조정.
+
+## 2026-07-07
+
+- Axis Server command API와 motion module 구조 리팩토링.
+- 기존 axis/control 흐름을 보다 명확한 command handler 구조로 나눔.
+- command authority 구조에 대해 논의하고, 다중 client 상황에서 제어권 개념을 정리.
+
+## 2026-07-06
+
+- EtherCAT CSP diagnostics와 setpoint feedback 개선.
+- CMMT device profile과 runtime environment 설정 구조를 리팩토링.
+- CMMT 단위 변환 관련 SDO read, user position unit, converting unit exponent 처리 방향 정리.
+- API 단위 정책을 linear=mm, rotary=deg 기준으로 잡고 drive unit과 API unit 사이 변환 로직을 조정.
+
+## 2026-07-02
+
+- EtherCAT sync 및 ROS Bridge configuration 보강.
+- CSP 동작 안정성, interpolation 설정, DC/free-run 운용 관련 실험 진행.
+- Linux Docker 및 Windows 실행 환경을 오가며 EtherCAT master 실행 구조를 정리.
+
+## 2026-06-29
+
+- Axis Control Panel에 motion limit 관련 기능 추가.
+- CSP feedback 표시 및 trace 관련 기능 보강.
+- 실제 EtherCAT/CMMT-AS 연결 테스트를 진행하며 PDO mapping, CiA402 state transition, fault reset, mode display 관련 문제를 조사.
+- Festo CMMT-AS-C4의 RxPDO/TxPDO mapping을 실제 장치에서 확인하고 서버 쪽 PDO codec/parser를 맞춤.
+
+## 2026-06-26
+
+- Axis Server와 ROS Docker control stack 구조 정리.
+- Axis Control Panel과 ROS 관련 실행 흐름을 Docker 기준으로 정리.
+- 초기 GUI 기반 축 설정/명령/피드백 표시 구조를 다듬기 시작.
+
+## 2026-06-25
+
+- Virtual EtherCAT 프로젝트 초기 구조 생성.
+- CiA402 기반 가상 EtherCAT 구동 실험을 위한 기본 코드 구성.
+- 초기 Axis Server, mock/virtual servo, ROS 연동 실험의 출발점 마련.
 
 ## 주요 설계 결정 요약
 
