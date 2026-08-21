@@ -58,6 +58,7 @@ class VirtualCiA402Servo(ServoInterface):
                 self.homing_active = False
                 self.homing_error = False
         self.od.write(0x6060,next_mode)
+        self.od.write(0x6061,next_mode)
 
     def set_target_position(self, position):
         if self._position_command_requires_reference() and not self.homing_referenced:

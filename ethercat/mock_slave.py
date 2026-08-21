@@ -22,3 +22,9 @@ class MockSlave:
 
         # Axis -> TxPDO
         self.od_bridge.axis_to_txpdo()
+
+    def read_sdo(self, index, subindex, size):
+        return self.od_bridge.read_sdo(index, subindex, size)
+
+    def write_sdo(self, index, subindex, payload):
+        self.od_bridge.write_sdo(index, subindex, payload)

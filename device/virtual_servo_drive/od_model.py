@@ -86,6 +86,24 @@ class VirtualObjectDictionary:
     def definition(self, index, subindex=None):
         return self.entries[self._storage_key(index, subindex)].definition
 
+    def definition_by_role(self, role):
+        matches = [
+            entry.definition
+            for entry in self.entries.values()
+            if entry.definition.role == role
+        ]
+        if len(matches) != 1:
+            raise KeyError(f"Expected one OD definition for role {role!r}, found {len(matches)}")
+        return matches[0]
+
+    def write_role(self, role, value):
+        definition = self.definition_by_role(role)
+        self.write(definition.index, value, definition.subindex)
+
+    def read_role(self, role):
+        definition = self.definition_by_role(role)
+        return self.read(definition.index, definition.subindex)
+
     def read(self, index, subindex=None):
         return self.entries[self._storage_key(index, subindex)].value
 
