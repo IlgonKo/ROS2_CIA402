@@ -8,6 +8,9 @@
 
 ### 완료
 
+- `TD-005-S01`을 완료하여 FailureCode 20개, MotionServerException 계층, 중앙 MRO mapping,
+  allowlist 기반 public details, INTERNAL_FAILURE fallback과 PartialFailure 결과 model을 구현했다.
+- S01 계약 테스트 9개와 기존 회귀를 포함한 전체 unittest 24개를 통과했으며 API runtime 동작은 변경하지 않았다.
 - TD-004를 완료하여 backend staged lifecycle과 device capability 계약을 명시적으로 정의했다.
 - MockMaster와 PySOEMMaster startup을 PRE-OP 설정 후 OP 진입 순서로 통일하고 method 존재 여부에
   따른 startup fallback을 제거했다.

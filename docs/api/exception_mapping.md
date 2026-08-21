@@ -67,6 +67,7 @@ Exception type과 failure code 및 안전한 기본 message를 하나의 중앙 
 class ExceptionFailureMapping:
     code: FailureCode
     default_message: str
+    detail_fields: tuple[tuple[str, str], ...] = ()
 
 
 EXCEPTION_FAILURE_MAPPINGS = {
@@ -80,6 +81,9 @@ EXCEPTION_FAILURE_MAPPINGS = {
     ),
 }
 ```
+
+`detail_fields`는 `(API field, Exception attribute)` 쌍의 allowlist다. 등록하지 않은 Exception 속성,
+Exception 문자열과 `__cause__`는 Failure에 포함하지 않는다.
 
 | Exception | FailureCode |
 | --- | --- |
