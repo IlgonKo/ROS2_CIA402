@@ -51,6 +51,31 @@ connect(target_state="preop")
 - 선택한 PDO mapping에 따른 PDO field 검증
 - cycle timing 등 선택적 계측 데이터
 
+### Axis/ServoInterface 제거와 Virtual OD 구조 연결
+
+[DEC-013](../../decisions.md)에 따라 `ServoInterface`를 실제 backend 공통 interface로 확장하지 않는다.
+이 interface의 구현체는 Virtual CiA402 Servo뿐이고 실제 CMMT/PySOEM 경로는 PDO/OD 경계를 사용한다.
+
+- `interfaces/servo_interface.py`를 제거한다.
+- mock startup에서만 생성되는 `motion_server/control/axis.py`의 `Axis` forwarding wrapper를 제거한다.
+- `VirtualCiA402Servo`는 profile/ESI 기반 OD Model을 직접 읽고 쓴다.
+- OD Bridge는 Axis method가 아니라 OD Model을 통해 SDO/RxPDO/TxPDO를 연결한다.
+- `set_profile_velocity()`의 `hasattr()` fallback은 제거하고 PDO mapping 및 OD role 검증으로 대체한다.
+- Motion Server 공통 control package에는 mock/virtual-device 전용 abstraction을 남기지 않는다.
+
+이 부분은 TD-015의 OD Model 전환과 TD-016의 MockMaster SDO 위임이 완료된 후 최종 정리한다.
+
+### TD-015/016과의 구현 순서
+
+세 TD는 DEC-013의 동일한 목표 구조를 공유하지만 브랜치와 완료 판정은 분리한다.
+
+1. TD-015: profile/ESI 기반 OD Model과 전체 OD Bridge를 구성한다.
+2. TD-016: MockSlave가 SDO/PDO를 OD Bridge에 위임하고 MockMaster의 device-specific 처리를 제거한다.
+3. TD-004: Axis/ServoInterface를 제거하고 backend lifecycle 및 device capability 계약을 최종 고정한다.
+
+최종 단계에서 세 TD의 완료 조건과 통합 회귀 테스트를 함께 확인하며, 조건을 모두 만족하면
+TD-004, TD-015와 TD-016을 각각 `complete`로 전환한다.
+
 ### Axis Restart Capability 및 명칭 계약
 
 - 전체 선택 기능은 `DeviceCapability.AXIS_RESTART`로 표현한다.

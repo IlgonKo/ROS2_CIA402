@@ -29,9 +29,28 @@
 - 축별 configuration 이름, profile 기본값과 잘못된 이름의 startup error를 지원한다.
 - required OD metadata는 index/subindex/type/access/role 검증과 virtual seed 정책을 명확히 분리한다.
 
+### Profile/ESI 기반 Virtual OD Model
+
+[DEC-013](../../decisions.md)에 따라 `od_model.py`를 가상축 Object Dictionary의 단일 상태 경계로 사용한다.
+
+- 선택된 device profile과 ESI에서 OD entry definition을 구성한다.
+- OD Model은 index/subindex, datatype, access, default, runtime value, role과 PDO mapping metadata를 관리한다.
+- required OD와 RxPDO/TxPDO object도 선택된 profile을 통해 공급하며 CMMT module을 직접 import하지 않는다.
+- SDO와 PDO는 별도 storage를 만들지 않고 동일한 OD Model의 runtime value를 사용한다.
+- Virtual Servo는 OD Model을 직접 읽고 쓰며 CiA402/motion behavior를 수행한다.
+- `od_bridge.py`는 value를 별도로 소유하지 않고 SDO/RxPDO/TxPDO 접근을 OD Model에 연결한다.
+
+```text
+Device Profile + ESI
+        -> OD Model (definition + runtime value)
+             <-> Servo Model
+             <-> OD Bridge (SDO, RxPDO, TxPDO)
+```
+
 ## 검증 계획
 
 - 여러 axis/profile/configuration 조합과 기본값을 테스트한다.
+- 동일 OD entry를 SDO와 PDO로 접근했을 때 같은 runtime value와 side effect가 보이는지 테스트한다.
 - 잘못된 profile/configuration, required OD 누락과 mock/real policy 일치를 테스트한다.
 
 ## 완료 증거

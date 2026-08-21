@@ -180,6 +180,7 @@ Tech Debt 상태 값은 `open`, `in_progress`, `complete`를 사용한다.
   - MockMaster와 PySOEMMaster가 동일한 staged startup 필수 lifecycle 계약을 구현한다.
   - capability 판단을 위한 `hasattr()` fallback이 제거된다.
   - axis restart는 `AXIS_RESTART` capability와 request/clear-request 계약으로 일관되게 표현된다.
+  - mock 전용 `Axis` wrapper와 실제 공통 계약이 아닌 `ServoInterface`가 제거된다.
   - 필수 capability 누락은 startup 단계에서 구체적인 오류로 검증된다.
   - mock과 PySOEM backend의 capability 계약 자동 테스트가 통과한다.
 - 상세: [TD-004 기술 명세](tasks/td/TD-004-backend-capability.md)
@@ -278,6 +279,7 @@ Tech Debt 상태 값은 `open`, `in_progress`, `complete`를 사용한다.
   - Virtual Servo에서 CMMT 모듈에 대한 직접 의존이 제거된다.
   - 축별 PDO configuration의 명시적 선택, 기본값과 잘못된 설정 오류가 지원된다.
   - mock과 실축 profile의 OD/PDO 선택 정책을 비교하는 자동 테스트가 통과한다.
+  - SDO와 PDO가 동일한 profile/ESI 기반 OD Model의 runtime value를 사용한다.
 - 상세: [TD-015 기술 명세](tasks/td/TD-015-virtual-servo-profile.md)
 
 ### TD-016 MockMaster의 Device-specific SDO 처리
@@ -289,6 +291,7 @@ Tech Debt 상태 값은 `open`, `in_progress`, `complete`를 사용한다.
   - MockMaster는 generic SDO transport만 담당한다.
   - 각 virtual device가 object access interface를 구현한다.
   - device-specific OD/PDO mapping이 해당 device package에서 관리된다.
+  - MockSlave가 OD Bridge를 통해 SDO와 PDO 접근을 동일한 OD Model에 위임한다.
   - 기존 virtual servo SDO/PDO 동작과 신규 virtual device 확장 테스트가 통과한다.
 - 상세: [TD-016 기술 명세](tasks/td/TD-016-mock-master-sdo.md)
 

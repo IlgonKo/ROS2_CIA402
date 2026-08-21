@@ -139,6 +139,30 @@
   - axis restart처럼 profile별 지원 여부가 다른 기능만 `DeviceCapability`로 선언한다.
   - platform 호환성, 선택적 진단 metadata와 PDO field 검사는 device capability로 분류하지 않는다.
 
+## DEC-013 Profile/ESI 기반 Virtual OD Model을 가상 장치의 단일 상태 경계로 사용
+
+- 상태: `accepted`
+- 결정일: 2026-08-21
+- 결정: 가상 장치는 선택된 device profile과 ESI를 기반으로 전체 Object Dictionary를 구성하고,
+  OD 정의와 runtime value를 함께 가진 `OD Model`을 SDO, PDO와 device behavior의 단일 상태 경계로 사용한다.
+- 이유: 실제 EtherCAT 장치에서 SDO와 PDO는 동일한 Object Dictionary를 서로 다른 방식으로 접근한다.
+  PDO 일부만 Virtual Servo에 연결하고 나머지 OD를 MockMaster에서 개별 처리하면 실제 장치 구조와 달라지고
+  device type이 추가될 때 EtherCAT transport가 device-specific object 의미를 계속 알게 된다.
+- 영향:
+  - `od_model.py`는 profile/ESI 기반 OD entry 정의, runtime value, access rule과 mapping metadata를 관리한다.
+  - `od_bridge.py`는 SDO read/write, RxPDO-to-OD와 OD-to-TxPDO 접근을 하나의 OD Model에 연결한다.
+  - `servo_model.py`는 OD Model을 읽고 쓰며 CiA402 state와 motion behavior를 모사한다.
+  - `MockSlave`는 cycle 순서와 OD Bridge 위임을 담당하고 device-specific object 의미를 알지 않는다.
+  - `MockMaster`는 slave routing과 generic EtherCAT transport만 담당한다.
+  - 공통 역할이 없는 `Axis` wrapper와 `ServoInterface`는 제거한다.
+
+```text
+Device Profile + ESI
+        -> OD Model <-> Servo Model
+             <-> OD Bridge (SDO, RxPDO, TxPDO)
+             -> MockSlave -> MockMaster -> DeviceManager -> AxisRuntime
+```
+
 ## 새 결정 작성 양식
 
 ```text
