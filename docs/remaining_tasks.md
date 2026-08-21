@@ -325,3 +325,15 @@ Tech Debt 상태 값은 `open`, `in_progress`, `complete`를 사용한다.
   - 기존 설치의 upgrade, 신규 설치와 rollback scenario가 Windows/Linux에서 검증된다.
   - 호환 기간 종료 후 제거할 fallback이 코드와 문서에서 추적 가능하다.
 - 상세: [TD-020 기술 명세](tasks/td/TD-020-legacy-runtime-identifiers.md)
+
+### TD-021 Windows 실행 스크립트의 PYTHONPATH 중복 및 진단 출력 정리
+
+- 상태: `open`
+- 우선순위: 낮음
+- 요약: Windows 실행 스크립트가 프로젝트 경로를 `PYTHONPATH`에 중복 추가하지 않고 실제 project root만 출력하게 한다.
+- 완료 조건:
+  - Motion Server, Axis Control Panel과 IO Control Panel script가 project root를 한 번만 추가한다.
+  - 같은 PowerShell process에서 반복 실행해도 `PYTHONPATH` 항목이 증가하지 않는다.
+  - 정상 실행 로그는 전체 `PYTHONPATH` 대신 `Project root: <path>`만 출력한다.
+  - 기존 외부 `PYTHONPATH` 항목의 순서와 값이 보존되고 PowerShell 구문 및 실행 검사가 통과한다.
+- 상세: [TD-021 기술 명세](tasks/td/TD-021-windows-pythonpath.md)
