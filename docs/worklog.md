@@ -8,6 +8,13 @@
 
 ### 완료
 
+- `TD-005-S05`를 완료하여 AP parameter API와 startup write의 I/O/module validation, payload 오류,
+  busy timeout, device reject 및 S03 backend Exception 전달을 공통 계약으로 migration했다.
+- AP parameter catalog가 없는 현재 범위에서는 parameter ID 사전 존재 검증을 RF-004에 유지하고,
+  실제 장치의 nonzero status를 `DeviceRejectedException`과 device code로 보존했다.
+- S04에서 발견되지 않았던 API package/router 순환 import를 제거하고 임시 handler adapter는 호출
+  시점에만 boundary에 연결되도록 수정했다.
+- S05 테스트 12개와 전체 unittest 73개를 통과했으며 제품 source 신규 파일 없이 기존 모듈에서 구현했다.
 - `TD-005-S04`를 완료하여 Axis/IO EtherCAT parameter read/write를 순수 operation, 구체 validation
   Exception, S03 backend Exception 전달과 S02 request boundary 구조로 migration했다.
 - S10 전까지 기존 `ok/error` 응답만 보내는 추적 가능한 legacy adapter를 유지하고, 예상 가능한

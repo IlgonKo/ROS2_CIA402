@@ -1,7 +1,6 @@
 from motion_server.config import DEVICE_PROFILE
 from motion_server.api.decoder import public_command_name
 from motion_server.api.encoder import send_client_message
-from motion_server.api.router import request_response
 from motion_server.api.validator import parse_int
 from motion_server.failure import (
     InvalidArgumentException,
@@ -98,7 +97,10 @@ def read_parameter(message, runtime, client):
     _send_legacy_parameter_response(
         client,
         message,
-        request_response(message, lambda: _read_axis_parameter(message, runtime)),
+        parameter_request_response(
+            message,
+            lambda: _read_axis_parameter(message, runtime),
+        ),
         "axis",
     )
 
@@ -107,7 +109,10 @@ def write_parameter(message, runtime, client):
     _send_legacy_parameter_response(
         client,
         message,
-        request_response(message, lambda: _write_axis_parameter(message, runtime)),
+        parameter_request_response(
+            message,
+            lambda: _write_axis_parameter(message, runtime),
+        ),
         "axis",
     )
 
@@ -116,7 +121,10 @@ def read_io_parameter(message, runtime, client):
     _send_legacy_parameter_response(
         client,
         message,
-        request_response(message, lambda: _read_io_parameter(message, runtime)),
+        parameter_request_response(
+            message,
+            lambda: _read_io_parameter(message, runtime),
+        ),
         "io",
     )
 
@@ -125,7 +133,10 @@ def write_io_parameter(message, runtime, client):
     _send_legacy_parameter_response(
         client,
         message,
-        request_response(message, lambda: _write_io_parameter(message, runtime)),
+        parameter_request_response(
+            message,
+            lambda: _write_io_parameter(message, runtime),
+        ),
         "io",
     )
 
@@ -136,6 +147,13 @@ def _read_axis_parameter(message, runtime):
     data = _parameter_data("axis", axis, index, subindex, data_type, value)
     data["length"] = length
     return data
+
+
+def parameter_request_response(message, operation):
+    # TECH_DEBT[TD-005]: Router owns this boundary after the S10 cutover.
+    from motion_server.api.router import request_response
+
+    return request_response(message, operation)
 
 
 def _write_axis_parameter(message, runtime):

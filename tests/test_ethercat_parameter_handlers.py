@@ -4,7 +4,7 @@ from types import SimpleNamespace
 from unittest.mock import Mock
 from unittest.mock import patch
 
-from motion_server.api import request_response
+from motion_server.api.router import request_response
 from motion_server.failure import (
     CommunicationTimeoutException,
     FailureCode,
