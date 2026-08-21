@@ -8,6 +8,12 @@
 
 ### 완료
 
+- `TD-005-S07C`를 완료하여 server/bus/axis/axes/IO status와 현재 Axis/EtherCAT/IO-Link Catalog
+  handler를 공통 request boundary에 연결했다.
+- Catalog의 not-ready, 없는 axis/IO/module/port binding, selector validation과 unsupported operation을
+  구체 Failure로 분리하고 예상 밖 내부 오류는 `INTERNAL_FAILURE`로 안전하게 숨겼다.
+- handler의 직접 `ok: false/error` 생성을 중앙 legacy status adapter로 이동해 S10 전 기존 client
+  응답 의미를 유지했으며 S07C 테스트 9개와 전체 unittest 99개를 통과했다.
 - `TD-005-S07A/S07B`를 완료하여 request boundary가 `PartialFailure`를 전체 code
   `PARTIAL_FAILURE`, 성공 target과 대상별 안전한 Failure로 encoding하도록 연결했다.
 - 축 enable/disable의 대상별 controlword write와 IO output의 단일·복수 module/channel write를

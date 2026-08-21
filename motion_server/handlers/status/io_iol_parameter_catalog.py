@@ -1,61 +1,71 @@
 from device.cpx_ap_i_ec.esi_module_catalog import esi_module_catalog
 from device.cpx_ap_i_ec.module_resolver import module_info_for_ap_module
-from motion_server.api import parse_int, send_client_message
+from motion_server.api import parse_int
+from motion_server.api.encoder import legacy_status_request_response
+from motion_server.failure import (
+    InvalidArgumentException,
+    ResourceNotFoundException,
+    ServerNotReadyException,
+    UnsupportedOperationException,
+)
 
 
 def iol_param_catalog(message, runtime, client):
-    response_type = "system/io/iol/param_catalog"
-    try:
-        require_iol_selector(message)
-        device = selected_io_device(runtime, message)
-        module_number = selected_module_number(message)
-        port_number = selected_port_number(message)
-        response = iol_catalog_payload(
-            response_type,
-            device,
-            module_number,
-            port_number,
-        )
-        response["ok"] = True
-    except Exception as exc:
-        response = {
-            "type": response_type,
-            "ok": False,
-            "io": message.get("io"),
-            "module": message.get("module"),
-            "port": message.get("port"),
-            "error": str(exc),
-        }
-    send_client_message(client, response)
+    return legacy_status_request_response(
+        message,
+        client,
+        lambda: iol_param_catalog_data(message, runtime),
+    )
+
+
+def iol_param_catalog_data(message, runtime):
+    require_iol_selector(message)
+    device = selected_io_device(runtime, message)
+    module_number = selected_module_number(message)
+    port_number = selected_port_number(message)
+    return iol_catalog_payload(device, module_number, port_number)
 
 
 def require_iol_selector(message):
     if "module" not in message and "slot" not in message:
-        raise ValueError("system/io/iol/param_catalog requires module")
+        raise InvalidArgumentException("module", "is required")
     if "port" not in message:
-        raise ValueError("system/io/iol/param_catalog requires port")
+        raise InvalidArgumentException("port", "is required")
 
 
 def selected_io_device(runtime, message):
-    return runtime.device_manager.io.selected_device(io_id=message.get("io"))
+    selector = message.get("io")
+    try:
+        return runtime.device_manager.io.selected_device(io_id=selector)
+    except AttributeError as exc:
+        raise ServerNotReadyException("I/O devices are unavailable") from exc
+    except (TypeError, ValueError) as exc:
+        raise ResourceNotFoundException("io", selector) from exc
 
 
 def selected_module_number(message):
-    return parse_int(message.get("module", message.get("slot")), 0)
+    return parse_catalog_int("module", message.get("module", message.get("slot")))
 
 
 def selected_port_number(message):
-    return parse_int(message.get("port"), 0)
+    return parse_catalog_int("port", message.get("port"))
 
 
-def iol_catalog_payload(response_type, device, module_number, port_number):
+def parse_catalog_int(field, value):
+    try:
+        return parse_int(value, 0)
+    except (TypeError, ValueError) as exc:
+        raise InvalidArgumentException(field, "must be an integer") from exc
+
+
+def iol_catalog_payload(device, module_number, port_number):
     config = io_config(device)
-    info = module_info_for_ap_module(config.layout, module_number)
+    try:
+        info = module_info_for_ap_module(config.layout, module_number)
+    except (TypeError, ValueError, KeyError, IndexError) as exc:
+        raise ResourceNotFoundException("io_module", module_number) from exc
     if not info.has_isdu_access:
-        raise ValueError(
-            "Selected AP module does not support IO-Link ISDU access: "
-            f"io={device['id']} module={module_number}"
-        )
+        raise UnsupportedOperationException("io_link_isdu_catalog")
 
     bindings = [
         binding
@@ -64,16 +74,12 @@ def iol_catalog_payload(response_type, device, module_number, port_number):
         and int(binding.port) == int(port_number)
     ]
     if not bindings:
-        raise ValueError(
-            "No IODD device binding for IO-Link parameter catalog: "
-            f"io={device['id']} "
-            f"module={module_number} "
-            f"port={port_number}. "
-            "Configure MOTION_SERVER_IO_<io>_IOL_PORTS for this port."
+        raise ResourceNotFoundException(
+            "io_link_port_binding",
+            {"io": device["id"], "module": module_number, "port": port_number},
         )
 
     return {
-        "type": response_type,
         "io": device["id"],
         "slave_index": device["slave_index"],
         "esi": str(esi_module_catalog().path),
@@ -100,7 +106,7 @@ def io_config(device):
     profile = getattr(device["slave"], "device_profile", None)
     config = getattr(profile, "config", None)
     if config is None:
-        raise ValueError(f"I/O device {device['id']} has no CPX configuration")
+        raise UnsupportedOperationException("io_link_parameter_catalog")
     return config
 
 

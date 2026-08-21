@@ -51,7 +51,7 @@ client의 복구 판단과 장애 분석이 불안정하다.
 | `TD-005-S06` | IO-Link ISDU 경로 | S03, S04 | `complete` |
 | `TD-005-S07A` | Motion/Axis command와 PartialFailure | S02-S04 | `complete` |
 | `TD-005-S07B` | IO command와 PartialFailure | S02-S06 | `complete` |
-| `TD-005-S07C` | Status/Catalog handler | S02-S06 | `pending` |
+| `TD-005-S07C` | Status/Catalog handler | S02-S06 | `complete` |
 | `TD-005-S08` | Diagnostic core와 startup/runtime 연계 | S01-S07 | `pending` |
 | `TD-005-S09` | Control Panel과 ROS의 기존/신규 응답 호환 | S02-S08 | `pending` |
 | `TD-005-S10` | 서버 Success/Fail envelope 최종 전환 | S09 | `pending` |
@@ -59,10 +59,10 @@ client의 복구 판단과 장애 분석이 불안정하다.
 
 ### 작업 재개 체크포인트
 
-- 현재 완료 단계: `TD-005-S07B`
-- 다음 실행 단계: `TD-005-S07C`
-- 다음 시작 위치: Status/Catalog handler의 not-ready, resource-not-found와 예상 밖 내부 오류를
-  공통 request boundary 계약으로 migration한다.
+- 현재 완료 단계: `TD-005-S07C`
+- 다음 실행 단계: `TD-005-S08`
+- 다음 시작 위치: 확정된 Diagnostic 데이터 model과 latching lifecycle을 구현하고 startup/runtime의
+  운전 영향 Alarm/Fault 발생 지점에 연결한다.
 - 현재 호환 상태: 서버는 legacy 응답만 송신한다. 신규 Success/Fail envelope는 아직 live API에 연결되지 않았다.
 - 보존할 사용자 변경: `device/cmmt/required_od.py`의 OD 기본값 및 형식 변경은 `TD-023` 범위이며
   TD-005 변경에 포함하지 않는다.
@@ -357,6 +357,19 @@ S07B 완료 증거:
 | 제외 범위 | catalog 내용 확장, notification/feedback 변경, Diagnostic 조회 API 신규 설계는 하지 않는다. |
 | 완료 조건 | 주요 조회 handler의 정상·not-ready·not-found·unexpected 테스트가 통과하고 legacy 오류 필드 생성이 handler에서 제거된다. |
 | 인계 | S08은 startup/runtime 상태를 status 경로에 연결할 기반을, S09는 모든 client 응답 종류의 표본을 확보한다. |
+
+S07C 완료 증거:
+
+- server/bus/axes/axis/IO status 조회를 공통 request boundary에 연결하고 신규 Success data에서는
+  레거시 `type`, `ok` field를 제거했다.
+- 서버와 버스 상태는 초기화 오류 확인을 위해 계속 조회 가능하며, Catalog runtime 구조가 준비되지
+  않은 경우 `SERVER_NOT_READY`로 구분한다.
+- axis/IO/module/IO-Link port binding 부재, selector validation과 지원하지 않는 Catalog를 각각
+  `RESOURCE_NOT_FOUND`, `INVALID_ARGUMENT`, `UNSUPPORTED_OPERATION`으로 구분한다.
+- handler의 broad catch 및 직접 `ok: false/error` 생성을 제거하고 중앙 legacy status adapter가
+  기존 client 형식을 S10까지 유지한다.
+- 정상 조회, not-ready, not-found, validation과 예상 밖 내부 오류 비노출을 검증하는 S07C 테스트
+  9개와 전체 unittest 99개가 통과했다.
 
 ### TD-005-S08 Diagnostic core와 startup/runtime 연계
 
