@@ -66,6 +66,10 @@ latching이므로 acknowledge 전에는 clear되지 않는다.
 
 ## IO
 
-현재 CPX-AP/IO-Link runtime PDO model에는 장치 health 또는 fault를 판정할 공통 신호가 없다. Bus WKC
-불일치만으로 특정 IO source를 추정하지 않으며, IO Diagnostic은 S08C2에서 device-profile별 health
-source와 판정 계약을 확정한 후 추가한다.
+CPX-AP ESI는 `0x6102 Diagnosis`와 선택형 `0x1AF1 Diag PDO`를 제공하지만, `0x1AF1`은 기본 Sync
+Manager assignment에 포함되지 않는다. 현재 runtime PDO model은 설정된 AP module process data만
+사용하므로 모든 PDO configuration에서 보장되는 I/O health source가 없다.
+
+따라서 현재는 `IO:<configured index>` station 또는 그 아래 module/channel Diagnostic을 생성하지 않는다.
+Bus WKC 불일치로 특정 I/O를 추정하지 않고, 단발 AP/ISDU 요청 실패도 I/O Alarm/Fault로 승격하지 않는다.
+선택형 상세 진단은 [RF-012](../tasks/rf/RF-012-cpx-ap-optional-diagnostic.md)에서 추적한다.

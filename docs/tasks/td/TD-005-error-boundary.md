@@ -59,10 +59,9 @@ client의 복구 판단과 장애 분석이 불안정하다.
 
 ### 작업 재개 체크포인트
 
-- 현재 완료 단계: `TD-005-S08C1`
-- 다음 실행 단계: `TD-005-S08C2`
-- 다음 시작 위치: CPX-AP/IO-Link device profile에서 runtime health를 신뢰할 수 있게 판정할
-  PDO/OD source가 있는지 확인하고 IO Alarm/Fault code와 발생·resolve 조건을 확정한다.
+- 현재 완료 단계: `TD-005-S08C2`
+- 다음 실행 단계: `TD-005-S08D`
+- 다음 시작 위치: 기존 status 경로에 활성 Diagnostic 조회와 직렬화 계약을 연결한다.
 - 현재 호환 상태: 서버는 legacy 응답만 송신한다. 신규 Success/Fail envelope는 아직 live API에 연결되지 않았다.
 - 보존할 사용자 변경: `device/cmmt/required_od.py`의 OD 기본값 및 형식 변경은 `TD-023` 범위이며
   TD-005 변경에 포함하지 않는다.
@@ -388,7 +387,7 @@ S08은 운전 영향 범위를 한 번에 변경하지 않고 다음 순서로 �
 | --- | --- | --- | --- |
 | `TD-005-S08A` | Diagnostic model, 활성 저장소와 lifecycle core | S07C | `complete` |
 | `TD-005-S08B` | startup 필수 실패와 Initialization Fault 연결 | S08A | `complete` |
-| `TD-005-S08C` | runtime Bus/Axis/IO Alarm·Fault producer와 API Fail 병행 | S08B | `in_progress` |
+| `TD-005-S08C` | runtime Bus/Axis/IO Alarm·Fault producer와 API Fail 병행 | S08B | `complete` |
 | `TD-005-S08D` | 기존 status 경로의 Diagnostic 조회·직렬화 계약 연결 | S08C | `pending` |
 
 #### TD-005-S08A 계약
@@ -437,7 +436,7 @@ S08A 완료 증거:
 | 하위 단계 | 범위 | 상태 |
 | --- | --- | --- |
 | `TD-005-S08C1` | Bus WKC와 Axis statusword 기반 runtime producer | `complete` |
-| `TD-005-S08C2` | IO device-profile health source와 Alarm/Fault 판정 | `pending` |
+| `TD-005-S08C2` | IO device-profile health source와 Alarm/Fault 판정 | `complete` |
 
 S08C1 완료 증거:
 
@@ -449,11 +448,18 @@ S08C1 완료 증거:
 - 단일 SDO timeout API Fail은 runtime Diagnostic을 생성하지 않는다.
 - Bus/Axis runtime Diagnostic 테스트 8개와 전체 unittest 129개가 통과했다.
 
-S08C2 시작 조건:
+S08C2 조사 결과와 결정:
 
-- 현재 IO PDO model에는 공통 health/fault signal이 없으므로 Bus WKC를 특정 IO source로 추정하지 않는다.
-- CPX-AP 및 향후 IO profile이 제공하는 health source, bit/status 의미와 Alarm/Fault 기준을 먼저 확정한다.
-- source가 없는 상태에서 IO Diagnostic을 임의 생성하거나 AP/ISDU 요청의 단발 실패를 승격하지 않는다.
+- CPX-AP ESI에는 `0x6102 Diagnosis`와 이를 전달하는 선택형 `0x1AF1 Diag PDO`가 존재하지만,
+  ESI가 `0x1AF1`을 기본 Sync Manager assignment에 포함하지 않는다.
+- 현재 CPX process-image 계약은 설정된 AP module의 입력 byte만 사용한다. `0x1AF1`을 추가하면 PDO
+  assignment, input image 크기와 module offset 계약이 함께 변경되므로 TD-005 범위에서 암묵적으로
+  활성화하지 않는다.
+- S08C2에서는 `IO:<configured index>` station 단위보다 세분된 module/channel Diagnostic을 생성하지
+  않는다. Bus WKC로 특정 IO source를 추정하거나 단발 AP/ISDU 요청 실패를 Diagnostic으로 승격하지 않는다.
+- 선택형 TxPDO 활성화, `0x6102` 해석, station Alarm/Fault 변환과 real/mock parity는 Optional Item
+  `RF-012`에서 구현한다.
+- 이 조사와 범위 확정으로 S08C2 및 S08C를 완료하며 다음 실행 단계는 `TD-005-S08D`다.
 
 ### TD-005-S09 Control Panel/ROS 호환 읽기
 

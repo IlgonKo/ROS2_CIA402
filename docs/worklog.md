@@ -8,6 +8,11 @@
 
 ### 완료
 
+- `TD-005-S08C2`에서 CPX-AP health source를 조사하여 `0x6102 Diagnosis`와 선택형 `0x1AF1 Diag PDO`가
+  존재하지만 기본 Sync Manager assignment에는 포함되지 않음을 확인했다.
+- PDO 구성에 따라 진단 가능 여부가 달라지는 상태에서 module/channel Diagnostic을 생성하지 않기로
+  확정했다. Bus WKC 추정과 단발 AP/ISDU 실패 승격도 제외하고, 선택형 상세 진단은 Optional Item
+  `RF-012`로 분리했다. 이로써 S08C를 완료했으며 다음 단계는 S08D다.
 - `TD-005-S08C1`을 완료하여 정상 process-data cycle 직후 Bus WKC와 Axis statusword를 평가하는
   runtime Diagnostic monitor를 연결했다.
 - 3회 연속 WKC 불일치는 latching Bus Fault, Axis fault bit는 latching Axis Fault, warning bit는

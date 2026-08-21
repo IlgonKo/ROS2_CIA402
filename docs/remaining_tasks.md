@@ -157,6 +157,18 @@ Tech Debt 상태 값은 `open`, `in_progress`, `complete`를 사용한다.
   - clean Windows PC에서 부팅 자동 시작, 정상 종료, 장애 후 재시작과 로그 보존 검증이 통과한다.
 - 상세: [RF-011 기능 명세](tasks/rf/RF-011-windows-service-logging.md)
 
+### RF-012 CPX-AP 선택형 상세 Diagnostic
+
+- 상태: `reserved`
+- 우선순위: 낮음 (Optional Item)
+- 요약: CPX-AP의 선택형 Diagnosis TxPDO를 사용하여 I/O station의 상세 Diagnostic을 제공한다.
+- 완료 조건:
+  - `0x1AF1` TxPDO의 활성화 여부, PDO assignment와 process-image 배치가 설정 계약으로 확정된다.
+  - `0x6102` Category Status, active count, module number와 diagnosis code의 해석 기준이 문서화된다.
+  - station 단위 Alarm/Fault 변환과 상세 module 정보의 표현 방식이 실제 장치 동작을 기준으로 검증된다.
+  - 선택형 PDO를 사용하지 않는 구성의 기존 I/O 동작과 real/mock parity가 유지된다.
+- 상세: [RF-012 기능 명세](tasks/rf/RF-012-cpx-ap-optional-diagnostic.md)
+
 ## Tech Debt
 
 ### TD-003 Axis Server 과거 명칭 잔존

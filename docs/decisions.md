@@ -316,6 +316,26 @@ Device Profile + ESI
   - 전체 지점의 목표 분류와 migration 순서는
     [Exception 발생·Catch 지점 목표 분류](diagnostic/exception_point_classification.md)를 따른다.
 
+## DEC-020 I/O Diagnostic은 구성에서 보장되는 Health Source만 사용
+
+- 상태: `accepted`
+- 결정일: 2026-08-21
+- 결정:
+  - I/O Diagnostic은 활성 PDO configuration 또는 별도로 확정된 접근 계약에서 health source가 보장될
+    때만 생성한다.
+  - 현재 CPX-AP 구성에서는 station, module 및 channel 단위 Diagnostic을 생성하지 않는다.
+  - Bus WKC 불일치로 특정 I/O source를 추정하거나 단발 AP/ISDU API Fail을 Diagnostic으로 승격하지 않는다.
+- 이유: CPX-AP의 `0x1AF1 Diag PDO`는 ESI에 정의되어 있지만 기본 Sync Manager assignment에는 포함되지
+  않는다. 이를 전제로 한 module 진단은 PDO 구성에 따라 가능 여부가 달라지고 기존 process-image 계약도
+  변경한다.
+- 검토한 대안:
+  - `0x6102`를 주기적으로 SDO polling하는 방식은 polling 주기, bus 부하, timeout과 동시 접근 정책이
+    먼저 필요하여 현재 범위에 포함하지 않는다.
+  - 선택형 PDO를 자동 추가하는 방식은 명시적인 설정 없이 process-image 크기와 offset을 변경하므로
+    채택하지 않는다.
+- 영향: TD-005-S08C2는 구현 없이 조사와 범위 확정으로 완료한다. 선택형 TxPDO 기반 station 진단과
+  module 상세정보는 Optional Item `RF-012`에서 별도로 설계·검증한다.
+
 ## 새 결정 작성 양식
 
 ```text
