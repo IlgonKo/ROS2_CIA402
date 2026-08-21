@@ -1,4 +1,5 @@
 import unittest
+from pathlib import Path
 from unittest.mock import Mock
 
 from motion_server.api import (
@@ -91,6 +92,16 @@ class ApiResponseContractTests(unittest.TestCase):
         import motion_server.api as api
 
         self.assertFalse(hasattr(api, "_add_request_id"))
+
+    def test_response_contract_uses_existing_api_modules(self):
+        import motion_server.api.encoder as encoder
+        import motion_server.api.router as router
+
+        self.assertIs(ResponseContext, encoder.ResponseContext)
+        self.assertIs(request_response, router.request_response)
+        api_directory = Path(encoder.__file__).parent
+        self.assertFalse((api_directory / "response.py").exists())
+        self.assertFalse((api_directory / "boundary.py").exists())
 
 
 class RequestBoundaryTests(unittest.TestCase):

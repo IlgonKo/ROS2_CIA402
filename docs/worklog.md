@@ -8,10 +8,14 @@
 
 ### 완료
 
+- S02의 별도 `api/response.py`, `api/boundary.py`가 TD-017의 기존 module 책임과 중복됨을 확인해
+  response 기능은 `encoder.py`, request boundary는 `router.py`로 통합하고 두 파일을 제거했다.
+- 후속 TD-005 단계는 구현 전에 기존 module 책임과 변경 위치를 대조하고 독립 개념이 아닌 신규
+  module을 만들지 않도록 계획 규칙과 구조 검증 테스트를 추가했다.
 - `TD-005-S02`를 완료하여 기존 `cmd` 및 신규 `type` 요청을 해석하는 ResponseContext,
   Success/Fail response encoder와 Exception mapping/logging request boundary를 구현했다.
-- S02 계약 테스트 12개와 전체 unittest 36개를 통과했으며 router, handler와 socket 송신 경로는
-  변경하지 않아 현재 서버의 legacy API 동작을 유지했다.
+- S02 계약 테스트 13개와 전체 unittest 37개를 통과했으며 `route_message`, handler와 socket 송신
+  경로는 변경하지 않아 현재 서버의 legacy API 동작을 유지했다.
 - `TD-005-S01`을 완료하여 FailureCode 20개, MotionServerException 계층, 중앙 MRO mapping,
   allowlist 기반 public details, INTERNAL_FAILURE fallback과 PartialFailure 결과 model을 구현했다.
 - S01 계약 테스트 9개와 기존 회귀를 포함한 전체 unittest 24개를 통과했으며 API runtime 동작은 변경하지 않았다.
