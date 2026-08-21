@@ -1,3 +1,6 @@
+from motion_server.diagnostic.serialization import diagnostic_status_snapshot
+
+
 def server_status_message(runtime, state):
     return {
         "type": "system/server/status",
@@ -8,4 +11,5 @@ def server_status_message(runtime, state):
         "axis_count": len(runtime.slaves),
         "cycle_time": float(runtime.cycle_time),
         "feedback_type": "system/feedback",
+        "diagnostic_status": diagnostic_status_snapshot(runtime),
     }

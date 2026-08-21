@@ -14,6 +14,11 @@ from motion_server.control.axis_units import (
     motion_limits_drive_to_api,
     profile_settings_drive_to_api,
 )
+from motion_server.diagnostic.models import (
+    DiagnosticSource,
+    DiagnosticSourceType,
+)
+from motion_server.diagnostic.serialization import diagnostic_status_snapshot
 
 
 def axis_status_message(runtime, state, axis_index, client_id=None):
@@ -105,6 +110,10 @@ def axis_status_message(runtime, state, axis_index, client_id=None):
             if axis_index < len(runtime.last_diagnostics)
             else {}
         ),
+        "diagnostic_status": diagnostic_status_snapshot(
+            runtime,
+            source=DiagnosticSource(DiagnosticSourceType.AXIS, axis_index),
+        ),
         "capabilities": state["capabilities"],
         "command_authority": {
             "owner": owner,
@@ -172,6 +181,10 @@ def axes_status_message(runtime, state, client_id=None):
         "trajectory": public_trajectory_state(state),
         "homing": public_homing_state(state),
         "diagnostics": runtime.last_diagnostics,
+        "diagnostic_status": diagnostic_status_snapshot(
+            runtime,
+            source_type=DiagnosticSourceType.AXIS,
+        ),
         "command_authority": {
             "owner": owner,
             "owned_by_this_client": owner is not None and owner == client_id,

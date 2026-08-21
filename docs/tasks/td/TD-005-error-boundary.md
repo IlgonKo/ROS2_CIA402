@@ -59,9 +59,10 @@ client의 복구 판단과 장애 분석이 불안정하다.
 
 ### 작업 재개 체크포인트
 
-- 현재 완료 단계: `TD-005-S08C2`
-- 다음 실행 단계: `TD-005-S08D`
-- 다음 시작 위치: 기존 status 경로에 활성 Diagnostic 조회와 직렬화 계약을 연결한다.
+- 현재 완료 단계: `TD-005-S08D`
+- 다음 실행 단계: `TD-005-S09`
+- 다음 시작 위치: Control Panel과 ROS client가 legacy 응답과 신규 Success/Fail envelope를 모두 읽는
+  공통 decoder와 호환 경계를 구현한다.
 - 현재 호환 상태: 서버는 legacy 응답만 송신한다. 신규 Success/Fail envelope는 아직 live API에 연결되지 않았다.
 - 보존할 사용자 변경: `device/cmmt/required_od.py`의 OD 기본값 및 형식 변경은 `TD-023` 범위이며
   TD-005 변경에 포함하지 않는다.
@@ -388,7 +389,7 @@ S08은 운전 영향 범위를 한 번에 변경하지 않고 다음 순서로 �
 | `TD-005-S08A` | Diagnostic model, 활성 저장소와 lifecycle core | S07C | `complete` |
 | `TD-005-S08B` | startup 필수 실패와 Initialization Fault 연결 | S08A | `complete` |
 | `TD-005-S08C` | runtime Bus/Axis/IO Alarm·Fault producer와 API Fail 병행 | S08B | `complete` |
-| `TD-005-S08D` | 기존 status 경로의 Diagnostic 조회·직렬화 계약 연결 | S08C | `pending` |
+| `TD-005-S08D` | 기존 status 경로의 Diagnostic 조회·직렬화 계약 연결 | S08C | `complete` |
 
 #### TD-005-S08A 계약
 
@@ -460,6 +461,21 @@ S08C2 조사 결과와 결정:
 - 선택형 TxPDO 활성화, `0x6102` 해석, station Alarm/Fault 변환과 real/mock parity는 Optional Item
   `RF-012`에서 구현한다.
 - 이 조사와 범위 확정으로 S08C2 및 S08C를 완료하며 다음 실행 단계는 `TD-005-S08D`다.
+
+#### TD-005-S08D 완료 증거
+
+- 기존 server/bus/axis/axes/io status에 공통 `diagnostic_status` snapshot을 추가했다.
+- server status는 모든 source, bus는 BUS, 단일 axis는 해당 AXIS, axes는 모든 AXIS, io는 모든 IO
+  source의 활성 Diagnostic만 조회한다.
+- snapshot은 범위별 현재 `level`과 Definition/Source/History로 구성된 `statuses`를 제공하며 활성 건이
+  없으면 `normal`과 빈 목록을 반환한다.
+- Fault 우선의 안정적인 정렬, UTC ISO 8601 timestamp와 source filtering을 직렬화 계층에서 담당한다.
+- 내부 예약 field `detail/context`는 공개 schema가 확정되지 않았으므로 외부에 직렬화하지 않는다.
+- Axis status의 기존 `diagnostics` 원시 CMMT readback은 호환을 위해 변경하지 않고 새 공통 상태와
+  `diagnostic_status` 이름으로 구분했다.
+- acknowledge 명령, notification과 영속 이력 조회는 S08D 범위에 추가하지 않았다.
+- S08D 직렬화/status 테스트 4개와 전체 unittest 133개가 통과했다.
+- 이로써 S08 전체를 완료하며 다음 실행 단계는 `TD-005-S09`다.
 
 ### TD-005-S09 Control Panel/ROS 호환 읽기
 

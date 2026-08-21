@@ -1,3 +1,7 @@
+from motion_server.diagnostic.models import DiagnosticSourceType
+from motion_server.diagnostic.serialization import diagnostic_status_snapshot
+
+
 def bus_status_message(runtime, state):
     expected_wkc = runtime.expected_wkc()
     actual_wkc = int(getattr(runtime, "wkc", 0))
@@ -19,4 +23,8 @@ def bus_status_message(runtime, state):
             int(slave.txpdo.mode_of_operation_display)
             for slave in runtime.slaves
         ],
+        "diagnostic_status": diagnostic_status_snapshot(
+            runtime,
+            source_type=DiagnosticSourceType.BUS,
+        ),
     }

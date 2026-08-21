@@ -15,6 +15,10 @@ from motion_server.diagnostic.models import (
     DiagnosticStatus,
     cleared_at,
 )
+from motion_server.diagnostic.serialization import (
+    diagnostic_status_data,
+    diagnostic_status_snapshot,
+)
 
 __all__ = [
     "DiagnosticDefinition",
@@ -30,4 +34,6 @@ __all__ = [
     "SERVER_INITIALIZATION_FAILED",
     "SERVER_SOURCE",
     "cleared_at",
+    "diagnostic_status_data",
+    "diagnostic_status_snapshot",
 ]

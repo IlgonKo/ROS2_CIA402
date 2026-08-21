@@ -8,6 +8,12 @@
 
 ### 완료
 
+- `TD-005-S08D`를 완료하여 기존 server/bus/axis/axes/io status에 source 범위별 공통
+  `diagnostic_status` snapshot을 연결했다.
+- Definition/Source/History, 범위별 현재 level, 안정적인 Fault 우선 정렬과 UTC timestamp를 직렬화하고,
+  내부 예약 `detail/context`와 기존 Axis `diagnostics` 원시 readback은 공개 공통 계약에서 분리했다.
+- S08D 테스트 4개와 전체 unittest 133개가 통과했다. S08 전체를 완료했으며 다음 단계는
+  Control Panel/ROS dual-read 호환을 구현하는 S09다.
 - `TD-005-S08C2`에서 CPX-AP health source를 조사하여 `0x6102 Diagnosis`와 선택형 `0x1AF1 Diag PDO`가
   존재하지만 기본 Sync Manager assignment에는 포함되지 않음을 확인했다.
 - PDO 구성에 따라 진단 가능 여부가 달라지는 상태에서 module/channel Diagnostic을 생성하지 않기로
