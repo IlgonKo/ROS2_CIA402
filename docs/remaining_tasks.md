@@ -301,3 +301,27 @@ Tech Debt 상태 값은 `open`, `in_progress`, `complete`를 사용한다.
   - API와 server log가 동일한 원인 식별자와 오류 메시지를 제공한다.
   - mock 오류 주입과 대표 CPX 설정 오류의 자동 복구 테스트가 통과한다.
 - 상세: [TD-018 기술 명세](tasks/td/TD-018-runtime-initialization-error.md)
+
+### TD-019 프로젝트·저장소 및 설치 경로 변경
+
+- 상태: `open`
+- 우선순위: 보통
+- 요약: `ROS2_CIA402/virtual_ethercat` 기반 프로젝트·저장소·설치 경로를 Motion Server 명칭으로 이관한다.
+- 완료 조건:
+  - GitHub repository, 로컬 workspace와 Linux 설치 경로의 목표 명칭이 결정 문서에 확정된다.
+  - Windows/Linux script와 문서가 새 경로를 기본값으로 사용한다.
+  - 기존 경로에서 새 경로로 이전하는 절차와 rollback 방법이 제공된다.
+  - clean checkout, Windows-to-Linux sync와 Basic mode startup 검증이 새 경로에서 통과한다.
+- 상세: [TD-019 기술 명세](tasks/td/TD-019-project-path-migration.md)
+
+### TD-020 Legacy 실행 식별자 Migration
+
+- 상태: `open`
+- 우선순위: 보통
+- 요약: 과거 프로젝트명을 포함한 container, image, service와 환경변수 식별자를 단계적으로 변경한다.
+- 완료 조건:
+  - legacy 실행 식별자와 신규 식별자의 mapping, 호환 기간과 제거 version이 문서화된다.
+  - Docker/systemd/환경변수에서 신규 식별자를 기본값으로 사용하고 legacy 입력을 명시적으로 지원한다.
+  - 기존 설치의 upgrade, 신규 설치와 rollback scenario가 Windows/Linux에서 검증된다.
+  - 호환 기간 종료 후 제거할 fallback이 코드와 문서에서 추적 가능하다.
+- 상세: [TD-020 기술 명세](tasks/td/TD-020-legacy-runtime-identifiers.md)

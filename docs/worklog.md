@@ -14,6 +14,8 @@
 - TD별 현재 구조, 위험, 구현 범위와 검증 계획을 `docs/tasks/td` 상세 문서로 분리했다.
 - `remaining_tasks.md`의 RF 항목도 동일한 형식으로 통일하고 완료 조건을 검증 가능한 결과로 강화했다.
 - RF별 사용자 가치, 구현 범위, 제약과 검증 계획을 `docs/tasks/rf` 상세 문서로 분리했다.
+- 프로젝트·설치 경로 migration을 `TD-019`, legacy 실행 식별자 migration을 `TD-020`으로 등록했다.
+- ROS package 식별자는 `RF-008`, 사용자 노출 Axis Server 명칭은 `TD-003`에서 처리하도록 범위를 분리했다.
 
 ## 2026-06-25
 

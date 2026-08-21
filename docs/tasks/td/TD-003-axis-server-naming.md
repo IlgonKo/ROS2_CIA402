@@ -18,6 +18,8 @@
 
 - 제품명이 확정된 `Axis Control Panel`은 변경 대상이 아니다.
 - 기존 환경변수, container, systemd service와 설치 경로는 하위 호환성 정책 없이 즉시 제거하지 않는다.
+- 프로젝트·설치 경로 변경은 [TD-019](TD-019-project-path-migration.md), 실행 식별자 migration은
+  [TD-020](TD-020-legacy-runtime-identifiers.md)에서 별도로 추적한다.
 
 ## 목표 구조 및 구현 범위
 
