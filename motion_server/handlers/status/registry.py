@@ -2,7 +2,6 @@ from motion_server.api.decoder import selected_single_axis
 from motion_server.api.encoder import (
     reject_command_message,
     send_client_message,
-    send_status_request_response,
     status_data,
 )
 from motion_server.failure import InvalidRequestException
@@ -109,20 +108,15 @@ def invalid_axis_status_request():
 
 
 def send_status_operation(message, client, operation, *, include_ok=True):
-    # TECH_DEBT[TD-005]: S11 removes the nested status request boundary.
-    return send_status_request_response(
-        message,
-        client,
-        operation,
-    )
+    return operation()
 
 
 def handle_axis_parameter_read(message_type, message, runtime, state, client):
-    read_parameter(message, runtime, client)
+    return read_parameter(message, runtime, client)
 
 
 def handle_io_parameter_read(message_type, message, runtime, state, client):
-    read_io_parameter(message, runtime, client)
+    return read_io_parameter(message, runtime, client)
 
 
 def reject_not_implemented(message_type, message, runtime, state, client):
@@ -138,23 +132,23 @@ def handle_io_input_read(message_type, message, runtime, state, client):
 
 
 def handle_axis_parameter_catalog(message_type, message, runtime, state, client):
-    axis_param_catalog(message, runtime, client)
+    return axis_param_catalog(message, runtime, client)
 
 
 def handle_ethercat_parameter_catalog(message_type, message, runtime, state, client):
-    ethercat_param_catalog(message, runtime, client)
+    return ethercat_param_catalog(message, runtime, client)
 
 
 def handle_iol_parameter_catalog(message_type, message, runtime, state, client):
-    iol_param_catalog(message, runtime, client)
+    return iol_param_catalog(message, runtime, client)
 
 
 def handle_ap_parameter_read(message_type, message, runtime, state, client):
-    read_ap_parameter(message, runtime, client)
+    return read_ap_parameter(message, runtime, client)
 
 
 def handle_iol_parameter_read(message_type, message, runtime, state, client):
-    read_iol_parameter(message, runtime, client)
+    return read_iol_parameter(message, runtime, client)
 
 
 STATUS_HANDLERS = {
@@ -194,5 +188,7 @@ def handle_status(message_type, message, runtime, state, client):
     handler = STATUS_HANDLERS.get(message_type)
     if handler is None:
         return False
-    handler(message_type, message, runtime, state, client)
+    client["_operation_result"] = handler(
+        message_type, message, runtime, state, client,
+    )
     return True

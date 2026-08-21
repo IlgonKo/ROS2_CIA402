@@ -1,6 +1,6 @@
-from motion_server.api.encoder import send_client_message
 from motion_server.api.specification import authority_message_types
 from motion_server.config import status_log
+from motion_server.failure import AuthorityBusyException, AuthorityRequiredException
 from motion_server.handlers.authority.status import authority_status_payload
 
 
@@ -15,26 +15,13 @@ def acquire_authority(client, state):
             if owner is None
             else "This connection already owns command authority."
         )
-        send_client_message(client, payload)
         status_log(f"Command authority granted to client {client['id']}")
-        return
+        return _authority_data(payload)
 
-    send_client_message(
-        client,
-        {
-            "type": "system/authority/request",
-            "ok": False,
-            "granted": False,
-            "reason": "authority_busy",
-            "owner": owner,
-            "owned_by_this_client": False,
-            "available": False,
-            "message": f"Command authority is already held by client {owner}.",
-        },
-    )
     status_log(
         f"Command authority denied to client {client['id']}; owner={owner}",
     )
+    raise AuthorityBusyException(owner)
 
 
 def release_authority(client, state):
@@ -51,29 +38,24 @@ def release_authority(client, state):
         reason = "authority_busy"
         message = "This client does not hold command authority."
 
-    send_client_message(
-        client,
-        {
-            "type": "system/authority/release",
-            "ok": owner == client["id"],
-            "granted": False,
-            "reason": reason,
-            "owner": state.get("command_authority_owner"),
-            "owned_by_this_client": False,
-            "available": state.get("command_authority_owner") is None,
-            "message": message,
-        },
-    )
+    if owner != client["id"]:
+        if owner is None:
+            raise AuthorityRequiredException()
+        raise AuthorityBusyException(owner)
+    return {
+        "granted": False,
+        "owner": None,
+        "owned_by_this_client": False,
+        "available": True,
+        "message": message,
+    }
 
 
 AUTHORITY_HANDLERS = {
     "system/authority/request": acquire_authority,
     "system/authority/release": release_authority,
     "system/authority/status": (
-        lambda client, state: send_client_message(
-            client,
-            authority_status_payload(client, state),
-        )
+        lambda client, state: _authority_data(authority_status_payload(client, state))
     ),
 }
 
@@ -97,5 +79,14 @@ def handle_authority(message_type, client, state):
     handler = AUTHORITY_HANDLERS.get(message_type)
     if handler is None:
         return False
-    handler(client, state)
+    client["_operation_result"] = handler(client, state)
     return True
+
+
+def _authority_data(payload):
+    data = dict(payload)
+    data.pop("type", None)
+    data.pop("ok", None)
+    if data.get("reason") is None:
+        data.pop("reason", None)
+    return data

@@ -5,6 +5,7 @@ from types import SimpleNamespace
 from unittest.mock import patch
 
 from motion_server.api.router import request_response
+from motion_server.failure import InvalidRequestException, ResourceNotFoundException
 from motion_server.handlers.status.axis_parameter_catalog import (
     axis_param_catalog_data,
 )
@@ -53,7 +54,7 @@ def axis_catalog_runtime(catalog):
 
 
 class StatusBoundaryTest(unittest.TestCase):
-    def test_server_status_sends_success_envelope(self):
+    def test_server_status_returns_operation_data(self):
         runtime = SimpleNamespace(slaves=[object()], cycle_time=0.008)
         active_client = client()
 
@@ -65,40 +66,34 @@ class StatusBoundaryTest(unittest.TestCase):
             active_client,
         )
 
-        self.assertEqual(response["result"], "success")
-        self.assertNotIn("type", response["data"])
-        self.assertFalse(response["data"]["drive_initialized"])
-        sent = active_client["conn"].messages[0]
-        self.assertEqual(sent, response)
-        self.assertNotIn("ok", sent)
+        self.assertNotIn("type", response)
+        self.assertFalse(response["drive_initialized"])
+        self.assertEqual(active_client["conn"].messages, [])
 
     def test_axis_status_missing_selector_is_safe_invalid_request(self):
         active_client = client()
 
-        response = handle_axis_status(
-            "system/axis/status",
-            {"type": "system/axis/status"},
-            SimpleNamespace(),
-            {},
-            active_client,
-        )
-
-        self.assertEqual(response["failure"]["code"], "INVALID_REQUEST")
-        self.assertEqual(active_client["conn"].messages[0], response)
+        with self.assertRaises(InvalidRequestException):
+            handle_axis_status(
+                "system/axis/status",
+                {"type": "system/axis/status"},
+                SimpleNamespace(),
+                {},
+                active_client,
+            )
 
     def test_axis_status_unknown_axis_is_resource_not_found(self):
         active_client = client()
         runtime = SimpleNamespace(slaves=[])
 
-        response = handle_axis_status(
-            "system/axis/status",
-            {"type": "system/axis/status", "axis": 5},
-            runtime,
-            {},
-            active_client,
-        )
-
-        self.assertEqual(response["failure"]["code"], "RESOURCE_NOT_FOUND")
+        with self.assertRaises(ResourceNotFoundException):
+            handle_axis_status(
+                "system/axis/status",
+                {"type": "system/axis/status", "axis": 5},
+                runtime,
+                {},
+                active_client,
+            )
 
 
 class CatalogBoundaryTest(unittest.TestCase):

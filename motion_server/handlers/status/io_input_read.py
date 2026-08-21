@@ -1,17 +1,10 @@
 from motion_server.api.decoder import selected_io_device
-from motion_server.api.encoder import (
-    io_device_snapshot,
-    send_status_request_response,
-)
+from motion_server.api.encoder import io_device_snapshot
 from motion_server.failure import ResourceNotFoundException, ServerNotReadyException
 
 
 def input_read(message, runtime, state, client):
-    return send_status_request_response(
-        message,
-        client,
-        lambda: input_read_data(message, runtime),
-    )
+    return input_read_data(message, runtime)
 
 
 def input_read_data(message, runtime):

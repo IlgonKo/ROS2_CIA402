@@ -225,7 +225,7 @@ def _live_response(context, client, captured_messages):
             ),
         )
     if not captured_messages:
-        return success_response(context)
+        return success_response(context, result)
 
     message = captured_messages[0]
     if message.get("result") in {"success", "fail"}:

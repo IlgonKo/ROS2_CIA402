@@ -102,14 +102,6 @@ def status_data(message):
     return data
 
 
-def send_status_request_response(message, client, operation):
-    from motion_server.api.router import request_response
-
-    response = request_response(message, operation)
-    send_client_message(client, response)
-    return response
-
-
 def command_name(message):
     return str(message.get("cmd", message.get("type", ""))).strip()
 

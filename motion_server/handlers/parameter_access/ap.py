@@ -1,7 +1,6 @@
 import struct
 import time
 
-from motion_server.api.encoder import send_client_message
 from motion_server.api.validator import parse_int
 from motion_server.failure import (
     DeviceAccessException,
@@ -34,26 +33,11 @@ AP_DATA_FORMATS = {
 
 
 def read_ap_parameter(message, runtime, client):
-    response = parameter_request_response(
-        message,
-        lambda: _read_ap_parameter(message, runtime),
-    )
-    send_client_message(client, response)
+    return _read_ap_parameter(message, runtime)
 
 
 def write_ap_parameter(message, runtime, client):
-    response = parameter_request_response(
-        message,
-        lambda: _write_ap_parameter(message, runtime),
-    )
-    send_client_message(client, response)
-
-
-def parameter_request_response(message, operation):
-    # TECH_DEBT[TD-005]: S11 moves this nested boundary to the live router.
-    from motion_server.api.router import request_response
-
-    return request_response(message, operation)
+    return _write_ap_parameter(message, runtime)
 
 
 def _read_ap_parameter(message, runtime):

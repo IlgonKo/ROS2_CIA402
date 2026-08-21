@@ -94,43 +94,19 @@ def selected_single_axis(message, runtime, command):
 
 
 def read_parameter(message, runtime, client):
-    send_client_message(
-        client,
-        parameter_request_response(
-            message,
-            lambda: _read_axis_parameter(message, runtime),
-        ),
-    )
+    return _read_axis_parameter(message, runtime)
 
 
 def write_parameter(message, runtime, client):
-    send_client_message(
-        client,
-        parameter_request_response(
-            message,
-            lambda: _write_axis_parameter(message, runtime),
-        ),
-    )
+    return _write_axis_parameter(message, runtime)
 
 
 def read_io_parameter(message, runtime, client):
-    send_client_message(
-        client,
-        parameter_request_response(
-            message,
-            lambda: _read_io_parameter(message, runtime),
-        ),
-    )
+    return _read_io_parameter(message, runtime)
 
 
 def write_io_parameter(message, runtime, client):
-    send_client_message(
-        client,
-        parameter_request_response(
-            message,
-            lambda: _write_io_parameter(message, runtime),
-        ),
-    )
+    return _write_io_parameter(message, runtime)
 
 
 def _read_axis_parameter(message, runtime):
@@ -139,13 +115,6 @@ def _read_axis_parameter(message, runtime):
     data = _parameter_data("axis", axis, index, subindex, data_type, value)
     data["length"] = length
     return data
-
-
-def parameter_request_response(message, operation):
-    # TECH_DEBT[TD-005]: S11 moves this nested boundary to the live router.
-    from motion_server.api.router import request_response
-
-    return request_response(message, operation)
 
 
 def _write_axis_parameter(message, runtime):

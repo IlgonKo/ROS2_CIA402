@@ -183,15 +183,10 @@ class ApParameterHandlerTest(unittest.TestCase):
 
         self.assertIs(caught.exception, expected)
 
-    def test_live_handler_sends_success_envelope(self):
-        connection = RecordingConnection()
-
-        read_ap_parameter(read_message(), runtime(), {"conn": connection})
-
-        response = connection.messages[0]
-        self.assertEqual(response["result"], "success")
-        self.assertIn("data", response)
-        self.assertNotIn("ok", response)
+    def test_handler_returns_operation_data(self):
+        data = read_ap_parameter(read_message(), runtime(), {})
+        self.assertEqual(data["io"], "io0")
+        self.assertNotIn("result", data)
 
     def test_startup_ap_write_uses_common_status_exceptions(self):
         timeout_master = FakeApMaster(status=AP_STATUS_BUSY)

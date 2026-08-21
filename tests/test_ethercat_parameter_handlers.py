@@ -216,8 +216,7 @@ class EthercatParameterHandlerTest(unittest.TestCase):
                 active_runtime,
             )
 
-    def test_live_handler_sends_success_envelope(self):
-        connection = RecordingConnection()
+    def test_handler_returns_operation_data(self):
         message = {
             "type": "system/axis/param_read",
             "axis": 0,
@@ -225,16 +224,11 @@ class EthercatParameterHandlerTest(unittest.TestCase):
             "data_type": "uint16",
         }
 
-        read_parameter(message, runtime(), {"conn": connection})
+        data = read_parameter(message, runtime(), {})
+        self.assertEqual(data["axis"], 0)
+        self.assertNotIn("result", data)
 
-        response = connection.messages[0]
-        self.assertEqual(response["result"], "success")
-        self.assertIn("data", response)
-        self.assertNotIn("ok", response)
-        self.assertNotIn("failure", response)
-
-    def test_live_failure_sends_safe_fail_envelope(self):
-        connection = RecordingConnection()
+    def test_handler_raises_typed_failure(self):
         message = {
             "type": "system/io/param_write",
             "io": "missing",
@@ -242,14 +236,8 @@ class EthercatParameterHandlerTest(unittest.TestCase):
             "value": 1,
         }
 
-        with patch("motion_server.api.router._LOGGER", Mock()):
-            write_io_parameter(message, runtime(), {"conn": connection})
-
-        response = connection.messages[0]
-        self.assertEqual(response["result"], "fail")
-        self.assertEqual(response["failure"]["code"], "RESOURCE_NOT_FOUND")
-        self.assertNotIn("ok", response)
-        self.assertNotIn("error", response)
+        with self.assertRaises(ResourceNotFoundException):
+            write_io_parameter(message, runtime(), {})
 
 
 if __name__ == "__main__":

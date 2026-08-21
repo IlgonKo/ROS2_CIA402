@@ -8,6 +8,10 @@
 
 ### 완료
 
+- `TD-005-S11B1`에서 status, EtherCAT/AP/IO-Link parameter 및 authority operation을 순수 data 반환과
+  typed Exception 계약으로 전환하고 사용되지 않는 중간 response helper를 제거했다.
+- direct handler 계약 테스트를 새 반환 방식으로 갱신했으며 전체 unittest 145개가 통과했다. 다음은
+  command 및 authority validation 직접 송신과 임시 request capture를 제거하는 `TD-005-S11B2`다.
 - `TD-005-S11A`에서 미배포 프로젝트에는 backward compatibility가 필요 없다는 결정에 따라 client의
   legacy response와 `diagnostics` fallback을 완전히 제거했다.
 - Axis/I/O Control Panel과 ROS Bridge는 현재 Success/Fail envelope 및 승인 notification만 해석하며,

@@ -59,10 +59,10 @@ client의 복구 판단과 장애 분석이 불안정하다.
 
 ### 작업 재개 체크포인트
 
-- 현재 완료 단계: `TD-005-S11A`
-- 다음 실행 단계: `TD-005-S11B`
-- 다음 시작 위치: command handler의 직접 송신/catch를 data 반환 및 typed Exception으로 바꾸고
-  `_RequestCaptureConnection`을 제거한다.
+- 현재 완료 단계: `TD-005-S11B1`
+- 다음 실행 단계: `TD-005-S11B2`
+- 다음 시작 위치: command handler와 authority validation의 직접 송신/catch를 data 반환 및 typed
+  Exception으로 바꾼 뒤 `_RequestCaptureConnection`을 제거한다.
 - 현재 호환 상태: 서버 request/response는 신규 Success/Fail envelope만 송신한다. 주기 feedback과
   자발적 notification은 envelope 대상이 아니다.
 - 보존할 사용자 변경: `device/cmmt/required_od.py`의 OD 기본값 및 형식 변경은 `TD-023` 범위이며
@@ -546,7 +546,8 @@ S11은 정리 범위를 한 번에 변경하지 않고 다음 순서로 진행�
 | 하위 단계 | 범위 | 상태 |
 | --- | --- | --- |
 | `TD-005-S11A` | client legacy response 및 `diagnostics` fallback 제거 | `complete` |
-| `TD-005-S11B` | command 반환/typed Exception 전환과 request capture 제거 | `pending` |
+| `TD-005-S11B1` | status, parameter, authority operation의 data 반환/typed Exception 전환 | `complete` |
+| `TD-005-S11B2` | command 반환/typed Exception 전환과 request capture 제거 | `pending` |
 | `TD-005-S11C` | broad catch allowlist, envelope/mapping 정적 검사와 TD-005 완료 | `pending` |
 
 S11A 완료 증거:
@@ -558,3 +559,14 @@ S11A 완료 증거:
 - Axis/I/O Control Panel과 ROS Bridge가 새 `decode_server_message` 계약을 사용한다.
 - current envelope, legacy 거부, `diagnostics` 미변환과 notification 테스트 6개 및 전체 unittest 145개가
   통과했다.
+
+S11B1 완료 증거:
+
+- status registry와 EtherCAT/AP/IO-Link parameter handler는 응답을 직접 송신하거나 내부 request
+  boundary를 호출하지 않고 operation data를 반환하며 typed Exception을 상위 경계로 전달한다.
+- authority acquire/release/status도 동일한 data 반환/typed Exception 계약으로 전환했다.
+- 사용되지 않게 된 parameter/status 중간 response helper를 제거했다.
+- direct handler 계약 테스트를 반환값과 typed Exception 기준으로 갱신했으며 전체 unittest 145개가
+  통과했다.
+- command 및 authority validation의 직접 송신은 S11B2에서 정리하고, 그 전까지 중앙 capture를
+  유지한다.
