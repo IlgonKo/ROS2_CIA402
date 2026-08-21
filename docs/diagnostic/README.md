@@ -14,11 +14,11 @@ API 요청의 `Success`와 `Error`는 Diagnostic에 포함하지 않는다. Pyth
 
 ## 현재 문서
 
+- [diagnostic_model.md](diagnostic_model.md): 확정된 Diagnostic 객체 구성과 acknowledge/resolve/clear 규칙
 - [error_point_inventory.md](error_point_inventory.md): 현재 Python exception 발생·catch 지점과 migration inventory
 
 ## 추가 예정 문서
 
-- Diagnostic model과 event/condition 수명 주기
 - Alarm/Fault 판정, acknowledge, clear 및 recovery 정책
 - Diagnostic code와 source/context 계약
 
