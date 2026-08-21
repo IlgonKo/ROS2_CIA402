@@ -47,6 +47,10 @@
 
 ### 문서 및 운영
 
+- 공개 계약과 내부 helper의 경계를 `DEC-014`로 확정하고, TD 계약표·추적표 작성 규칙과
+  최소 구현체/누락/내부 helper 부재 테스트 원칙을 문서 가이드에 추가했다.
+- Codex가 구현 전에 계약 범위와 제외 범위를 확인하고 합의 없는 계약 확대를 중단하도록
+  저장소 루트 `AGENTS.md`에 구현 규칙을 추가했다.
 - TD-023의 MotionController 제한 기준을 device OD readback으로 확정하고 기존
   `MOTION_SERVER_MAX_VELOCITY`, `ACCELERATION`, `DECELERATION` fallback 제거와
   필수 readback 실패의 initialization error 처리를 완료 조건에 반영했다.

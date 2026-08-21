@@ -78,6 +78,14 @@ TD-004, TD-015와 TD-016을 각각 `complete`로 전환한다.
 
 ### Axis Restart Capability 및 명칭 계약
 
+| 구분 | 항목 |
+| --- | --- |
+| 공개 capability | `DeviceCapability.AXIS_RESTART` |
+| 필수 구현 | `request_axis_restart()`, `clear_axis_restart_request()` |
+| 선택 기능 | 없음 |
+| 내부 helper | `write_axis_restart_command()` |
+| 제외 범위 | 내부 helper를 capability validation 대상으로 포함하는 것 |
+
 - 전체 선택 기능은 `DeviceCapability.AXIS_RESTART`로 표현한다.
 - 상위 profile 동작은 다음 이름으로 통일한다.
   - `request_axis_restart(...)`: restart request를 확실한 `0 -> 1` 전이로 발생시킨다.
@@ -109,6 +117,13 @@ DeviceCapability.AXIS_RESTART
 - capability 선언과 request/clear-request method가 불일치하면 startup 전에 실패하는지 테스트한다.
 
 ## 완료 증거
+
+| 명세 항목 | 구현 위치 | 검증 테스트 | 범위 확대 여부 |
+| --- | --- | --- | --- |
+| request/clear-request 계약 | `device/capabilities.py` | `test_axis_restart_capability_requires_complete_contract` | 없음 |
+| 내부 write helper 계약 제외 | `device/cmmt/profile.py` | `test_axis_restart_contract_does_not_require_write_helper` | 없음 |
+| request `0 -> 1` 동작 | `device/cmmt/profile.py` | `test_axis_restart_request_writes_zero_then_one` | 없음 |
+| clear-request `0` 동작 | `device/cmmt/profile.py` | `test_axis_restart_clear_writes_zero` | 없음 |
 
 - `ethercat/backend_contract.py`에 staged backend lifecycle Protocol과 필수 method 검증을 추가했다.
 - MockMaster와 PySOEMMaster가 `connect(PRE-OP) -> enter_operational()` 계약을 구현하고,
