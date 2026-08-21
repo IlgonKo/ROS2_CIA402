@@ -24,6 +24,33 @@ device profile과 transport capability의 책임이 섞인다.
 - 필수 method와 선택 기능을 startup validation에서 구분한다.
 - 암묵적인 `hasattr()` fallback을 제거한다.
 
+### 필수 Backend Lifecycle 계약
+
+[DEC-012](../../decisions.md)의 원칙에 따라 staged startup은 선택 capability가 아니라 모든 지원 backend의
+필수 계약으로 정의한다.
+
+```text
+connect(target_state="preop")
+  -> PRE-OP에서 device/PDO/SDO 설정
+  -> enter_operational()
+  -> process data exchange
+  -> CiA402 enable
+```
+
+- MockMaster는 실제 EtherCAT state가 없더라도 위 호출 순서와 결과 계약을 모사한다.
+- PySOEMMaster는 실제 EtherCAT PRE-OP/SAFE-OP/OP state transition을 수행한다.
+- `AxisRuntime`과 `DeviceManager`는 동일한 필수 lifecycle interface를 노출한다.
+- `hasattr(runtime, "enter_operational")` 분기와 단일 단계 startup fallback을 제거한다.
+- `set_axis_position_counts_per_api_unit()`처럼 모든 runtime에 필요한 동작도 필수 계약으로 호출한다.
+- 필수 method가 누락된 backend는 runtime 생성 또는 startup validation 단계에서 구체적인 오류로 거부한다.
+
+다음 항목은 이 capability 계약의 범위에서 제외한다.
+
+- `os.add_dll_directory` 같은 platform 기능 검사
+- PySOEM version별 선택 진단 metadata
+- 선택한 PDO mapping에 따른 PDO field 검증
+- cycle timing 등 선택적 계측 데이터
+
 ### Axis Restart Capability 및 명칭 계약
 
 - 전체 선택 기능은 `DeviceCapability.AXIS_RESTART`로 표현한다.
@@ -50,6 +77,8 @@ DeviceCapability.AXIS_RESTART
 ## 검증 계획
 
 - mock/PySOEM backend의 capability 선언과 필수 method 일치 여부를 테스트한다.
+- mock/PySOEM backend가 동일한 PRE-OP 설정 후 OP 진입 호출 순서를 따르는지 테스트한다.
+- 필수 lifecycle method가 누락된 test backend가 startup 전에 거부되는지 테스트한다.
 - capability 누락과 지원하지 않는 기능 요청의 오류를 테스트한다.
 - axis restart request가 `0 -> 1`, startup clear가 `0`을 기록하는지 테스트한다.
 - capability 선언과 request/clear-request method가 불일치하면 startup 전에 실패하는지 테스트한다.

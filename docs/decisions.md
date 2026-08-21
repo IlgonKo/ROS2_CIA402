@@ -123,6 +123,22 @@
 - 영향: ESI/IODD version 선택, parsing failure와 unsupported metadata는 명시적인 startup/API 오류로 처리한다.
   AP parameter catalog처럼 ESI/IODD가 제공하지 않는 정보는 다른 source가 확보되기 전까지 추정하지 않는다.
 
+## DEC-012 필수 Backend Lifecycle과 선택 Device Capability 분리
+
+- 상태: `accepted`
+- 결정일: 2026-08-21
+- 결정: 모든 EtherCAT master backend는 staged startup lifecycle을 필수 계약으로 구현한다.
+  구현체별로 실제 지원 여부가 다른 device 동작만 명시적인 capability로 표현한다.
+- 이유: MockMaster와 PySOEMMaster 모두 `connect(target_state="preop")`과 `enter_operational()`을 지원하므로
+  staged startup은 선택 기능이 아니다. `AxisRuntime`에 항상 존재하는 method를 `hasattr()`로 검사하는 방식은
+  backend 지원 여부를 검증하지 못하고 필수 구현 누락의 발견만 실제 호출 시점까지 늦춘다.
+- 영향:
+  - startup은 항상 `connect(PRE-OP) -> device 설정 -> enter OP -> process data exchange` 순서를 사용한다.
+  - master 필수 method는 명시적인 interface/protocol과 startup validation으로 검사한다.
+  - 필수 lifecycle을 지원하지 않는 backend는 fallback 경로로 실행하지 않고 startup 전에 거부한다.
+  - axis restart처럼 profile별 지원 여부가 다른 기능만 `DeviceCapability`로 선언한다.
+  - platform 호환성, 선택적 진단 metadata와 PDO field 검사는 device capability로 분류하지 않는다.
+
 ## 새 결정 작성 양식
 
 ```text

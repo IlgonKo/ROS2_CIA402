@@ -23,6 +23,8 @@
 
 ### 문서 및 운영
 
+- staged startup을 모든 backend의 필수 lifecycle 계약으로, device별 선택 기능만 capability로 다루는
+  원칙을 `DEC-012`와 TD-004 상세 명세에 확정했다.
 - TD-004의 axis restart capability를 `AXIS_RESTART`로 확정하고 상위 request/clear-request와
   저수준 command write의 명칭 및 책임을 상세 명세에 기록했다.
 - `docs/README.md`를 추가하여 프로젝트 문서의 진입점, 문서별 책임과 갱신 규칙을 정리했다.
