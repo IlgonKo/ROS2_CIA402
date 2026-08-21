@@ -2,7 +2,7 @@
 
 ## 문서 역할
 
-이 문서는 TD-005 설계를 위한 현재 코드 inventory다. 각 지점이 API Error, Alarm, Fault 또는
+이 문서는 TD-005 설계를 위한 현재 코드 inventory다. 각 지점이 API Fail, Alarm, Fault 또는
 내부 처리 중 어디에 해당하는지는 아직 확정하지 않았으며 목표 계약을 현재 동작처럼 기록하지 않는다.
 상세 계약이 확정되면 API 결과는 `docs/api/`, 운전 상태는 `docs/diagnostic/`의 별도 설계 문서로
 옮기고, 이 문서는 migration 추적 자료로 유지한다.
@@ -225,7 +225,7 @@ programming error 처리 정책을 allowlist에 기록한다.
 1. 이 inventory는 TD-005 하위 조사 문서로 유지하고 migration 상태와 line inventory를 관리한다.
 2. 설계 합의 후 `docs/api/`와 `docs/diagnostic/` 아래에 책임별 설계 문서를 생성하여 다음의 장기 계약만 기록한다.
    - error taxonomy와 계층별 변환 경계;
-   - 안정적인 API error code와 response schema;
+   - 안정적인 API failure code와 Fail response schema;
    - recoverable, connection 유지, runtime/degraded 정책;
    - logging 및 민감정보 비노출 정책;
    - broad catch allowlist 원칙.

@@ -47,12 +47,14 @@
 
 ### 문서 및 운영
 
+- API 요청의 실패 결과 명칭을 `Error`가 아닌 `Fail`로 확정하고 관련 계약과 설계 순서의
+  표기를 Success/Fail로 통일했다.
 - `DEC-016`으로 DiagnosticStatus를 Definition, Source와 History의 조합으로 구성하고
   latching 여부에 따른 acknowledge/resolve/clear 및 재발 규칙을 확정했다.
 - Source를 `SERVER`, `BUS`, `AXIS`, `IO` type과 종류별 설정 index의 조합으로 식별하고,
   recovery policy는 RF-005에서 별도 설계하도록 DiagnosticDefinition에서 제외했다.
-- `DEC-015`를 개정하여 API 요청 결과를 Success/Error로, 지속되는 Diagnostic 상태를
-  NORMAL/ALARM/FAULT로 분리하고 Error를 Diagnostic level에서 제외했다.
+- `DEC-015`를 개정하여 API 요청 결과를 Success/Fail로, 지속되는 Diagnostic 상태를
+  NORMAL/ALARM/FAULT로 분리하고 요청 실패를 Diagnostic level에서 제외했다.
 - 관련 문서를 `docs/api/`와 `docs/diagnostic/`으로 분리하고 기존 전수 조사 자료를 분류 전
   중립 inventory인 `diagnostic/error_point_inventory.md`로 변경했다.
 - TD-005의 Python 오류 발생·catch 지점을 전수 조사하여 catch 144곳, broad catch 85곳,

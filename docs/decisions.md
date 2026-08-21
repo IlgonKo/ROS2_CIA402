@@ -188,29 +188,29 @@ Device Profile + ESI
 - 상태: `accepted`
 - 결정일: 2026-08-21
 - 결정:
-  - API 요청 결과는 `Success` 또는 `Error`로 표현하며 Diagnostic에 포함하지 않는다.
-  - `Error`는 개별 요청의 실패 결과이며 지속 상태, acknowledge 또는 clear 대상으로 관리하지 않는다.
+  - API 요청 결과는 `Success` 또는 `Fail`로 표현하며 Diagnostic에 포함하지 않는다.
+  - `Fail`은 개별 요청의 실패 결과이며 지속 상태, acknowledge 또는 clear 대상으로 관리하지 않는다.
   - Diagnostic은 Motion Server 또는 장치의 현재 운전 상태를 나타낸다.
   - `DiagnosticLevel`은 `NORMAL`, `ALARM`, `FAULT`만 정의한다.
   - `NORMAL`은 활성 Alarm이나 Fault 없이 정상 운전 가능한 상태다.
   - `Alarm`은 이상이 발생하여 사용자의 확인이나 대응이 필요하지만 정상 운전을 계속할 수 있는 경우다.
   - `Fault`는 Motion Server 또는 장치의 정상 운전 상태가 제한, 중단, degraded 또는 unavailable로 변경되는 경우다.
-  - Python `Exception`은 내부 계층 사이에서 실패를 전달하는 구현 수단이다. API 경계에서는 `Error`로
+  - Python `Exception`은 내부 계층 사이에서 실패를 전달하는 구현 수단이다. API 경계에서는 `Fail`로
     변환하고, 운전 상태에도 영향이 있으면 별도로 `Alarm` 또는 `Fault` Diagnostic을 생성한다.
 - 이유: 요청의 성공·실패와 지속되는 운전 상태는 수명 주기와 소비자가 다르다. 두 개념을 같은 level로
   묶으면 정상 상태 표현, clear 정책과 API 응답 의미가 불명확해진다.
 - 검토한 대안:
-  - `NORMAL`, `ERROR`, `ALARM`, `FAULT`를 하나의 `DiagnosticLevel`로 두는 방식은 요청 결과인 Error를
+  - `NORMAL`, `ERROR`, `ALARM`, `FAULT`를 하나의 `DiagnosticLevel`로 두는 방식은 요청 실패를
     시스템 활성 상태처럼 오해하게 하므로 채택하지 않는다.
   - transport/protocol/device 원인 taxonomy를 사용자 API에 직접 노출하는 방식은 내부 구조와 API를 과도하게 결합한다.
 - 영향:
-  - API의 Success/Error 계약은 `docs/api/`에서 관리한다.
+  - API의 Success/Fail 계약은 `docs/api/`에서 관리한다. `Error`는 API 결과 상태의 명칭으로 사용하지 않는다.
   - Diagnostic 상태와 Alarm/Fault 정책은 `docs/diagnostic/`에서 관리한다.
   - 기존 exception 발생·catch inventory는 분류 전 중립 자료로 `docs/diagnostic/error_point_inventory.md`에 둔다.
-  - 각 exception 지점은 후속 설계에서 `API Error`, `Alarm`, `Fault`, `Internal only` 중 하나로 분류한다.
+  - 각 exception 지점은 후속 설계에서 `API Fail`, `Alarm`, `Fault`, `Internal only` 중 하나로 분류한다.
 
 ```text
-개별 API 요청의 처리 결과인가? -> Success / Error
+개별 API 요청의 처리 결과인가? -> Success / Fail
 현재 운전 상태에 영향이 없는가? -> Diagnostic 변경 없음
 이상이 있지만 정상 운전을 계속할 수 있는가? -> Alarm
 운전이 제한·중단되거나 상태가 변경되는가? -> Fault
