@@ -47,6 +47,10 @@
 
 ### 문서 및 운영
 
+- 기존 exception 관련 74개 파일, broad catch 85곳과 generic RuntimeError 42곳을 API Fail, Alarm,
+  Fault와 Internal only로 분류하고 기능 경로별 migration boundary와 우선순위를 확정했다.
+- EtherCAT SDO 수직 경로를 표준 패턴으로 확정하고 전체 분류에서 발견된 ConfigurationException과
+  SdoObjectNotFoundException을 `DEC-019` 계층에 추가했다.
 - `DEC-019`의 구체 Exception 계층과 failure code mapping을 확정하고, 구조화 속성 allowlist,
   Python exception chaining 및 별도 PartialFailure 집계 객체 원칙을 추가했다.
 - `DEC-019`로 내부 Exception과 API Failure를 중앙 mapping table에서 연결하고 별도

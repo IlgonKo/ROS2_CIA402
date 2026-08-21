@@ -2,8 +2,9 @@
 
 ## 문서 역할
 
-이 문서는 TD-005 설계를 위한 현재 코드 inventory다. 각 지점이 API Fail, Alarm, Fault 또는
-내부 처리 중 어디에 해당하는지는 아직 확정하지 않았으며 목표 계약을 현재 동작처럼 기록하지 않는다.
+이 문서는 TD-005 설계를 위한 현재 코드 inventory다. 각 지점의 목표 분류는
+[Exception 발생·Catch 지점 목표 분류](exception_point_classification.md)에서 관리하며 목표 계약을
+현재 동작처럼 기록하지 않는다.
 상세 계약이 확정되면 API 결과는 `docs/api/`, 운전 상태는 `docs/diagnostic/`의 별도 설계 문서로
 옮기고, 이 문서는 migration 추적 자료로 유지한다.
 
@@ -235,8 +236,5 @@ programming error 처리 정책을 allowlist에 기록한다.
 
 ## 다음 설계 단계
 
-- 85개 broad catch를 각 행 단위로 `허용/구체화/상위 이동/별도 정책` 판정한다.
-- 42개 generic RuntimeError를 target taxonomy에 매핑한다.
-- 사용자 입력 `ValueError`와 programming invariant를 구분한다.
-- 대표 수직 경로로 EtherCAT SDO read/write의 발생, 변환, API response, Panel 표시와 연결 유지를 설계한다.
-- TD-018이 사용할 initialization/degraded 오류 계약을 분리한다.
+- 완료된 목표 분류를 TD-005 구현 단위와 자동 검증 항목으로 나눈다.
+- TD-018이 사용할 initialization/degraded Diagnostic 생성과 보존 계약을 연결한다.

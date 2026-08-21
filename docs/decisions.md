@@ -302,6 +302,8 @@ Device Profile + ESI
   - 공통 base에 자유 형식 public details를 두지 않고 구체 Exception의 명시적 속성만 mapper가 허용한다.
   - 저수준 원인은 Python exception chaining으로 보존하며 API에 직접 노출하지 않는다.
   - partial failure는 Exception이 아니라 대상별 성공과 실패를 가진 집계 객체로 표현한다.
+  - inventory 분류에서 확인된 startup 설정 실패와 OD 부재를 위해 `ConfigurationException`과
+    `SdoObjectNotFoundException`을 계층에 추가한다.
 - 이유: mapping을 발생 지점에 하드코딩하면 동일 Exception의 API 표현이 달라질 수 있다. 반대로 별도
   Definition Registry까지 두면 Enum과 mapping table의 책임을 중복한다.
 - 검토한 대안:
@@ -311,6 +313,8 @@ Device Profile + ESI
 - 영향:
   - 상세 mapper 계약은 [Exception과 API Failure Mapping](api/exception_mapping.md)을 따른다.
   - handler별 broad catch와 Exception별 details allowlist는 inventory 분류 후 최상위 boundary 중심으로 migration한다.
+  - 전체 지점의 목표 분류와 migration 순서는
+    [Exception 발생·Catch 지점 목표 분류](diagnostic/exception_point_classification.md)를 따른다.
 
 ## 새 결정 작성 양식
 
