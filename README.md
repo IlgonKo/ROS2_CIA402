@@ -14,14 +14,14 @@ Motion Server documentation:
 
 ## Mock path
 
-The mock path uses the same Axis Server TCP API as the real drive path, but
+The mock path uses the same Motion Server TCP API as the real drive path, but
 selects the virtual CiA402 servo backend.
 
 ```text
 ROS Control Panel
   -> ros/bridge.py
   -> TCP JSON
-  -> Axis Server backend=mock
+  -> Motion Server backend=mock
   -> MockMaster / MockSlave
   -> device/virtual_servo_drive
 ```
@@ -35,7 +35,7 @@ physically connected to the EtherCAT device.
 Docker ROS2 GUI / command nodes
   -> ros/bridge.py
   -> TCP JSON
-  -> Axis Server on the EtherCAT host PC
+  -> Motion Server on the EtherCAT host PC
   -> Festo CMMT-AS
 ```
 
@@ -56,8 +56,8 @@ bash scripts/host/adapters.sh
 bash scripts/host/start.sh
 ```
 
-`scripts/host/start.sh` starts the existing Axis Server image. Rebuild the
-server image only after changing the Axis Server Dockerfile or dependencies:
+`scripts/host/start.sh` starts the existing Motion Server image. Rebuild the
+server image only after changing the Motion Server Dockerfile or dependencies:
 
 ```bash
 bash scripts/host/start.sh --build
@@ -119,9 +119,9 @@ bash scripts/host/start.sh
 docker logs -f ros_cia402_motion_server
 ```
 
-The Dockerized Axis Server uses host networking and privileged raw Ethernet
+The Dockerized Motion Server uses host networking and privileged raw Ethernet
 access so the container can send EtherCAT frames through the Ubuntu PC NIC.
-The Axis Server image is intentionally separate from the GUI image. The server
+The Motion Server image is intentionally separate from the GUI image. The server
 image contains PySOEM and EtherCAT access only; the panel image contains Tk GUI
 dependencies and connects to the server through TCP.
 
@@ -149,19 +149,19 @@ Repeating module areas such as `0x9000...0x9FFF`, `0xA000...0xA4F0`,
 `0xF030...0xF03F`, and `0xF050...0xF05F` are resolved by the CPX object lookup
 helper instead of being expanded into thousands of static entries.
 
-Axis Server does not remap PDOs at runtime. CMMT profiles validate the drive's
+Motion Server does not remap PDOs at runtime. CMMT profiles validate the drive's
 configured PDO mapping before `config_map()`, then use that process-image layout
 for encode/decode. If the drive mapping does not match the expected CMMT layout,
 startup stops with a mapping mismatch message.
 
-Linux local Axis Server control and visualization:
+Linux local Motion Server control and visualization:
 
 ```bash
 bash scripts/host/panel.sh
 ```
 
 The panel runs in a separate `axis_panel` container, connects directly to the
-local Axis Server TCP port from `.env`, and does not require ROS2. It can send
+local Motion Server TCP port from `.env`, and does not require ROS2. It can send
 target positions, apply profile velocity/accel/decel limits, send alarm ack,
 run two-point repeat motion, and show position/velocity traces. It also
 provides manual CiA402 controlword commands after the server's automatic
@@ -184,7 +184,7 @@ digital output control panel. On Windows, the I/O panel can be started from:
 .\scripts\windows\io_panel.ps1
 ```
 
-The Axis Server accepts multiple TCP clients. Command messages require command
+The Motion Server accepts multiple TCP clients. Command messages require command
 authority on the TCP connection that sends them: a client sends
 `authority/acquire` once before motion commands, manual controlwords,
 limit changes, mode changes, jogs, or alarm ack. If no client owns authority,
@@ -201,7 +201,7 @@ pv   Profile Velocity, target velocity command through `axis/move_vel`
 csp  Cyclic Synchronous Position, available for smoother target streaming
 ```
 
-Axis Server command and feedback units are normalized at the TCP API boundary:
+Motion Server command and feedback units are normalized at the TCP API boundary:
 linear axes use `mm`, `mm/s`, `mm/s^2`, and rotary axes use `deg`, `deg/s`,
 `deg/s^2`. The server reads the drive user unit and conversion settings during
 startup and converts to the drive's PDO/SDO units internally.
@@ -229,10 +229,10 @@ target stream is too coarse:
 PYSOEM_CYCLE_TIME=0.002
 ```
 
-The Axis Server log prints `CSP_CV=...` and `CSP_CP=...` for each axis so the
+The Motion Server log prints `CSP_CV=...` and `CSP_CP=...` for each axis so the
 generated CSP command velocity/position can be compared with the drive's actual
 velocity/position. Some drives do not expose CiA402 object `0x60C2`
-interpolation time period; the Axis Server treats that as a supported fallback
+interpolation time period; the Motion Server treats that as a supported fallback
 and continues without writing it.
 
 The drive's `0x606C` actual velocity can use vendor-specific scaling. The Axis
@@ -244,7 +244,7 @@ shows and traces the drive's actual velocity feedback.
 values are smoother; `1.0` disables filtering.
 
 The panel needs an active Linux desktop/X11 session. The boot service starts
-only the Axis Server container; open the panel manually with
+only the Motion Server container; open the panel manually with
 `bash scripts/host/panel.sh` after logging into the desktop.
 
 To start the Dockerized PySOEM server automatically when the Ubuntu PC boots:
@@ -328,7 +328,7 @@ bash scripts/ros/start.sh
 bash scripts/ros/panel.sh
 ```
 
-`ros_bridge` runs in the background as an Axis Server TCP client.
+`ros_bridge` runs in the background as a Motion Server TCP client.
 `ros_control_panel` runs only while the GUI is open. They use separate Docker
 images: the Bridge image has only ROS messaging/runtime dependencies, while the
 ROS Control Panel image also contains Tk/X11 GUI dependencies. The compose
@@ -420,11 +420,11 @@ MOTION_SERVER_HOST=192.168.0.12
 ROS_BRIDGE_AUTO_REQUEST_AUTHORITY=1
 ```
 
-Use `192.168.0.12` when the Axis Server runs on the Ubuntu EtherCAT host from a
-Windows ROS container. Use `127.0.0.1` when ROS and Axis Server containers run
+Use `192.168.0.12` when the Motion Server runs on the Ubuntu EtherCAT host from a
+Windows ROS container. Use `127.0.0.1` when ROS and Motion Server containers run
 on the same Linux host with host networking.
 
-By default, the ROS Bridge requests Axis Server command authority automatically
+By default, the ROS Bridge requests Motion Server command authority automatically
 after connecting. Set `ROS_BRIDGE_AUTO_REQUEST_AUTHORITY=0` if command authority
 should be managed by another client such as the local Axis Panel.
 Authority is connection-based: the Bridge does not use or expose command tokens,
@@ -526,17 +526,17 @@ The PySOEM Docker image runs Python with bytecode generation disabled so new
 ## Folder guide
 
 ```text
-motion_server/         Axis Server TCP API, backend selection, local panel, and host entrypoint
+motion_server/         Motion Server TCP API, backend selection, local panel, and host entrypoint
 diagnostics/         Adapter listing, PDO dump, and smoke-test utilities
-docker/motion_server/  Axis Server Dockerfile and compose file
-docker/axis_panel/   Axis Server Control Panel Dockerfile
+docker/motion_server/  Motion Server Dockerfile and compose file
+docker/axis_panel/   Axis Control Panel Dockerfile
 docker/ros/          ROS Compose file
 docker/ros_bridge/   ROS Bridge Dockerfile
 docker/ros_control_panel/ ROS Control Panel Dockerfile
 docker/ros_moveit/   ROS MoveIt Dockerfile
 scripts/host/        Ubuntu EtherCAT host commands: start, stop, panel, service, adapters
 scripts/ros/         ROS container launch helpers
-scripts/windows/     Windows sync helper and optional direct Axis Server launcher
+scripts/windows/     Windows sync helper and optional direct Motion Server launcher
 ros/                 ROS bridge/control panel and trace display
 ethercat/            Mock/PySOEM EtherCAT transport, distributed clock, and WKC code
 device/pdo_metadata/ PDO mapping entry and data type metadata helpers

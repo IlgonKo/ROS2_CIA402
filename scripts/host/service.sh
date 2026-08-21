@@ -37,7 +37,7 @@ install_service() {
 
   cat > "${SERVICE_FILE}" <<EOF
 [Unit]
-Description=ROS CiA402 Axis Server
+Description=Motion Server
 Requires=docker.service
 After=docker.service network-online.target
 Wants=network-online.target

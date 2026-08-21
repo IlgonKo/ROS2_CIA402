@@ -33,7 +33,7 @@ def reject_advanced_only_command(client, message, state):
             "server_mode": state.get("server_mode"),
             "message": (
                 f"{command} is available only in "
-                "Axis Server advanced mode."
+                "Motion Server advanced mode."
             ),
         },
     )
@@ -42,7 +42,7 @@ def reject_advanced_only_command(client, message, state):
 def route_message(message, runtime, state, client):
     if MOTION_SERVER_COMMAND_LOGS:
         print(
-            "Axis Server received command: "
+            "Motion Server received command: "
             f"client={client.get('id')} "
             f"{json.dumps(message, sort_keys=True, ensure_ascii=False)}",
             flush=True,

@@ -23,4 +23,4 @@ Controller action expected by MoveIt:
 ```
 
 The Bridge provides this action server and forwards accepted trajectory targets
-to the Axis Server.
+to the Motion Server.

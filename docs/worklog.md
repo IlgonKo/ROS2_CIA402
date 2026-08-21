@@ -16,6 +16,10 @@
 - RF별 사용자 가치, 구현 범위, 제약과 검증 계획을 `docs/tasks/rf` 상세 문서로 분리했다.
 - 프로젝트·설치 경로 migration을 `TD-019`, legacy 실행 식별자 migration을 `TD-020`으로 등록했다.
 - ROS package 식별자는 `RF-008`, 사용자 노출 Axis Server 명칭은 `TD-003`에서 처리하도록 범위를 분리했다.
+- TD-003을 완료하고 server, Control Panel, ROS, script와 현재 문서의 사용자 노출 명칭을
+  `Motion Server` 또는 `Axis Control Panel`로 통일했다.
+- 기존 Linux 설치 호환성을 위해 `ros-cia402-axis-server.service` 식별자는 유지하고 TD-020에서 추적하게 했다.
+- `diagnostics/check_legacy_names.py`를 추가해 허용 목록 밖의 과거 명칭이 다시 추가되지 않게 했다.
 
 ## 2026-06-25
 

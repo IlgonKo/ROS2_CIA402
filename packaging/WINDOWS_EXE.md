@@ -1,6 +1,6 @@
 # Windows EXE Packaging
 
-Axis Server and Axis Control Panel can run on Windows without Docker after
+Motion Server and Axis Control Panel can run on Windows without Docker after
 packaging with PyInstaller.
 
 ## Build

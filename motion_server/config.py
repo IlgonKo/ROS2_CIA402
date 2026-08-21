@@ -233,7 +233,7 @@ MODE_RXPDO_FIELDS = {
 }
 def parse_args(argv=None):
     parser = argparse.ArgumentParser(
-        description="TCP JSON-lines Axis Server for CiA402 axes."
+        description="TCP JSON-lines Motion Server for CiA402 axes."
     )
     parser.add_argument(
         "interface",

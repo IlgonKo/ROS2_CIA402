@@ -31,7 +31,7 @@ MOTION_MODE="${MOTION_SERVER_MOTION_MODE:-pp}"
 COMMAND_LOGS="${MOTION_SERVER_COMMAND_LOGS:-0}"
 STATUS_LOGS="${MOTION_SERVER_STATUS_LOGS:-0}"
 
-echo "Starting Axis Server"
+echo "Starting Motion Server"
 echo "Backend=${BACKEND}"
 echo "ServerMode=${SERVER_MODE}"
 echo "Bus=${BUS}"

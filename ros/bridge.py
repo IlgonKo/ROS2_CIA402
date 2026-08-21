@@ -284,7 +284,7 @@ class Cia402CommandBridgeNode(Node):
             ]
         )
         self.get_logger().info(
-            "Forwarded target positions to Axis Server: "
+            "Forwarded target positions to Motion Server: "
             f"{list(msg.data[:self.axis_count])}"
         )
 
@@ -299,7 +299,7 @@ class Cia402CommandBridgeNode(Node):
 
         self.send_trajectory_command(command_points)
         self.get_logger().info(
-            "Forwarded JointTrajectory to Axis Server: "
+            "Forwarded JointTrajectory to Motion Server: "
             f"points={len(command_points)}"
         )
 
@@ -454,7 +454,7 @@ class Cia402CommandBridgeNode(Node):
 
         if not self.send_trajectory_command(command_points):
             result.error_code = FollowJointTrajectory.Result.INVALID_GOAL
-            result.error_string = "Axis Server is not connected."
+            result.error_string = "Motion Server is not connected."
             goal_handle.abort()
             return result
 
@@ -478,20 +478,20 @@ class Cia402CommandBridgeNode(Node):
 
         goal_handle.succeed()
         result.error_code = FollowJointTrajectory.Result.SUCCESSFUL
-        result.error_string = "Trajectory accepted by Axis Server."
+        result.error_string = "Trajectory accepted by Motion Server."
         return result
 
     def send_trajectory_command(self, points):
         if not self.auto_request_authority:
             self.get_logger().warn(
-                "Ignoring trajectory command because Axis Server authority "
+                "Ignoring trajectory command because Motion Server authority "
                 "auto request is disabled. Request authority first."
             )
             return False
 
         if not self.ensure_motion_server_authority():
             self.get_logger().warn(
-                "Ignoring trajectory command until Axis Server authority is granted."
+                "Ignoring trajectory command until Motion Server authority is granted."
             )
             return False
         with self.feedback_lock:
@@ -508,14 +508,14 @@ class Cia402CommandBridgeNode(Node):
     def send_trajectory_stop(self):
         if not self.auto_request_authority:
             self.get_logger().warn(
-                "Ignoring trajectory stop because Axis Server authority "
+                "Ignoring trajectory stop because Motion Server authority "
                 "auto request is disabled. Request authority first."
             )
             return False
 
         if not self.ensure_motion_server_authority():
             self.get_logger().warn(
-                "Ignoring trajectory stop until Axis Server authority is granted."
+                "Ignoring trajectory stop until Motion Server authority is granted."
             )
             return False
         return self.send_json({"type": "trajectory_stop", "mode": "controlled"})
@@ -637,7 +637,7 @@ class Cia402CommandBridgeNode(Node):
 
             if trajectory_state == "fault":
                 self.publish_follow_joint_feedback(goal_handle, target_positions)
-                return False, trajectory_message or "Axis Server trajectory fault."
+                return False, trajectory_message or "Motion Server trajectory fault."
 
             if self.positions_within_tolerance(
                 actual_positions,
@@ -703,7 +703,7 @@ class Cia402CommandBridgeNode(Node):
         self.motion_limits = limits
         self.get_logger().info(
             "Updated local ROS Bridge motion limits only. "
-            "Configure Axis Server limits from Axis Panel."
+            "Configure Motion Server limits from Axis Panel."
         )
 
     def alarm_ack_callback(self, _msg):
@@ -776,13 +776,13 @@ class Cia402CommandBridgeNode(Node):
     def authority_acquire_callback(self, _msg):
         self.request_motion_server_authority()
         self.get_logger().info(
-            "Requested Axis Server command authority; auto request enabled"
+            "Requested Motion Server command authority; auto request enabled"
         )
 
     def authority_release_callback(self, _msg):
         self.release_motion_server_authority()
         self.get_logger().info(
-            "Released Axis Server command authority; auto request disabled"
+            "Released Motion Server command authority; auto request disabled"
         )
 
     def connection_loop(self):
@@ -801,7 +801,7 @@ class Cia402CommandBridgeNode(Node):
             time.sleep(RECONNECT_PERIOD)
 
     def connect(self):
-        self.get_logger().info(f"Connecting to Axis Server {self.host}:{self.port}")
+        self.get_logger().info(f"Connecting to Motion Server {self.host}:{self.port}")
         sock = socket.create_connection((self.host, self.port), timeout=5.0)
         sock.settimeout(None)
         sock_file = sock.makefile("r", encoding="utf-8", newline="\n")
@@ -810,7 +810,7 @@ class Cia402CommandBridgeNode(Node):
             self.sock = sock
             self.sock_file = sock_file
 
-        self.get_logger().info("Connected to Axis Server")
+        self.get_logger().info("Connected to Motion Server")
         self.has_motion_server_authority = False
         if self.auto_request_authority:
             self.request_motion_server_authority()
@@ -910,7 +910,7 @@ class Cia402CommandBridgeNode(Node):
             self.last_published_trajectory_fault = ""
             return
 
-        message = str(trajectory.get("message", "Axis Server trajectory fault."))
+        message = str(trajectory.get("message", "Motion Server trajectory fault."))
         if message == self.last_published_trajectory_fault:
             return
 
@@ -968,7 +968,7 @@ class Cia402CommandBridgeNode(Node):
 
         with self.sock_lock:
             if self.sock is None:
-                self.get_logger().warn("Axis Server is not connected yet")
+                self.get_logger().warn("Motion Server is not connected yet")
                 return False
 
             self.sock.sendall(payload)
@@ -994,7 +994,7 @@ class Cia402CommandBridgeNode(Node):
                 "owned_by_this_client": False,
                 "available": False,
                 "owner": None,
-                "message": "Authority: ROS Bridge disconnected from Axis Server",
+                "message": "Authority: ROS Bridge disconnected from Motion Server",
             },
         )
 

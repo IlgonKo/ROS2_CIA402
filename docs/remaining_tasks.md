@@ -149,7 +149,7 @@ Tech Debt 상태 값은 `open`, `in_progress`, `complete`를 사용한다.
 
 ### TD-003 Axis Server 과거 명칭 잔존
 
-- 상태: `open`
+- 상태: `complete`
 - 우선순위: 보통
 - 요약: 서버를 가리키는 과거 `Axis Server` 명칭을 `Motion Server`로 통일한다.
 - 완료 조건:

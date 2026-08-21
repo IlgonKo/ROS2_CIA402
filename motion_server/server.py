@@ -249,7 +249,7 @@ def run_degraded_server_loop(server, runtime, state):
     last_status_log_time = time.monotonic()
 
     print(
-        "Axis server is running in initialization-error state: "
+        "Motion Server is running in initialization-error state: "
         f"{state.get('initialization_error', '')}",
         flush=True,
     )
@@ -346,7 +346,7 @@ def run_main_once():
         except Exception as exc:
             initialization_error = str(exc)
             print(
-                "Drive initialization failed; keeping Axis Server online: "
+                "Drive initialization failed; keeping Motion Server online: "
                 f"{initialization_error}",
                 flush=True,
             )
@@ -540,7 +540,7 @@ def run_main_once():
             server.bind((args.host, args.port))
             server.listen(1)
             print(
-                f"Axis server listening on {args.host}:{args.port} "
+                f"Motion Server listening on {args.host}:{args.port} "
                 f"backend={args.backend} axes={args.axis_count}",
                 flush=True,
             )

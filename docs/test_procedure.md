@@ -34,19 +34,25 @@ namespace, feedback 형식, 단위 정책을 변경한 경우에는 이후 ROS B
    python -B -m compileall -q motion_server ethercat device control_panel interfaces ros packaging diagnostics
    ```
 
-2. 공백/줄바꿈 검사
+2. Legacy 제품명 검사
+
+   ```powershell
+   python -B diagnostics/check_legacy_names.py
+   ```
+
+3. 공백/줄바꿈 검사
 
    ```powershell
    git diff --check
    ```
 
-3. Tech Debt 표식 검사
+4. Tech Debt 표식 검사
 
    - 새 임시 fallback 또는 legacy 경로가 있으면 `TECH_DEBT[TD-xxx]` 주석을 남긴다.
    - 같은 변경에서 [Remaining Tasks](remaining_tasks.md)의 `Tech Debt` 항목도 추가하거나 갱신한다.
    - 기능성 미완료 항목은 `Remaining Feature`에 `RF-*`로 기록한다.
 
-4. 공개 API 영향 확인
+5. 공개 API 영향 확인
 
    - command namespace가 변경되었는지 확인한다.
    - request/response 필드명이 변경되었는지 확인한다.

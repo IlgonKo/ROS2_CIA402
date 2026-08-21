@@ -440,10 +440,10 @@ class AxisControlPanelNode(Node):
         if payload.get("connected") is False:
             self.command_authority_text = payload.get(
                 "message",
-                "Authority: ROS Bridge disconnected from Axis Server",
+                "Authority: ROS Bridge disconnected from Motion Server",
             )
         elif payload.get("owned_by_this_client", False):
-            self.command_authority_text = "Authority: ROS Bridge owns Axis Server"
+            self.command_authority_text = "Authority: ROS Bridge owns Motion Server"
         elif payload.get("available", False):
             self.command_authority_text = "Authority: available"
         elif payload.get("owner", None) is not None:
@@ -815,7 +815,7 @@ class AxisControlPanelGui:
         headers = ["Joint", "Max Velocity", "Accel", "Decel", "Jerk"]
         ttk.Label(
             frame,
-            text="Read-only feedback from Axis Server. Configure limits in Axis Panel.",
+            text="Read-only feedback from Motion Server. Configure limits in Axis Panel.",
             anchor="w",
         ).grid(
             row=0,

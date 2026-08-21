@@ -4,7 +4,7 @@
 
 - 일부 server reset/restart, bus reconnect와 IO-Link ISDU API의 문서상 지원 여부가 route와 다르다.
 - README의 PDO remap 정책 설명이 현재 구현과 다르다.
-- 과거 Axis Server 명칭과 manual CSP count scale 설명이 남아 있다.
+- manual CSP count scale 설명 등 현재 구현과 맞지 않는 내용이 남아 있다.
 
 ## 관련 위치
 

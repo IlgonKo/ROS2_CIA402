@@ -29,7 +29,7 @@ if ([string]::IsNullOrWhiteSpace($Bus)) {
 
 $env:PYTHONPATH = "$ProjectRoot;$env:PYTHONPATH"
 
-Write-Host "Starting Axis Server"
+Write-Host "Starting Motion Server"
 Write-Host "Backend=$Backend"
 Write-Host "ServerMode=$ServerMode"
 Write-Host "Interface=$Interface"

@@ -1,6 +1,6 @@
 # Motion Server Software Architecture
 
-이 문서는 Motion Server의 내부 소프트웨어 구조를 설명한다. 현재 GUI와 일부 로그에는 과거 명칭인 Axis Server가 남아 있지만, 역할 기준으로는 EtherCAT/CiA402 축 제어를 담당하는 Motion Server로 본다.
+이 문서는 EtherCAT/CiA402 축 제어를 담당하는 Motion Server의 내부 소프트웨어 구조를 설명한다.
 
 ## 목적
 

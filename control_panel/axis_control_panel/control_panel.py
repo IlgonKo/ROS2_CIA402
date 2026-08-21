@@ -46,7 +46,7 @@ class AxisServerControlPanel(
         self.axis_count = len(axis_names)
         self.auto_sdo_reads = bool(auto_sdo_reads)
         self.root = tk.Tk()
-        self.root.title("Axis Server Control Panel")
+        self.root.title("Axis Control Panel")
         self.root.geometry("1180x820")
         self.root.protocol("WM_DELETE_WINDOW", self.close)
 
@@ -468,7 +468,7 @@ class AxisServerControlPanel(
         )
         self.update_connection_button(connected)
         if notice:
-            messagebox.showinfo("Axis Server", notice)
+            messagebox.showinfo("Motion Server", notice)
         if diagnosis_result:
             self.diagnosis_result_var.set(diagnosis_result)
         self.process_panel_sdo_read_queue(connected)

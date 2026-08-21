@@ -297,7 +297,7 @@ class CMMTDeviceProfile:
             f"CMMT {label} mapping mismatch on slave {slave_index}.\n"
             f"Expected {label}:\n{self.format_pdo_entries(expected)}\n"
             f"Actual {label}:\n{self.format_pdo_entries(actual)}\n"
-            "Configure the drive PDO mapping before starting Axis Server."
+            "Configure the drive PDO mapping before starting Motion Server."
         )
 
     @staticmethod

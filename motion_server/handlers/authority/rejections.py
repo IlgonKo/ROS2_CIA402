@@ -31,7 +31,7 @@ def reject_command_when_not_initialized(client, message, state):
             "type": "command_rejected",
             "command": command_name(message),
             "message": (
-                "Axis Server is running, but EtherCAT drive initialization "
+                "Motion Server is running, but EtherCAT drive initialization "
                 f"failed: {state.get('initialization_error', 'unknown error')}"
             ),
         },

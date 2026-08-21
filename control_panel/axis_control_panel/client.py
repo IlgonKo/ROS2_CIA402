@@ -393,7 +393,7 @@ class AxisServerClient:
         payload = (json.dumps(message) + "\n").encode("utf-8")
         with self.lock:
             if self.sock is None:
-                raise ConnectionError("Axis server is not connected")
+                raise ConnectionError("Motion Server is not connected")
             self.sock.sendall(payload)
             if refresh_status:
                 status_payload = (json.dumps({"cmd": "system/axes/status"}) + "\n").encode(

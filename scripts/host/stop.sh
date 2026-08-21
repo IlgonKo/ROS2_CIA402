@@ -20,4 +20,4 @@ fi
 docker rm -f ros_cia402_motion_server 2>/dev/null || true
 docker rm -f ros2_cia402_pysoem_host 2>/dev/null || true
 
-echo "Stopped Axis Server container."
+echo "Stopped Motion Server container."

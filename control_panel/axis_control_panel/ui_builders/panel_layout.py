@@ -28,7 +28,7 @@ class PanelLayoutMixin:
         header.pack(fill="x", pady=(0, 10))
         ttk.Label(
             header,
-            text="Axis Server Control Panel",
+            text="Axis Control Panel",
             font=("TkDefaultFont", 12, "bold"),
         ).pack(side="left")
         ttk.Button(

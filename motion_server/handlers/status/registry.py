@@ -29,7 +29,7 @@ def handle_advanced_status_rejection(message_type, runtime, state, client):
     status["type"] = message_type
     status["trajectory"] = inactive_trajectory_state("advanced_only")
     status["trajectory"]["message"] = (
-        f"{message_type} is available only in Axis Server advanced mode."
+        f"{message_type} is available only in Motion Server advanced mode."
     )
     send_client_message(client, status)
 
