@@ -32,7 +32,7 @@ client의 복구 판단과 장애 분석이 불안정하다.
 
 ## 조사 자료
 
-- [Error·Alarm·Fault 발생 및 Catch 지점 전수 조사](../../error_alarm_fault/point_list.md)
+- [Exception 발생 및 Catch 지점 전수 조사](../../diagnostic/error_point_inventory.md)
 - 2026-08-21 기준 catch 144곳, broad catch 85곳, 명시적 raise 233곳과
   generic `RuntimeError` 42곳을 migration 대상으로 추적한다.
 
