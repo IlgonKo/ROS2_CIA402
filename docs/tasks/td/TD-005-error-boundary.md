@@ -40,7 +40,7 @@ client의 복구 판단과 장애 분석이 불안정하다.
 | 하위 작업 | 범위 | 선행 작업 | 상태 |
 | --- | --- | --- | --- |
 | `TD-005-S01` | FailureCode, Exception 계층, Mapper, PartialFailure 기반 | 없음 | `complete` |
-| `TD-005-S02` | Response encoder, request boundary와 기존 API adapter | S01 | `pending` |
+| `TD-005-S02` | Response encoder, request boundary와 기존 API adapter | S01 | `complete` |
 | `TD-005-S03` | EtherCAT SDO 및 Mock/PySOEM Exception parity | S01 | `pending` |
 | `TD-005-S04` | Axis/IO EtherCAT parameter handler | S02, S03 | `pending` |
 | `TD-005-S05` | AP parameter 경로 | S03, S04 | `pending` |
@@ -55,10 +55,10 @@ client의 복구 판단과 장애 분석이 불안정하다.
 
 ### 작업 재개 체크포인트
 
-- 현재 완료 단계: `TD-005-S01`
-- 다음 실행 단계: `TD-005-S02`
-- 다음 시작 위치: 공통 response model/encoder와 요청 최상위 exception boundary를 추가하되,
-  기존 handler의 실제 응답 형식은 아직 전환하지 않는다.
+- 현재 완료 단계: `TD-005-S02`
+- 다음 실행 단계: `TD-005-S03`
+- 다음 시작 위치: MockMaster와 PySOEMMaster의 SDO read/write 오류를 전수 대조하고
+  timeout, object-not-found, device-reject와 communication failure의 공통 Exception 변환 경계를 확정한다.
 - 현재 호환 상태: 서버는 legacy 응답만 송신한다. 신규 Success/Fail envelope는 아직 live API에 연결되지 않았다.
 - 보존할 사용자 변경: `device/cmmt/required_od.py`의 OD 기본값 및 형식 변경은 `TD-023` 범위이며
   TD-005 변경에 포함하지 않는다.
@@ -107,6 +107,7 @@ S01 완료 조건:
 | 하위 작업 | 구현 | 검증 | 결과 |
 | --- | --- | --- | --- |
 | `TD-005-S01` | `motion_server/failure/`의 code, model, Exception, mapping과 partial model | `tests/test_failure_contract.py` 9개 및 전체 24개 unittest | 통과 |
+| `TD-005-S02` | `ResponseContext`, Success/Fail encoder와 side-effect 없는 request boundary | `tests/test_api_response_boundary.py` 12개 및 전체 36개 unittest | 통과 |
 
 S01 명세 추적:
 
@@ -132,6 +133,22 @@ S01에서는 response JSON encoding, router, handler/backend와 Diagnostic runti
 | 제외 범위 | 기존 handler 응답 형식의 일괄 변경, notification/feedback envelope 변경, socket 단절을 API Fail로 송신, client 변경은 하지 않는다. |
 | 완료 조건 | response 계약의 필드 포함·배타성·request_id 규칙과 mapper 연계를 자동 테스트한다. 기존 live API 및 기존 전체 테스트 동작이 유지된다. |
 | 인계 | S03은 Exception 기반 backend 계약을 사용할 수 있고, S04 이후 handler는 이 encoder/boundary에 연결할 수 있어야 한다. |
+
+S02 명세 추적:
+
+| 명세 항목 | 구현 위치 | 검증 테스트 | 범위 확대 여부 |
+| --- | --- | --- | --- |
+| Success/Fail 필드와 상호 배타성 | `motion_server/api/response.py` | `test_success_contains_data_only`, `test_fail_contains_failure_only_and_omits_absent_details` | 없음 |
+| 빈 Success data와 선택 details | `response.py` | `test_empty_success_has_empty_data_object`, `test_fail_includes_allowlisted_details` | 없음 |
+| request_id echo | `ResponseContext` | `test_request_id_is_echoed_only_when_present` | 없음 |
+| 기존 `cmd` 요청 adapter | `ResponseContext.from_request` | `test_legacy_cmd_is_adapted_to_response_type` | 없음 |
+| 필수 command type 검증 | `ResponseContext.from_request` | `test_request_without_command_type_is_rejected` | 없음 |
+| Exception mapping boundary와 logging | `motion_server/api/boundary.py` | `test_expected_exception_becomes_mapped_fail`, `test_unexpected_exception_is_logged_and_hidden` | 없음 |
+| transport 오류 제외 | socket 송신을 boundary 밖에 유지 | `test_transport_send_is_outside_request_boundary` | 없음 |
+| 내부 helper 비공개 | package export | `test_internal_response_helper_is_not_public_contract` | 없음 |
+
+S02에서는 `route_message`, handler와 socket 송신 경로를 변경하지 않았다. 따라서 서버는 계속 legacy
+응답만 송신하며 신규 envelope는 S04 이후 handler migration과 S10 최종 전환 전까지 live API에 적용되지 않는다.
 
 ### TD-005-S03 EtherCAT SDO Exception parity
 

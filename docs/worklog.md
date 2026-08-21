@@ -8,6 +8,10 @@
 
 ### 완료
 
+- `TD-005-S02`를 완료하여 기존 `cmd` 및 신규 `type` 요청을 해석하는 ResponseContext,
+  Success/Fail response encoder와 Exception mapping/logging request boundary를 구현했다.
+- S02 계약 테스트 12개와 전체 unittest 36개를 통과했으며 router, handler와 socket 송신 경로는
+  변경하지 않아 현재 서버의 legacy API 동작을 유지했다.
 - `TD-005-S01`을 완료하여 FailureCode 20개, MotionServerException 계층, 중앙 MRO mapping,
   allowlist 기반 public details, INTERNAL_FAILURE fallback과 PartialFailure 결과 model을 구현했다.
 - S01 계약 테스트 9개와 기존 회귀를 포함한 전체 unittest 24개를 통과했으며 API runtime 동작은 변경하지 않았다.
