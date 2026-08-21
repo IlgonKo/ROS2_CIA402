@@ -243,6 +243,27 @@ Device Profile + ESI
     후속 구현에서 이름과 책임을 분리한다.
   - recovery handler, 보존 정책과 API serialization은 각각의 후속 설계에서 확정한다.
 
+## DEC-017 API 요청 응답을 Success/Fail Envelope로 통일
+
+- 상태: `accepted`
+- 결정일: 2026-08-21
+- 결정:
+  - 모든 요청 응답은 요청과 같은 `type`, `result` 및 `data` 또는 `failure`를 갖는 공통 envelope를 사용한다.
+  - `result` 값은 `success`와 `fail`이며 Success에는 `data`만, Fail에는 `failure`만 포함한다.
+  - 요청에 optional `request_id`가 있으면 응답에 그대로 반환한다.
+  - Fail의 `failure`는 안정적인 `code`, 사용자용 `message`와 optional `details`로 구성한다.
+  - 비동기 명령의 Success는 작업 승인·시작을 뜻하며 완료는 후속 status/notification으로 전달한다.
+  - 주기적 feedback과 자발적 notification에는 요청 결과인 `result`를 넣지 않는다.
+- 이유: 현재 `ok`, `accepted`, `reason`, `error`와 `command_rejected`가 혼재하여 client가 command별로
+  성공과 실패를 다르게 판정한다. 공통 envelope는 요청 상관관계와 실패 처리를 일관되게 만든다.
+- 검토한 대안:
+  - 기존 flat payload에 `ok`만 공통 추가하는 방식은 성공 데이터와 실패 정보의 경계가 계속 불명확하여 채택하지 않는다.
+  - 실패 시 `type`을 `command_rejected`로 바꾸는 방식은 원래 요청과의 상관관계를 약화하므로 채택하지 않는다.
+- 영향:
+  - 목표 계약은 [API Success/Fail 응답 계약](api/response_contract.md)을 따른다.
+  - 기존 응답 형식은 현재 동작으로 유지되며 TD-005 구현에서 새 envelope로 migration한다.
+  - failure code taxonomy, Exception mapping과 호환 기간은 후속 설계에서 확정한다.
+
 ## 새 결정 작성 양식
 
 ```text

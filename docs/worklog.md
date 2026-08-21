@@ -47,6 +47,8 @@
 
 ### 문서 및 운영
 
+- `DEC-017`로 요청과 같은 type, Success/Fail result, optional request_id 및 data/failure를 사용하는
+  공통 API response envelope를 확정하고 기존 응답 필드를 TD-005 migration 대상으로 명시했다.
 - API 요청의 실패 결과 명칭을 `Error`가 아닌 `Fail`로 확정하고 관련 계약과 설계 순서의
   표기를 Success/Fail로 통일했다.
 - `DEC-016`으로 DiagnosticStatus를 Definition, Source와 History의 조합으로 구성하고
