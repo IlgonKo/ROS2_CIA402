@@ -1,8 +1,8 @@
-from motion_server.api import reject_command_message
+from motion_server.api import raise_operation_rejected
 
 
 def reject_ap_parameter_catalog(message_type, message, runtime, state, client):
-    reject_command_message(
+    raise_operation_rejected(
         client,
         message_type,
         (

@@ -18,7 +18,9 @@ from motion_server.control.axis_operations import (
     disabled_operation_axes,
     update_motion_mode_summary,
 )
-from motion_server.api import parse_axis_indices, send_client_message
+from motion_server.api import parse_axis_indices
+from motion_server.api.encoder import status_data
+from motion_server.failure import InvalidArgumentException, InvalidStateException
 from motion_server.app.state import inactive_homing_state
 
 
@@ -51,10 +53,6 @@ def homing_status_message(runtime, state):
         "type": "homing_status",
         "homing": homing,
     }
-
-
-def send_homing_status(client, runtime, state):
-    send_client_message(client, homing_status_message(runtime, state))
 
 
 def set_homing_start_bit(runtime, axis_indices, enabled):
@@ -103,9 +101,8 @@ def start_homing(message, runtime, state, client):
     except (TypeError, ValueError) as exc:
         state["homing"] = inactive_homing_state("rejected")
         state["homing"]["message"] = str(exc)
-        send_homing_status(client, runtime, state)
         print(f"Ignored {command}: {exc}", flush=True)
-        return
+        raise InvalidArgumentException("axis", "is invalid") from exc
     disabled_axes = disabled_operation_axes(runtime, axis_indices)
     if disabled_axes:
         message_text = (
@@ -114,9 +111,8 @@ def start_homing(message, runtime, state, client):
         )
         state["homing"] = inactive_homing_state("rejected")
         state["homing"]["message"] = message_text
-        send_homing_status(client, runtime, state)
         print(f"Ignored {command}: {message_text}", flush=True)
-        return
+        raise InvalidStateException(command, "axis_disabled")
 
     original_modes = {
         axis_index: state["motion_modes"][axis_index]
@@ -155,7 +151,6 @@ def start_homing(message, runtime, state, client):
         "initial_referenced": initial_referenced,
         "referenced_seen_low": referenced_seen_low,
     }
-    send_homing_status(client, runtime, state)
     status_log(
         f"Received {command}: "
         f"axes={axis_indices} "
@@ -163,6 +158,7 @@ def start_homing(message, runtime, state, client):
         f"initial_referenced={initial_referenced} "
         f"controlwords={[f'0x{runtime.slaves[index].rxpdo.controlword:04X}' for index in axis_indices]}",
     )
+    return status_data(homing_status_message(runtime, state))
 
 
 def update_homing_state(runtime, state):

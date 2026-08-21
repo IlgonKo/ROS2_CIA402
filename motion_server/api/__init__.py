@@ -16,7 +16,7 @@ from motion_server.api.encoder import (
     ResponseContext,
     fail_response,
     failure_value,
-    reject_command_message,
+    raise_operation_rejected,
     send_client_message,
     success_response,
 )
@@ -27,7 +27,7 @@ __all__ = [
     "parse_int",
     "parse_axis_indices",
     "public_command_name",
-    "reject_command_message",
+    "raise_operation_rejected",
     "ResponseContext",
     "require_int32",
     "require_uint32",

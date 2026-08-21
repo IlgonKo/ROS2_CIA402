@@ -18,11 +18,12 @@ from motion_server.control.setpoint_output import (
 )
 from motion_server.api import (
     public_command_name,
-    reject_command_message,
+    raise_operation_rejected,
     require_int32,
     require_uint32,
     selected_axes,
 )
+from motion_server.failure import InvalidStateException
 
 
 def unreferenced_axes(runtime, axes):
@@ -44,7 +45,7 @@ def command_position_axes(runtime, state, axes, positions, command_name, client=
             f"statuswords={[f'0x{slave.txpdo.statusword:04X}' for slave in runtime.slaves]}",
             flush=True,
         )
-        return
+        raise InvalidStateException(command_name, "axis_fault")
 
     disabled_axes = disabled_operation_axes(runtime, axes)
     if disabled_axes:
@@ -54,7 +55,7 @@ def command_position_axes(runtime, state, axes, positions, command_name, client=
             f"statuswords={[f'0x{runtime.slaves[index].txpdo.statusword:04X}' for index in disabled_axes]}"
         )
         if client is not None:
-            reject_command_message(client, command_name, message_text)
+            raise_operation_rejected(client, command_name, message_text)
         print(f"Ignored {command_name}: {message_text}", flush=True)
         return
 
@@ -100,7 +101,7 @@ def command_position_axes(runtime, state, axes, positions, command_name, client=
             f"{command_name} failed while sending position command: {exc}"
         )
         if client is not None:
-            reject_command_message(client, command_name, message_text)
+            raise_operation_rejected(client, command_name, message_text)
         print(
             f"Ignored {command_name}: {message_text} "
             f"axes={axes} statuswords="
@@ -200,7 +201,7 @@ def move_absolute(message, runtime, state, client):
         positions = axis_positions_from_message(message, runtime, state, command)
         apply_move_profile_velocity(message, runtime, state, axes)
     except Exception as exc:
-        reject_command_message(client, command, str(exc))
+        raise_operation_rejected(client, command, str(exc))
         return
 
     not_referenced = unreferenced_axes(runtime, axes)
@@ -210,7 +211,7 @@ def move_absolute(message, runtime, state, client):
             f"unreferenced_axes={not_referenced} "
             f"statuswords={[f'0x{runtime.slaves[index].txpdo.statusword:04X}' for index in not_referenced]}"
         )
-        reject_command_message(client, command, message_text)
+        raise_operation_rejected(client, command, message_text)
         print(f"Ignored {command}: {message_text}", flush=True)
         return
 
@@ -223,7 +224,7 @@ def move_relative(message, runtime, state, client):
         axes, distances = axis_distances_from_message(message, runtime, state, command)
         apply_move_profile_velocity(message, runtime, state, axes)
     except Exception as exc:
-        reject_command_message(client, command, str(exc))
+        raise_operation_rejected(client, command, str(exc))
         return
 
     positions = runtime.relative_target_positions(axes, distances)
@@ -240,7 +241,7 @@ def move_velocity(message, runtime, state, client):
     try:
         axes, velocities = axis_velocities_from_message(message, runtime, state, command)
     except Exception as exc:
-        reject_command_message(client, command, str(exc))
+        raise_operation_rejected(client, command, str(exc))
         return
 
     command_profile_velocities(runtime, state, axes, velocities, command, client)

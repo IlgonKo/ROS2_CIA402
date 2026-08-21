@@ -1,6 +1,6 @@
 from motion_server.config import CSP_MODE, DEVICE_PROFILE, require_pdo_fields_for_mode
 from motion_server.app.cycle import exchange
-from motion_server.api import reject_command_message
+from motion_server.api import raise_operation_rejected
 
 
 def axis_count(runtime):
@@ -61,14 +61,7 @@ def reject_if_any_axis_disabled(runtime, axes, client, command):
     if not disabled_axes:
         return False
 
-    reject_command_message(
-        client,
-        command,
-        "Axis operation is disabled. "
-        f"disabled_axes={disabled_axes} "
-        f"statuswords={[f'0x{runtime.slaves[index].txpdo.statusword:04X}' for index in disabled_axes]}",
-    )
-    return True
+    raise_operation_rejected(client, command, "Axis operation is disabled.")
 
 
 def pv_allowed_axis(state, axis_index):
@@ -104,9 +97,7 @@ def reject_if_pv_not_allowed(state, axis_indices, client, command):
         return False
 
     message = pv_reject_message(state, blocked_axes)
-    reject_command_message(client, command, message)
-    print(f"Ignored {command}: {message}", flush=True)
-    return True
+    raise_operation_rejected(client, command, message)
 
 
 def mode_code(mode_name):

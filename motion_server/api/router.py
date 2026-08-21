@@ -27,7 +27,6 @@ from motion_server.failure import (
     UnsupportedOperationException,
     map_exception,
 )
-from motion_server.failure import Failure, FailureCode
 
 
 _LOGGER = logging.getLogger(__name__)
@@ -67,42 +66,11 @@ from motion_server.handlers.command.registry import handle_command  # noqa: E402
 from motion_server.handlers.status import handle_status  # noqa: E402
 
 
-class _RequestCaptureConnection:
-    # TECH_DEBT[TD-005]: S11 removes this compatibility capture after command
-    # handlers return operation data or raise typed Exceptions directly.
-    def __init__(self):
-        self.messages = []
-
-    def sendall(self, payload):
-        for line in payload.decode("utf-8").splitlines():
-            if line.strip():
-                self.messages.append(json.loads(line))
-
-
 def route_message(message, runtime, state, client):
-    context = ResponseContext.from_request(message)
-    capture = _RequestCaptureConnection()
-    request_client = dict(client)
-    request_client["conn"] = capture
-
-    try:
-        _route_message_to_handler(message, runtime, state, request_client)
-    except MotionServerException as exception:
-        _LOGGER.warning(
-            "Motion Server request failed: type=%s request_id=%r failure=%s",
-            context.response_type,
-            context.request_id if context.has_request_id else None,
-            type(exception).__name__,
-        )
-        request_client["_failure"] = map_exception(exception)
-    except Exception as exception:
-        _LOGGER.exception(
-            "Motion Server request failed: type=%s request_id=%r",
-            context.response_type,
-            context.request_id if context.has_request_id else None,
-        )
-        request_client["_failure"] = map_exception(exception)
-    response = _live_response(context, request_client, capture.messages)
+    response = request_response(
+        message,
+        lambda: _route_message_to_handler(message, runtime, state, client),
+    )
     send_client_message(client, response)
     return response
 
@@ -139,82 +107,12 @@ def _route_message_to_handler(message, runtime, state, client):
         raise ServerNotReadyException(state.get("initialization_error"))
 
     if spec.is_authority:
-        handle_authority(message_type, client, state)
-        return
+        return handle_authority(message_type, client, state)
 
-    if spec.is_status and handle_status(
-        message_type,
-        message,
-        runtime,
-        state,
-        client,
-    ):
-        return
+    if spec.is_status:
+        return handle_status(message_type, message, runtime, state, client)
 
-    if handle_command(message_type, message, runtime, state, client):
-        return
-
-    raise UnknownCommandException(raw_message_type)
-
-
-def _live_response(context, client, captured_messages):
-    failure = client.get("_failure")
-    result = client.get("_operation_result")
-    if isinstance(result, PartialFailure):
-        return partial_fail_response(context, result)
-    if failure is not None:
-        return fail_response(context, failure)
-    if len(captured_messages) > 1:
-        return fail_response(
-            context,
-            Failure(
-                FailureCode.INTERNAL_FAILURE,
-                "An internal failure occurred.",
-            ),
-        )
-    if not captured_messages:
-        return success_response(context, result)
-
-    message = captured_messages[0]
-    if message.get("result") in {"success", "fail"}:
-        response = dict(message)
-        response["type"] = context.response_type
-        if context.has_request_id:
-            response["request_id"] = context.request_id
-        return response
-    if _legacy_message_failed(message):
-        return fail_response(context, _legacy_failure(message))
-    return success_response(context, _legacy_success_data(message))
-
-
-def _legacy_message_failed(message):
-    return message.get("type") == "command_rejected" or message.get("ok") is False
-
-
-def _legacy_failure(message):
-    reason = str(message.get("reason", "")).lower()
-    if reason == "authority_required":
-        return Failure(FailureCode.AUTHORITY_REQUIRED, "Command authority is required.")
-    if reason == "authority_busy":
-        details = {"owner": message["owner"]} if message.get("owner") is not None else None
-        return Failure(
-            FailureCode.AUTHORITY_BUSY,
-            "Command authority is held by another client.",
-            details,
-        )
-    return Failure(FailureCode.OPERATION_FAILED, "The operation failed.")
-
-
-def _legacy_success_data(message):
-    data = dict(message)
-    data.pop("type", None)
-    data.pop("ok", None)
-    data.pop("accepted", None)
-    if data.get("reason") is None:
-        data.pop("reason", None)
-    if "device_diagnostics" in data:
-        data.pop("diagnostics", None)
-    return data
+    return handle_command(message_type, message, runtime, state, client)
 
 
 dispatch_message = route_message

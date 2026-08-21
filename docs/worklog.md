@@ -8,6 +8,12 @@
 
 ### 완료
 
+- `TD-005-S11B2B`를 완료하여 Axis motion/state/settings, jog, homing, trajectory와 parameter-save의
+  요청 결과를 data 반환/typed Exception/`PartialFailure` 계약으로 통일했다.
+- router의 `_RequestCaptureConnection`, legacy 판별과 `_operation_result` 임시 저장을 제거했다.
+  요청 handler/control 계층의 직접 송신도 제거되어 request boundary만 최종 envelope를 한 번 송신한다.
+- 전체 unittest 145개와 source compile 검사가 통과했다. S11B를 더 세분화하지 않고 다음 단계는
+  broad catch 및 정적 계약 검사를 마무리하는 `TD-005-S11C`다.
 - `TD-005-S11B2A`에서 router의 unknown/advanced-only/authority/initialization 거부와 command registry의
   selector/미구현 검증을 legacy 송신 대신 typed Exception으로 전환했다.
 - server reset/restart, bus reconnect와 I/O output write는 operation data 또는 `PartialFailure`를

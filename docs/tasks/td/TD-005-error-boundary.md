@@ -59,10 +59,10 @@ client의 복구 판단과 장애 분석이 불안정하다.
 
 ### 작업 재개 체크포인트
 
-- 현재 완료 단계: `TD-005-S11B2A`
-- 다음 실행 단계: `TD-005-S11B2B`
-- 다음 시작 위치: Axis motion/state/settings, homing, trajectory 및 parameter-save handler의 직접
-  송신/catch를 data 반환 및 typed Exception으로 바꾼 뒤 `_RequestCaptureConnection`을 제거한다.
+- 현재 완료 단계: `TD-005-S11B2B` (`S11B` 전체 완료)
+- 다음 실행 단계: `TD-005-S11C`
+- 다음 시작 위치: broad catch allowlist와 envelope/mapping 정적 검사를 추가하고 error point inventory의
+  모든 항목을 완료·제외·후속 작업 중 하나로 종결한다.
 - 현재 호환 상태: 서버 request/response는 신규 Success/Fail envelope만 송신한다. 주기 feedback과
   자발적 notification은 envelope 대상이 아니다.
 - 보존할 사용자 변경: `device/cmmt/required_od.py`의 OD 기본값 및 형식 변경은 `TD-023` 범위이며
@@ -548,7 +548,7 @@ S11은 정리 범위를 한 번에 변경하지 않고 다음 순서로 진행�
 | `TD-005-S11A` | client legacy response 및 `diagnostics` fallback 제거 | `complete` |
 | `TD-005-S11B1` | status, parameter, authority operation의 data 반환/typed Exception 전환 | `complete` |
 | `TD-005-S11B2A` | router validation과 server/bus/I/O command 반환 계약 전환 | `complete` |
-| `TD-005-S11B2B` | Axis command 반환/typed Exception 전환과 request capture 제거 | `pending` |
+| `TD-005-S11B2B` | Axis command 반환/typed Exception 전환과 request capture 제거 | `complete` |
 | `TD-005-S11C` | broad catch allowlist, envelope/mapping 정적 검사와 TD-005 완료 | `pending` |
 
 S11A 완료 증거:
@@ -582,3 +582,15 @@ S11B2A 완료 증거:
 - 전체 unittest 145개와 source compile 검사가 통과했다.
 - Axis motion/state/settings, homing, trajectory와 parameter-save 직접 송신은 S11B2B 범위이며, 해당
   전환이 끝날 때 request capture를 제거한다.
+
+S11B2B 완료 증거:
+
+- Axis motion/state/settings, jog, homing, trajectory와 parameter-save 요청 경로가 operation data를
+  반환하거나 typed Exception/`PartialFailure`를 상위 request boundary로 전달한다.
+- 기존 `reject_command_message` 전송 helper는 송신 의미가 없는 `raise_operation_rejected`로 바꾸고
+  요청 handler와 control 계층의 직접 `send_client_message` 호출을 제거했다.
+- router는 `_RequestCaptureConnection`, legacy 응답 판별과 `_operation_result` 임시 저장 없이 handler
+  반환값을 단일 `request_response` boundary에서 Success/Fail envelope로 변환한다.
+- `send_client_message`는 request boundary인 router에만 남아 있으며 전체 unittest 145개와 source
+  compile 검사가 통과했다.
+- 사용자 결정에 따라 S11B를 더 세분화하지 않으며 다음 단계는 바로 S11C다.

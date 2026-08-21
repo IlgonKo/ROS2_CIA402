@@ -1,7 +1,6 @@
 from motion_server.api.decoder import selected_single_axis
 from motion_server.api.encoder import (
-    reject_command_message,
-    send_client_message,
+    raise_operation_rejected,
     status_data,
 )
 from motion_server.failure import InvalidRequestException
@@ -27,16 +26,6 @@ from motion_server.handlers.status.io_ap_parameter_catalog import (
     reject_ap_parameter_catalog,
 )
 from motion_server.handlers.status.server_status import server_status_message
-
-
-def handle_advanced_status_rejection(message_type, runtime, state, client):
-    status = axes_status_message(runtime, state, client["id"])
-    status["type"] = message_type
-    status["trajectory"] = inactive_trajectory_state("advanced_only")
-    status["trajectory"]["message"] = (
-        f"{message_type} is available only in Motion Server advanced mode."
-    )
-    send_client_message(client, status)
 
 
 def handle_server_status(message_type, message, runtime, state, client):
@@ -120,7 +109,7 @@ def handle_io_parameter_read(message_type, message, runtime, state, client):
 
 
 def reject_not_implemented(message_type, message, runtime, state, client):
-    reject_command_message(
+    raise_operation_rejected(
         client,
         message_type,
         f"{message_type} is not implemented yet.",
@@ -128,7 +117,7 @@ def reject_not_implemented(message_type, message, runtime, state, client):
 
 
 def handle_io_input_read(message_type, message, runtime, state, client):
-    input_read(message, runtime, state, client)
+    return input_read(message, runtime, state, client)
 
 
 def handle_axis_parameter_catalog(message_type, message, runtime, state, client):
@@ -187,8 +176,6 @@ validate_status_registry()
 def handle_status(message_type, message, runtime, state, client):
     handler = STATUS_HANDLERS.get(message_type)
     if handler is None:
-        return False
-    client["_operation_result"] = handler(
-        message_type, message, runtime, state, client,
-    )
-    return True
+        from motion_server.failure import UnknownCommandException
+        raise UnknownCommandException(message_type)
+    return handler(message_type, message, runtime, state, client)

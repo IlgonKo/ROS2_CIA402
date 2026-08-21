@@ -9,7 +9,7 @@ from motion_server.control.axis_operations import (
 )
 from motion_server.api import (
     public_command_name,
-    reject_command_message,
+    raise_operation_rejected,
     selected_single_axis,
 )
 
@@ -29,7 +29,7 @@ def start_jog(message, runtime, state, client):
                 f"{command} speed must be slow, fast, or two_phase"
             )
     except Exception as exc:
-        reject_command_message(client, command, str(exc))
+        raise_operation_rejected(client, command, str(exc))
         return
     if reject_if_any_axis_disabled(runtime, [axis_index], client, command):
         return
@@ -43,7 +43,7 @@ def start_jog(message, runtime, state, client):
             state["motion_modes"][axis_index] = "jog"
             update_motion_mode_summary(state)
     except Exception as exc:
-        reject_command_message(client, command, str(exc))
+        raise_operation_rejected(client, command, str(exc))
         return
 
     slave = runtime.slaves[axis_index]
@@ -72,7 +72,7 @@ def stop_jog(message, runtime, state, client):
     try:
         axis_index = selected_single_axis(message, runtime, command)
     except Exception as exc:
-        reject_command_message(client, command, str(exc))
+        raise_operation_rejected(client, command, str(exc))
         return
 
     slave = runtime.slaves[axis_index]
@@ -89,7 +89,7 @@ def stop_jog(message, runtime, state, client):
         state["motion_modes"][axis_index] = previous_mode
         update_motion_mode_summary(state)
     except Exception as exc:
-        reject_command_message(
+        raise_operation_rejected(
             client,
             command,
             f"Jog stopped, but failed to restore {previous_mode.upper()}: {exc}",

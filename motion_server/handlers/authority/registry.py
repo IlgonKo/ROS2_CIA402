@@ -78,9 +78,9 @@ validate_authority_registry()
 def handle_authority(message_type, client, state):
     handler = AUTHORITY_HANDLERS.get(message_type)
     if handler is None:
-        return False
-    client["_operation_result"] = handler(client, state)
-    return True
+        from motion_server.failure import UnknownCommandException
+        raise UnknownCommandException(message_type)
+    return handler(client, state)
 
 
 def _authority_data(payload):

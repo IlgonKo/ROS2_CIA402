@@ -22,11 +22,11 @@ from motion_server.control.axis_operations import (
 )
 from motion_server.api import (
     public_command_name,
-    reject_command_message,
+    raise_operation_rejected,
     require_uint32,
     selected_axes,
-    send_client_message,
 )
+from motion_server.failure import OperationException
 
 
 def set_motion_limits(message, runtime, state, client):
@@ -114,7 +114,7 @@ def set_motion_limits(message, runtime, state, client):
                 max_deceleration,
             )
     except Exception as exc:
-        reject_command_message(client, command, str(exc))
+        raise_operation_rejected(client, command, str(exc))
         return
 
 
@@ -253,7 +253,7 @@ def set_profile(message, runtime, state, client):
                 ),
             )
     except Exception as exc:
-        reject_command_message(client, command, str(exc))
+        raise_operation_rejected(client, command, str(exc))
         return
 
     status_log(
@@ -383,7 +383,7 @@ def set_software_position_limits(message, runtime, state, client):
                 f"metadata={axis_metadata(state, axis_index)}",
             )
     except Exception as exc:
-        reject_command_message(client, command, str(exc))
+        raise_operation_rejected(client, command, str(exc))
         return
 
     status_log(
@@ -395,14 +395,7 @@ def set_software_position_limits(message, runtime, state, client):
 def reject_command(client, command, message):
     if client is None:
         return
-    send_client_message(
-        client,
-        {
-            "type": "command_rejected",
-            "command": command,
-            "message": message,
-        },
-    )
+    raise OperationException(command)
 
 
 def set_mode(message, runtime, state, client=None):

@@ -1,6 +1,5 @@
 from motion_server.config import DEVICE_PROFILE
 from motion_server.api.decoder import public_command_name
-from motion_server.api.encoder import send_client_message
 from motion_server.api.validator import parse_int
 from motion_server.failure import (
     InvalidArgumentException,
@@ -289,27 +288,6 @@ def is_cpx_isdu_access_object(index):
 
 def save_parameters(message, runtime, client):
     response_type = public_command_name(message)
-    try:
-        axis_index = selected_single_axis(message, runtime, response_type)
-        result = DEVICE_PROFILE.save_parameters(runtime, axis_index)
-    except Exception as exc:
-        send_client_message(
-            client,
-            {
-                "type": response_type,
-                "ok": False,
-                "axis": message.get("axis", message.get("axes", 0)),
-                "error": str(exc),
-            },
-        )
-        return
-
-    send_client_message(
-        client,
-        {
-            "type": response_type,
-            "ok": True,
-            "axis": axis_index,
-            "result": result,
-        },
-    )
+    axis_index = selected_single_axis(message, runtime, response_type)
+    result = DEVICE_PROFILE.save_parameters(runtime, axis_index)
+    return {"axis": axis_index, "result": result}

@@ -21,6 +21,7 @@ from motion_server.control.axis_operations import (
     update_motion_mode_summary,
 )
 from motion_server.api import require_int32
+from motion_server.failure import InvalidStateException
 
 
 def command_profile_positions(runtime, target_positions, axis_indices):
@@ -55,7 +56,7 @@ def command_profile_velocities(
             f"statuswords={[f'0x{slave.txpdo.statusword:04X}' for slave in runtime.slaves]}",
             flush=True,
         )
-        return
+        raise InvalidStateException(command, "axis_fault")
 
     if reject_if_any_axis_disabled(runtime, axis_indices, client, command):
         return

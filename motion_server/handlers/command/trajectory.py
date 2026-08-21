@@ -17,7 +17,8 @@ from motion_server.control.axis_operations import (
     reject_if_any_axis_disabled,
 )
 from motion_server.control.setpoint_output import command_csp_positions
-from motion_server.api import public_command_name, send_client_message
+from motion_server.api import public_command_name
+from motion_server.api.encoder import status_data
 from motion_server.api.decoder import selected_axes
 from motion_server.app.state import inactive_trajectory_state
 from motion_server.control.trajectory_verifier import (
@@ -26,17 +27,20 @@ from motion_server.control.trajectory_verifier import (
     normalize_trajectory_points,
     validate_trajectory_limits,
 )
+from motion_server.failure import OperationException, UnsupportedOperationException
 
 
 def reject_trajectory(state, message, inactive_trajectory_state):
     state["trajectory"] = inactive_trajectory_state("rejected")
     state["trajectory"]["message"] = message
     print(f"Ignored trajectory/move: {message}", flush=True)
+    raise OperationException("system/axes/trajectory")
 
 def fault_trajectory(state, message, inactive_trajectory_state):
     state["trajectory"] = inactive_trajectory_state("fault")
     state["trajectory"]["message"] = message
     print(f"Faulted trajectory/move: {message}", flush=True)
+    raise OperationException("system/axes/trajectory")
 
 def same_trajectory_target(active_trajectory, axes, points, tolerance=1e-6):
     if not active_trajectory.get("active"):
@@ -71,6 +75,7 @@ def move_api(message, runtime, state, client):
         ensure_csp_mode=ensure_csp_mode,
         inactive_trajectory_state=inactive_trajectory_state,
     )
+    return {"trajectory": dict(state["trajectory"])}
 
 
 def move(
@@ -224,7 +229,7 @@ def stop(message, runtime, state, client):
         state["trajectory"] = inactive_trajectory_state("stop_rejected")
         state["trajectory"]["message"] = f"Unsupported stop mode: {mode}"
         print(f"Ignored unsupported trajectory/stop mode: {mode}", flush=True)
-        return
+        raise UnsupportedOperationException(command, f"stop_mode:{mode}")
 
     state["trajectory"] = inactive_trajectory_state("stopped")
     try:
@@ -233,7 +238,7 @@ def stop(message, runtime, state, client):
         state["trajectory"] = inactive_trajectory_state("stop_rejected")
         state["trajectory"]["message"] = str(exc)
         print(f"Ignored {command}: {exc}", flush=True)
-        return
+        raise
     if reject_if_any_axis_disabled(runtime, axes, client, command):
         state["trajectory"] = inactive_trajectory_state("stop_rejected")
         state["trajectory"]["message"] = "Axis operation is disabled."
@@ -253,8 +258,7 @@ def stop(message, runtime, state, client):
 
 
 def status(message, runtime, state, client):
-    response = axes_status_message(runtime, state, client["id"])
-    send_client_message(client, response)
+    return status_data(axes_status_message(runtime, state, client["id"]))
 
 
 def update_active(runtime, state):

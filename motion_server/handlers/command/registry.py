@@ -153,6 +153,6 @@ validate_command_registry()
 def handle_command(command_name, message, runtime, state, client):
     command = COMMAND_HANDLERS.get(command_name)
     if command is None:
-        return False
-    client["_operation_result"] = command(message, runtime, state, client)
-    return True
+        from motion_server.failure import UnknownCommandException
+        raise UnknownCommandException(command_name)
+    return command(message, runtime, state, client)
