@@ -29,117 +29,121 @@ Tech Debt 상태 값은 `open`, `in_progress`, `complete`를 사용한다.
 
 - 상태: `planned`
 - 우선순위: 높음
-- 목표: 실제 CPX-AP-I-EC가 없어도 동일한 설정과 API로 Remote I/O를 시험할 수 있게 한다.
-- 범위:
-  - `MOTION_SERVER_IO_<io>_MODULES`와 `MOTION_SERVER_IO_<io>_IOL_PORTS`를 그대로 사용한다.
-  - DI/DO/AI/AO/IO-Link process image와 AP module layout을 모사한다.
-  - EtherCAT SDO, AP parameter access, IO-Link ISDU의 테스트 가능한 가상 동작을 제공한다.
-  - Motion Server와 IO Control Panel에서 실장치와 가상 장치를 같은 API로 다룬다.
-- 완료 조건: 실장치 없이 IO feedback, output write, parameter read/write의 회귀 테스트가 통과한다.
+- 요약: 실장치와 동일한 설정 및 API로 시험할 수 있는 CPX-AP-I-EC Virtual I/O를 제공한다.
+- 완료 조건:
+  - DI/DO/AI/AO/IO-Link process image와 AP module layout이 설정대로 생성된다.
+  - SDO, AP parameter와 IO-Link ISDU read/write가 실장치와 동일한 공개 API로 동작한다.
+  - Motion Server와 IO Control Panel의 virtual I/O 회귀 테스트가 통과한다.
+  - 실장치 profile과 virtual profile의 지원 범위 및 차이가 문서화된다.
+- 상세: [RF-001 기능 명세](tasks/rf/RF-001-cpx-virtual-io.md)
 
 ### RF-002 Low-code Reference Client
 
 - 상태: `planned`
 - 우선순위: 높음
-- 목표: Node-RED 같은 low-code 환경에서 Motion Server TCP JSON API를 바로 사용할 수 있게 한다.
-- 범위:
-  - JSON-lines 연결, 재연결, request/response correlation 예제를 제공한다.
-  - authority request/release, `system/feedback`, axis motion, IO output, parameter access를 포함한다.
-  - Basic mode 기준 Node-RED flow와 최소 Python reference client를 제공한다.
-- 완료 조건: 사용자 코드가 패널 없이 Motion Server를 연결하고 축과 I/O를 제어할 수 있다.
+- 요약: 패널 없이 Motion Server API를 사용할 수 있는 Node-RED 및 Python reference client를 제공한다.
+- 완료 조건:
+  - JSON-lines 연결, 재연결과 request/response correlation이 구현된다.
+  - authority, feedback, axis motion, I/O output과 parameter access 예제가 제공된다.
+  - Node-RED flow와 Python client가 동일한 Basic mode 시나리오를 완료한다.
+  - clean environment에서 설치·실행 절차가 재현되고 자동 또는 scripted smoke test가 통과한다.
+- 상세: [RF-002 기능 명세](tasks/rf/RF-002-low-code-client.md)
 
 ### RF-003 예약된 Bus 및 I/O 관리 API
 
 - 상태: `reserved`
 - 우선순위: 보통
-- 현재 미구현 API:
-  - `system/bus/rescan`
-  - `system/io/reset`
-  - `system/io/restart`
-  - `system/io/param_save`
-- 선행 결정: 각 명령의 장치별 의미, authority 요구 여부, 실행 중 PDO 처리와 복구 정책을 확정한다.
-- 완료 조건: API 문서, handler, 실장치 또는 virtual-device 검증이 함께 제공된다.
+- 요약: 예약된 bus rescan과 I/O reset/restart/parameter-save API의 계약과 구현을 완성한다.
+- 완료 조건:
+  - 각 명령의 device별 의미, authority, lifecycle과 PDO 처리 정책이 결정 문서에 확정된다.
+  - API specification, validation, handler와 응답 형식이 구현된다.
+  - 성공, 지원하지 않는 device, 실행 중 충돌과 복구 실패 경로가 자동 테스트된다.
+  - 지원 장치의 virtual 또는 실장치 smoke test와 API 문서가 제공된다.
+- 상세: [RF-003 기능 명세](tasks/rf/RF-003-bus-io-management.md)
 
 ### RF-004 AP Parameter Catalog
 
 - 상태: `blocked`
 - 우선순위: 낮음
-- 현재 상태: AP parameter read/write는 구현되어 있지만 catalog 조회와 사전 validation은 미구현이다.
-- 이유: CPX EtherCAT ESI의 `0x27F0` 정보는 AP parameter access mailbox 형식만 설명하며,
-  AP 하위 모듈별 parameter catalog는 APDD가 필요하다.
-- 재개 조건: APDD를 안정적으로 확보하고 버전별로 캐시하는 정책이 확정된다.
-- 비고: ESI의 EtherCAT OD catalog를 AP parameter catalog로 오인하지 않는다.
+- 요약: APDD 기반 AP module parameter catalog 조회와 write 사전 validation을 제공한다.
+- 완료 조건:
+  - 지원 module의 APDD source, version 식별과 cache 정책이 확정된다.
+  - parameter metadata 조회 API와 type/range/access validation이 구현된다.
+  - APDD 누락, version mismatch와 unsupported parameter 오류가 구분된다.
+  - 대표 module catalog fixture와 실장치 parameter read/write 검증이 통과한다.
+- 상세: [RF-004 기능 명세](tasks/rf/RF-004-ap-parameter-catalog.md)
 
 ### RF-005 Runtime Fault 및 Recovery 모델 완성
 
 - 상태: `planned`
 - 우선순위: 보통
-- 범위:
-  - 정상, initialization-error, bus-disconnected, recoverable-fault 상태를 명시한다.
-  - `system/server/reset`, `system/bus/reconnect`, server restart의 책임 경계를 확정한다.
-  - runtime 재구성 후 authority와 client notification 정책을 검증한다.
-- 완료 조건: 상태 전이와 API 응답이 문서화되고 mock/실장치 복구 시험이 통과한다.
+- 요약: runtime fault state와 reset/reconnect/restart 복구 모델을 완성한다.
+- 완료 조건:
+  - 정상, initialization-error, bus-disconnected와 recoverable-fault 상태 및 전이가 명세된다.
+  - server reset, bus reconnect와 process restart의 책임 및 허용 조건이 구현된다.
+  - runtime 재구성 시 authority와 client notification 정책이 일관되게 적용된다.
+  - mock 오류 주입과 대표 실장치 복구 시나리오가 모두 통과한다.
+- 상세: [RF-005 기능 명세](tasks/rf/RF-005-runtime-recovery.md)
 
 ### RF-006 배포 구성 최종 검증
 
 - 상태: `planned`
 - 우선순위: 보통
-- 범위:
-  - Windows 패키지의 Motion Server, Axis Control Panel, IO Control Panel, Tools, Manual 구성을 검증한다.
-  - Linux Docker 설정과 Windows `config.txt`의 지원 항목을 맞춘다.
-  - CMMT-AS/ST 및 CPX-AP-I-EC ESI/IODD 포함 규칙을 확정한다.
-- 완료 조건: 새 Windows PC와 새 Linux PC에서 Basic mode 설치 절차가 그대로 재현된다.
+- 요약: Windows package와 Linux Docker 배포 구성을 clean system에서 최종 검증한다.
+- 완료 조건:
+  - Windows package의 server, panel, tools, manual과 catalog 구성이 정의대로 포함된다.
+  - Linux `.env`와 Windows `config.txt`의 지원 설정 및 기본값 차이가 문서화된다.
+  - ESI/IODD 포함, 검색과 version 선택 규칙이 두 환경에서 검증된다.
+  - 새 Windows/Linux PC에서 Basic mode 설치 및 smoke-test 절차가 그대로 재현된다.
+- 상세: [RF-006 기능 명세](tasks/rf/RF-006-deployment-validation.md)
 
 ### RF-007 CMMT ESI/PDO 실장치 검증 확대
 
 - 상태: `in_progress`
 - 우선순위: 높음
-- 범위:
-  - CMMT-AS/ST catalog, required OD, 축별 PDO configuration을 실제 구성에서 검증한다.
-  - remap 후 assignment와 mapping entry readback을 비교한다.
-  - 다른 ESI revision에서도 record/subindex parsing이 유지되는지 확인한다.
-- 완료 조건: 6축 구성과 AS/ST 혼합 구성의 startup 및 motion smoke test가 통과한다.
+- 요약: CMMT-AS/ST ESI catalog와 PDO configuration을 다양한 실장치 구성에서 검증한다.
+- 완료 조건:
+  - 지원 AS/ST model 및 ESI revision별 catalog parsing 결과가 기록된다.
+  - required OD와 축별 PDO assignment/mapping readback이 기대값과 일치한다.
+  - 6축 및 AS/ST 혼합 구성의 startup, enable과 motion smoke test가 통과한다.
+  - 실패 fixture와 실장치 시험 절차가 회귀 가능한 형태로 보존된다.
+- 상세: [RF-007 기능 명세](tasks/rf/RF-007-cmmt-hardware-validation.md)
 
 ### RF-008 ROS Bridge 후속 이관 및 테스트
 
 - 상태: `reserved`
 - 우선순위: 보통
-- 보류 정책: 별도 언급 전까지 개발하지 않는다.
-- 목표: Motion Server API와 설정 구조가 안정된 뒤 ROS Bridge를 최신 Motion Server 구조에 맞게 이관한다.
-- 범위:
-  - Motion Server command namespace, authority, feedback, axis/io status 변경을 ROS Bridge에 반영한다.
-  - Motion Server의 mm/deg API 단위 정책과 ROS command/trajectory 단위 변환 경계를 재검토한다.
-  - ROS Docker 구성, ROS Control Panel, Bridge connection 설정을 최신 Motion Server 설정과 맞춘다.
-  - mock/virtual backend와 실장치 backend 기준으로 ROS Bridge smoke test를 수행한다.
-- 완료 조건: ROS Bridge가 최신 Motion Server API로 축 command, feedback, authority 처리를 수행하고
-  Docker 환경에서 재현 가능한 테스트 절차가 문서화된다.
+- 요약: Motion Server API 안정화 후 ROS Bridge와 ROS 실행 구성을 최신 계약으로 이관한다.
+- 완료 조건:
+  - command, authority, feedback과 axis/I/O status가 최신 API specification과 일치한다.
+  - Motion Server mm/deg와 ROS SI unit 변환 경계가 문서화되고 자동 테스트된다.
+  - ROS Docker, Control Panel과 connection 설정이 최신 configuration model을 사용한다.
+  - mock 및 실장치 기준 trajectory/feedback smoke test 절차가 재현된다.
+- 상세: [RF-008 기능 명세](tasks/rf/RF-008-ros-bridge-migration.md)
 
 ### RF-009 Motion Server Trajectory API 정리
 
 - 상태: `reserved`
 - 우선순위: 보통
-- 보류 정책: 별도 언급 전까지 개발하지 않는다.
-- 목표: 다축 trajectory command API의 책임 범위와 구현을 Motion Server API 구조에 맞게 정리한다.
-- 범위:
-  - `system/axes/trajectory`와 `system/axes/trajectory_stop`의 payload, 단위, 완료/중단 응답을 확정한다.
-  - PP/PV/CSP mode별 trajectory 지원 범위와 제한 조건을 정리한다.
-  - 반복 동작, 단축 move, ROS trajectory 입력과의 책임 경계를 명확히 한다.
-  - virtual backend 기반 자동 테스트와 실장치 smoke test 절차를 추가한다.
-- 완료 조건: Trajectory API 문서, handler, validation, feedback 연동, 테스트가 함께 정리된다.
+- 요약: 다축 trajectory command의 API 계약, mode별 동작과 책임 경계를 정리한다.
+- 완료 조건:
+  - trajectory/stop payload, 단위, validation과 완료·중단 응답이 명세된다.
+  - PP/PV/CSP별 지원 범위와 반복 동작, 단축 move, ROS 입력의 책임 경계가 확정된다.
+  - handler, feedback와 cancel/error path가 구현되고 virtual backend 자동 테스트가 통과한다.
+  - 지원 mode의 실장치 smoke test 및 안전 제한 조건이 문서화된다.
+- 상세: [RF-009 기능 명세](tasks/rf/RF-009-trajectory-api.md)
 
 ### RF-010 사용자 문서 최신화
 
 - 상태: `planned`
 - 우선순위: 보통
-- 목표: 최근 Motion Server, Axis/IO Control Panel, EtherCAT device profile, Remote I/O 변경 내용을
-  사용자 문서에 반영한다.
-- 범위:
-  - User Manual에 최신 API namespace, authority, axis/io feedback, parameter access, Basic mode 동작을 반영한다.
-  - Installation Manual에 Windows package와 Linux Docker 설치/설정 절차, `config.txt`/`.env` 구조,
-    ESI/IODD 배치 규칙을 반영한다.
-  - 문서 파일명과 패키징 포함 규칙이 `docs` 폴더 기준으로 유지되는지 확인한다.
-- 완료 조건: 최신 코드 기준으로 사용자 매뉴얼과 설치 매뉴얼을 검토하고,
-  Windows/Linux Basic mode 절차가 문서만 보고 재현 가능하다.
+- 요약: 사용자 및 설치 매뉴얼을 최신 Motion Server 기능과 배포 구성에 맞춘다.
+- 완료 조건:
+  - User Manual이 최신 API, authority, feedback, parameter access와 Basic mode를 설명한다.
+  - Installation Manual이 Windows/Linux 설치, 설정과 ESI/IODD 규칙을 설명한다.
+  - 문서 파일명, 내부 링크와 packaging 포함 검사가 통과한다.
+  - 신규 사용자가 문서만으로 두 환경의 Basic mode 설치와 smoke test를 재현한다.
+- 상세: [RF-010 기능 명세](tasks/rf/RF-010-user-documentation.md)
 
 ## Tech Debt
 
