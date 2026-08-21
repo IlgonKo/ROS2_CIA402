@@ -8,6 +8,12 @@
 
 ### 완료
 
+- `TD-005-S07A/S07B`를 완료하여 request boundary가 `PartialFailure`를 전체 code
+  `PARTIAL_FAILURE`, 성공 target과 대상별 안전한 Failure로 encoding하도록 연결했다.
+- 축 enable/disable의 대상별 controlword write와 IO output의 단일·복수 module/channel write를
+  all-success, all-fail, partial-fail로 구분하고 기존 cycle exchange, target hold와 legacy 응답을 유지했다.
+- 축 selector 및 IO output validation을 구체 Exception으로 분류하고 authority/state/limit/device 및
+  내부정보 비노출을 포함한 S07A/B 테스트 7개와 전체 unittest 90개를 통과했다.
 - `TD-005-S06`을 완료하여 IO-Link ISDU read/write의 I/O, port binding, IODD index/subindex와 access
   right 검증을 구체 Exception으로 구분하고 busy timeout 및 device status 처리를 통일했다.
 - ISDU SDO/transport 오류의 broad RuntimeError 포장을 제거하고 S03 backend Exception을 그대로

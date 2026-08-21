@@ -27,6 +27,12 @@ from motion_server.config import (
     DEVICE_PROFILE,
     status_log,
 )
+from motion_server.failure import (
+    DeviceAccessException,
+    MotionServerException,
+    PartialFailure,
+    collect_target_results,
+)
 
 HALT_BIT = 1 << 8
 OPERATION_ENABLED_MASK = 0x006F
@@ -274,8 +280,14 @@ def enable(message, runtime, state, client):
     except Exception as exc:
         reject_command_message(client, command, str(exc))
         return
-    for axis_index in axes:
-        runtime.slaves[axis_index].rxpdo.controlword = 0x000F
+    try:
+        result = set_axes_controlword(runtime, axes, 0x000F)
+    except MotionServerException as exc:
+        reject_command_message(client, command, str(exc))
+        return
+    if isinstance(result, PartialFailure):
+        reject_command_message(client, command, "Axis command partially failed.")
+        return result
     exchange(runtime, cycles=3)
     status_log(
         "Received axis/enable: "
@@ -283,6 +295,7 @@ def enable(message, runtime, state, client):
         f"statuswords={[f'0x{runtime.slaves[index].txpdo.statusword:04X}' for index in axes]}",
     )
     send_client_message(client, axes_status_message(runtime, state, client["id"]))
+    return result
 
 
 def disable(message, runtime, state, client):
@@ -301,9 +314,17 @@ def disable(message, runtime, state, client):
     if homing.get("active") and set(axes) & set(homing.get("axes", [])):
         finish_homing(runtime, state, "stopped", "Homing stopped by axis/disable.")
 
-    for axis_index in axes:
+    def disable_axis(axis_index):
         hold_axis_at_actual_position(runtime, state, axis_index)
-        runtime.slaves[axis_index].rxpdo.controlword = 0x0007
+        set_axis_controlword(runtime, axis_index, 0x0007)
+
+    try:
+        result = collect_target_results(axes, disable_axis)
+    except MotionServerException as exc:
+        reject_command_message(client, command, str(exc))
+        return
+    if isinstance(result, PartialFailure):
+        reject_command_message(client, command, "Axis command partially failed.")
     runtime.set_target_positions(state["target_positions"])
     exchange(runtime, cycles=3)
     status_log(
@@ -311,7 +332,23 @@ def disable(message, runtime, state, client):
         f"axes={axes} "
         f"statuswords={[f'0x{runtime.slaves[index].txpdo.statusword:04X}' for index in axes]}",
     )
-    send_client_message(client, axes_status_message(runtime, state, client["id"]))
+    if not isinstance(result, PartialFailure):
+        send_client_message(client, axes_status_message(runtime, state, client["id"]))
+    return result
+
+
+def set_axis_controlword(runtime, axis_index, controlword):
+    try:
+        runtime.slaves[axis_index].rxpdo.controlword = controlword
+    except (OSError, AttributeError, TypeError, ValueError) as exc:
+        raise DeviceAccessException("axis_controlword_write") from exc
+
+
+def set_axes_controlword(runtime, axes, controlword):
+    return collect_target_results(
+        axes,
+        lambda axis_index: set_axis_controlword(runtime, axis_index, controlword),
+    )
 
 
 def is_operation_enabled_controlword(controlword):

@@ -33,7 +33,7 @@ from motion_server.failure.mapping import (
     map_exception,
 )
 from motion_server.failure.models import Failure
-from motion_server.failure.partial import ItemFailure, PartialFailure
+from motion_server.failure.partial import ItemFailure, PartialFailure, collect_target_results
 
 
 __all__ = [
@@ -61,6 +61,7 @@ __all__ = [
     "OperationException",
     "OperationTimeoutException",
     "PartialFailure",
+    "collect_target_results",
     "PermissionDeniedException",
     "RequestException",
     "ResourceNotFoundException",

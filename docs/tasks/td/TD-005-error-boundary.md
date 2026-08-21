@@ -49,8 +49,8 @@ client의 복구 판단과 장애 분석이 불안정하다.
 | `TD-005-S04` | Axis/IO EtherCAT parameter handler | S02, S03 | `complete` |
 | `TD-005-S05` | AP parameter 경로 | S03, S04 | `complete` |
 | `TD-005-S06` | IO-Link ISDU 경로 | S03, S04 | `complete` |
-| `TD-005-S07A` | Motion/Axis command와 PartialFailure | S02-S04 | `pending` |
-| `TD-005-S07B` | IO command와 PartialFailure | S02-S06 | `pending` |
+| `TD-005-S07A` | Motion/Axis command와 PartialFailure | S02-S04 | `complete` |
+| `TD-005-S07B` | IO command와 PartialFailure | S02-S06 | `complete` |
 | `TD-005-S07C` | Status/Catalog handler | S02-S06 | `pending` |
 | `TD-005-S08` | Diagnostic core와 startup/runtime 연계 | S01-S07 | `pending` |
 | `TD-005-S09` | Control Panel과 ROS의 기존/신규 응답 호환 | S02-S08 | `pending` |
@@ -59,10 +59,10 @@ client의 복구 판단과 장애 분석이 불안정하다.
 
 ### 작업 재개 체크포인트
 
-- 현재 완료 단계: `TD-005-S06`
-- 다음 실행 단계: `TD-005-S07A`
-- 다음 시작 위치: Motion/Axis command의 authority, state, limit와 대상별 실행 실패를 조사하고
-  다축 all-success/all-fail/partial-fail 결과 계약을 기존 command handler에 적용한다.
+- 현재 완료 단계: `TD-005-S07B`
+- 다음 실행 단계: `TD-005-S07C`
+- 다음 시작 위치: Status/Catalog handler의 not-ready, resource-not-found와 예상 밖 내부 오류를
+  공통 request boundary 계약으로 migration한다.
 - 현재 호환 상태: 서버는 legacy 응답만 송신한다. 신규 Success/Fail envelope는 아직 live API에 연결되지 않았다.
 - 보존할 사용자 변경: `device/cmmt/required_od.py`의 OD 기본값 및 형식 변경은 `TD-023` 범위이며
   TD-005 변경에 포함하지 않는다.
@@ -317,6 +317,16 @@ S06에서는 기존 `handlers/parameter_access/iol.py`만 변경했다. 제품 s
 | 완료 조건 | authority/state/limit/device 실패와 all-success/all-fail/partial-fail 테스트가 통과하며 명령 실행 순서와 기존 안전 동작은 유지된다. |
 | 인계 | S08 Diagnostic 연계가 필요한 운전 영향 실패 지점을 명확히 식별할 수 있어야 한다. |
 
+S07A 완료 증거:
+
+- 축 selector는 잘못된 값과 없는 축을 각각 `INVALID_ARGUMENT`, `RESOURCE_NOT_FOUND`로 구분한다.
+- 대상별 controlword 실행은 요청 순서를 유지하고 all-success는 성공 대상 목록, all-fail은 첫 번째
+  안전한 예상 실패, 일부 실패는 `PartialFailure`로 반환한다.
+- request boundary는 authority/state/limit/device 실패와 `PARTIAL_FAILURE`를 공통 Fail envelope로
+  변환하며 내부 Exception 문자열을 공개하지 않는다.
+- 실제 축 enable/disable handler는 기존 cycle exchange, target hold와 legacy 응답을 유지하는 adapter로
+  위 대상별 실행 결과를 사용한다.
+
 ### TD-005-S07B IO command와 PartialFailure
 
 | 구분 | 계획 |
@@ -327,6 +337,15 @@ S06에서는 기존 `handlers/parameter_access/iol.py`만 변경했다. 제품 s
 | 제외 범위 | 예약 API 구현(RF-003), 신규 IO 기능 추가, recovery 정책은 하지 않는다. |
 | 완료 조건 | 단일/복수 대상의 성공, 전체 실패, 부분 실패 및 내부정보 비노출 테스트가 통과한다. |
 | 인계 | S08에서 상태 영향이 있는 IO 실패만 Diagnostic 후보로 연결할 수 있어야 한다. |
+
+S07B 완료 증거:
+
+- 단일 `system/io/output_write` 의미를 유지하면서 `writes` 목록을 동일 I/O 장치 또는 항목별 selector의
+  복수 module/channel 요청으로 처리한다.
+- 없는 I/O, 잘못된 field/value와 device access 실패를 구체 Exception으로 구분한다.
+- 복수 출력은 요청 순서대로 실행하며 all-success, all-fail과 partial-fail을 분리하고 부분 실패 시
+  성공 target과 대상별 안전한 Failure를 보존한다.
+- S07A/B 계약 테스트 7개와 전체 unittest 90개가 통과했다.
 
 ### TD-005-S07C Status/Catalog handler
 

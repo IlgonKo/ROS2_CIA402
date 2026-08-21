@@ -14,7 +14,8 @@ from motion_server.control.axis_units import (
     motion_limits_drive_to_api,
     profile_settings_drive_to_api,
 )
-from motion_server.failure import Failure
+from motion_server.failure import Failure, PartialFailure, map_exception
+from motion_server.failure.codes import FailureCode
 
 
 @dataclass(frozen=True)
@@ -55,6 +56,24 @@ def fail_response(context, failure):
     }
     _add_request_id(response, context)
     return response
+
+
+def partial_fail_response(context, result: PartialFailure):
+    failure = Failure(
+        FailureCode.PARTIAL_FAILURE,
+        "The operation completed for only some targets.",
+        {
+            "succeeded": list(result.succeeded),
+            "failed": [
+                {
+                    "target": item.target,
+                    "failure": failure_value(map_exception(item.exception)),
+                }
+                for item in result.failed
+            ],
+        },
+    )
+    return fail_response(context, failure)
 
 
 def failure_value(failure: Failure):

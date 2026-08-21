@@ -1,28 +1,122 @@
 from motion_server.api import public_command_name, reject_command_message, send_client_message
 from motion_server.api.decoder import selected_io_device
 from motion_server.api.encoder import io_device_snapshot
+from motion_server.failure import (
+    DeviceAccessException,
+    InvalidArgumentException,
+    ItemFailure,
+    MotionServerException,
+    PartialFailure,
+    ResourceNotFoundException,
+)
 
 
 def output_write(message, runtime, state, client):
     command = public_command_name(message)
     try:
-        device = selected_io_device(
-            runtime,
-            io_id=message.get("io", message.get("id")),
-            slave_index=message.get("slave_index"),
-        )
-        apply_output_write(device["slave"].rxpdo, message)
-    except Exception as exc:
+        result = write_outputs(message, runtime)
+    except MotionServerException as exc:
         reject_command_message(client, command, str(exc))
         return
 
+    if isinstance(result, PartialFailure):
+        reject_command_message(client, command, "I/O output command partially failed.")
+        return result
+
+    if isinstance(result, list):
+        send_client_message(
+            client,
+            {"type": command, "accepted": True, "targets": result},
+        )
+        return result
+
     response = io_device_snapshot(
-        device,
+        result["device"],
         include_raw=bool(message.get("raw", False)),
     )
     response["type"] = command
     response["accepted"] = True
     send_client_message(client, response)
+    return result
+
+
+def write_outputs(message, runtime):
+    writes = message.get("writes")
+    if writes is None:
+        request = dict(message)
+        return write_output_target(request, runtime)
+    if not isinstance(writes, list) or not writes:
+        raise InvalidArgumentException("writes", "must be a non-empty list")
+
+    requests = []
+    for index, item in enumerate(writes):
+        if not isinstance(item, dict):
+            raise InvalidArgumentException(
+                "writes",
+                f"item {index} must be an object",
+            )
+        request = {
+            key: value
+            for key, value in message.items()
+            if key not in {"writes", "request_id"}
+        }
+        request.update(item)
+        requests.append(request)
+
+    targets = [
+        output_target(request, index)
+        for index, request in enumerate(requests)
+    ]
+    succeeded = []
+    failed = []
+    for target, request in zip(targets, requests):
+        try:
+            write_output_target(request, runtime)
+        except MotionServerException as exception:
+            failed.append(ItemFailure(target, exception))
+        else:
+            succeeded.append(target)
+    if not failed:
+        return succeeded
+    if not succeeded:
+        raise failed[0].exception
+    return PartialFailure(succeeded, failed)
+
+
+def output_target(message, index=0):
+    target = {
+        "io": message.get("io", message.get("id")),
+        "slot": message.get("slot"),
+    }
+    if "channel" in message:
+        target["channel"] = message.get("channel")
+    if target["io"] is None:
+        target["io"] = index
+    return target
+
+
+def write_output_target(message, runtime):
+    selector = message.get("io", message.get("id"))
+    try:
+        device = selected_io_device(
+            runtime,
+            io_id=selector,
+            slave_index=message.get("slave_index"),
+        )
+    except (TypeError, ValueError) as exc:
+        raise ResourceNotFoundException("io", selector) from exc
+    try:
+        apply_output_write(device["slave"].rxpdo, message)
+    except InvalidArgumentException:
+        raise
+    except (AttributeError, OSError) as exc:
+        raise DeviceAccessException("io_output_write") from exc
+    except (TypeError, ValueError) as exc:
+        raise InvalidArgumentException(
+            "output",
+            "is invalid for the selected I/O target",
+        ) from exc
+    return {"target": output_target(message), "device": device}
 
 
 def apply_output_write(rxpdo, message):
@@ -52,7 +146,7 @@ def apply_output_write(rxpdo, message):
 
 def require_field(message, field):
     if field not in message:
-        raise ValueError(f"system/io/output_write requires {field}")
+        raise InvalidArgumentException(field, "is required")
     return message[field]
 
 
@@ -74,5 +168,5 @@ def parse_bool(value):
             return True
         if normalized in {"0", "false", "off", "no"}:
             return False
-        raise ValueError(f"Invalid boolean value: {value!r}")
+        raise InvalidArgumentException("value", "must be boolean")
     return bool(value)
