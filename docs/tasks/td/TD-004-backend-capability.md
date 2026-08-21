@@ -115,11 +115,13 @@ DeviceCapability.AXIS_RESTART
   Motion Server와 PySOEM smoke test가 동일한 순서로 호출한다.
 - MockMaster는 PRE-OP 연결 없이 OP 진입을 거부하며 lifecycle 호출 순서를 테스트로 검증한다.
 - `DeviceCapability.AXIS_RESTART`와 capability-method validation을 추가했다.
-- CMMT restart 동작을 `request_axis_restart()`, `clear_axis_restart_request()`,
-  `write_axis_restart_command()`로 통일하고 request의 `0 -> 1` 전이를 검증했다.
+- `AXIS_RESTART` capability 계약을 `request_axis_restart()`와
+  `clear_axis_restart_request()`로 정의하고 선언과 method 일치를 startup 전에 검증한다.
+- `write_axis_restart_command()`는 CMMT profile 내부의 저수준 OD write helper로만 사용하며
+  capability 계약에는 포함하지 않고 request의 `0 -> 1` 전이를 검증했다.
 - `Axis` forwarding wrapper와 `ServoInterface`를 제거하고 MockSlave가 Virtual Servo 및
   OD Model/Bridge를 직접 사용하도록 변경했다.
 - runtime staged startup과 position scale 갱신의 `hasattr()` fallback을 제거했다.
-- `python -m unittest discover -s tests -v`: Mock/PySOEM 계약 테스트를 포함한 14개 테스트 통과.
+- `python -m unittest discover -s tests -v`: Mock/PySOEM 계약 테스트를 포함한 15개 테스트 통과.
 - CMMT-AS 1축 mock 전체 초기화에서 `connect:preop -> enter_operational` 순서와
   CiA402 `Operation Enabled(0x0027)` 진입을 확인했다.
