@@ -178,6 +178,7 @@ Tech Debt 상태 값은 `open`, `in_progress`, `complete`를 사용한다.
 - 완료 조건:
   - 지원 capability와 필수 method가 명시적인 interface 또는 object로 정의된다.
   - capability 판단을 위한 `hasattr()` fallback이 제거된다.
+  - axis restart는 `AXIS_RESTART` capability와 request/clear-request 계약으로 일관되게 표현된다.
   - 필수 capability 누락은 startup 단계에서 구체적인 오류로 검증된다.
   - mock과 PySOEM backend의 capability 계약 자동 테스트가 통과한다.
 - 상세: [TD-004 기술 명세](tasks/td/TD-004-backend-capability.md)

@@ -23,6 +23,8 @@
 
 ### 문서 및 운영
 
+- TD-004의 axis restart capability를 `AXIS_RESTART`로 확정하고 상위 request/clear-request와
+  저수준 command write의 명칭 및 책임을 상세 명세에 기록했다.
 - `docs/README.md`를 추가하여 프로젝트 문서의 진입점, 문서별 책임과 갱신 규칙을 정리했다.
 - `decisions.md`를 추가하여 기존 구현과 문서에서 확인되는 핵심 설계 결정을 `DEC-###` 형식으로 기록했다.
 - 프로젝트 README에서 설계, API, 시험, 결정, 작업 목록과 작업 이력 문서로 바로 이동할 수 있게 연결했다.
