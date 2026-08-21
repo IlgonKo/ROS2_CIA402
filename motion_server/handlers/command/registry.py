@@ -1,4 +1,4 @@
-from motion_server.api import reject_command_message
+from motion_server.failure import InvalidRequestException, UnsupportedOperationException
 from motion_server.handlers.command.homing import start_homing
 from motion_server.handlers.command.io_output_write import output_write
 from motion_server.handlers.command.io_ap_parameter_write import (
@@ -50,20 +50,17 @@ from motion_server.handlers.command.trajectory import (
 
 def reject_not_implemented(message, runtime, state, client):
     command = str(message.get("cmd", "")).strip()
-    reject_command_message(client, command, f"{command} is not implemented yet.")
+    raise UnsupportedOperationException(command, "not_implemented")
 
 
 def require_single_axis(command):
     def wrapper(message, runtime, state, client):
         public_command = str(message.get("cmd", "")).strip()
         if "axes" in message or "axis" not in message:
-            reject_command_message(
-                client,
-                public_command,
-                f"{public_command} requires axis and does not accept axes.",
+            raise InvalidRequestException(
+                f"{public_command} requires axis and does not accept axes."
             )
-            return
-        command(message, runtime, state, client)
+        return command(message, runtime, state, client)
 
     return wrapper
 
@@ -72,13 +69,10 @@ def require_axes(command):
     def wrapper(message, runtime, state, client):
         public_command = str(message.get("cmd", "")).strip()
         if "axis" in message or "axes" not in message:
-            reject_command_message(
-                client,
-                public_command,
-                f"{public_command} requires axes and does not accept axis.",
+            raise InvalidRequestException(
+                f"{public_command} requires axes and does not accept axis."
             )
-            return
-        command(message, runtime, state, client)
+        return command(message, runtime, state, client)
 
     return wrapper
 

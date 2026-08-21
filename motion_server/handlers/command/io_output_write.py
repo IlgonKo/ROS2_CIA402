@@ -1,4 +1,3 @@
-from motion_server.api import public_command_name, reject_command_message, send_client_message
 from motion_server.api.decoder import selected_io_device
 from motion_server.api.encoder import io_device_snapshot
 from motion_server.failure import (
@@ -12,32 +11,19 @@ from motion_server.failure import (
 
 
 def output_write(message, runtime, state, client):
-    command = public_command_name(message)
-    try:
-        result = write_outputs(message, runtime)
-    except MotionServerException as exc:
-        reject_command_message(client, command, str(exc))
-        return
+    result = write_outputs(message, runtime)
 
     if isinstance(result, PartialFailure):
-        reject_command_message(client, command, "I/O output command partially failed.")
         return result
 
     if isinstance(result, list):
-        send_client_message(
-            client,
-            {"type": command, "accepted": True, "targets": result},
-        )
-        return result
+        return {"targets": result}
 
     response = io_device_snapshot(
         result["device"],
         include_raw=bool(message.get("raw", False)),
     )
-    response["type"] = command
-    response["accepted"] = True
-    send_client_message(client, response)
-    return result
+    return response
 
 
 def write_outputs(message, runtime):

@@ -59,10 +59,10 @@ client의 복구 판단과 장애 분석이 불안정하다.
 
 ### 작업 재개 체크포인트
 
-- 현재 완료 단계: `TD-005-S11B1`
-- 다음 실행 단계: `TD-005-S11B2`
-- 다음 시작 위치: command handler와 authority validation의 직접 송신/catch를 data 반환 및 typed
-  Exception으로 바꾼 뒤 `_RequestCaptureConnection`을 제거한다.
+- 현재 완료 단계: `TD-005-S11B2A`
+- 다음 실행 단계: `TD-005-S11B2B`
+- 다음 시작 위치: Axis motion/state/settings, homing, trajectory 및 parameter-save handler의 직접
+  송신/catch를 data 반환 및 typed Exception으로 바꾼 뒤 `_RequestCaptureConnection`을 제거한다.
 - 현재 호환 상태: 서버 request/response는 신규 Success/Fail envelope만 송신한다. 주기 feedback과
   자발적 notification은 envelope 대상이 아니다.
 - 보존할 사용자 변경: `device/cmmt/required_od.py`의 OD 기본값 및 형식 변경은 `TD-023` 범위이며
@@ -547,7 +547,8 @@ S11은 정리 범위를 한 번에 변경하지 않고 다음 순서로 진행�
 | --- | --- | --- |
 | `TD-005-S11A` | client legacy response 및 `diagnostics` fallback 제거 | `complete` |
 | `TD-005-S11B1` | status, parameter, authority operation의 data 반환/typed Exception 전환 | `complete` |
-| `TD-005-S11B2` | command 반환/typed Exception 전환과 request capture 제거 | `pending` |
+| `TD-005-S11B2A` | router validation과 server/bus/I/O command 반환 계약 전환 | `complete` |
+| `TD-005-S11B2B` | Axis command 반환/typed Exception 전환과 request capture 제거 | `pending` |
 | `TD-005-S11C` | broad catch allowlist, envelope/mapping 정적 검사와 TD-005 완료 | `pending` |
 
 S11A 완료 증거:
@@ -570,3 +571,14 @@ S11B1 완료 증거:
   통과했다.
 - command 및 authority validation의 직접 송신은 S11B2에서 정리하고, 그 전까지 중앙 capture를
   유지한다.
+
+S11B2A 완료 증거:
+
+- unknown command, advanced-only, authority 및 initialization validation은 legacy rejection을 송신하지
+  않고 각각의 typed Exception을 발생시킨다.
+- command registry의 단일/복수 Axis selector 및 미구현 command도 typed Exception 계약을 사용한다.
+- server reset/restart, bus reconnect와 I/O output write는 직접 송신하지 않고 operation data 또는
+  `PartialFailure`를 반환한다.
+- 전체 unittest 145개와 source compile 검사가 통과했다.
+- Axis motion/state/settings, homing, trajectory와 parameter-save 직접 송신은 S11B2B 범위이며, 해당
+  전환이 끝날 때 request capture를 제거한다.

@@ -8,6 +8,11 @@
 
 ### 완료
 
+- `TD-005-S11B2A`에서 router의 unknown/advanced-only/authority/initialization 거부와 command registry의
+  selector/미구현 검증을 legacy 송신 대신 typed Exception으로 전환했다.
+- server reset/restart, bus reconnect와 I/O output write는 operation data 또는 `PartialFailure`를
+  반환하도록 바꿨다. 전체 unittest 145개와 source compile 검사가 통과했으며 다음 단계는 남은 Axis
+  command와 request capture를 제거하는 `TD-005-S11B2B`다.
 - `TD-005-S11B1`에서 status, EtherCAT/AP/IO-Link parameter 및 authority operation을 순수 data 반환과
   typed Exception 계약으로 전환하고 사용되지 않는 중간 response helper를 제거했다.
 - direct handler 계약 테스트를 새 반환 방식으로 갱신했으며 전체 unittest 145개가 통과했다. 다음은

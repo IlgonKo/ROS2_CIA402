@@ -13,12 +13,20 @@ from motion_server.api.encoder import (
     ResponseContext,
     fail_response,
     partial_fail_response,
-    reject_command_message,
     send_client_message,
     success_response,
 )
 from motion_server.api.validator import validate_command
-from motion_server.failure import MotionServerException, PartialFailure, map_exception
+from motion_server.failure import (
+    AuthorityBusyException,
+    AuthorityRequiredException,
+    MotionServerException,
+    PartialFailure,
+    ServerNotReadyException,
+    UnknownCommandException,
+    UnsupportedOperationException,
+    map_exception,
+)
 from motion_server.failure import Failure, FailureCode
 
 
@@ -54,30 +62,9 @@ def request_response(request, operation, *, logger=None):
 from motion_server.handlers.authority import (  # noqa: E402
     client_has_command_authority,
     handle_authority,
-    reject_command_when_not_initialized,
-    reject_command_without_authority,
 )
 from motion_server.handlers.command.registry import handle_command  # noqa: E402
-from motion_server.handlers.status import (  # noqa: E402
-    handle_advanced_status_rejection,
-    handle_status,
-)
-
-
-def reject_advanced_only_command(client, message, state):
-    command = command_name(message)
-    send_client_message(
-        client,
-        {
-            "type": "command_rejected",
-            "command": command,
-            "server_mode": state.get("server_mode"),
-            "message": (
-                f"{command} is available only in "
-                "Motion Server advanced mode."
-            ),
-        },
-    )
+from motion_server.handlers.status import handle_status  # noqa: E402
 
 
 class _RequestCaptureConnection:
@@ -140,51 +127,16 @@ def _route_message_to_handler(message, runtime, state, client):
         client_has_command_authority(client, state),
     )
     if validation_error == "unknown":
-        client["_failure"] = Failure(
-            FailureCode.UNKNOWN_COMMAND,
-            "The command is unknown.",
-            {"command": raw_message_type},
-        )
-        if raw_message_type:
-            reject_command_message(
-                client,
-                raw_message_type,
-                f"Unknown command: {raw_message_type}",
-            )
-        return
+        raise UnknownCommandException(raw_message_type)
     if validation_error == "advanced_only":
-        client["_failure"] = Failure(
-            FailureCode.UNSUPPORTED_OPERATION,
-            "The requested operation is not supported.",
-            {"operation": message_type, "reason": "advanced_only"},
-        )
-        if spec and spec.is_status:
-            handle_advanced_status_rejection(message_type, runtime, state, client)
-        else:
-            reject_advanced_only_command(client, message, state)
-        return
+        raise UnsupportedOperationException(message_type, "advanced_only")
     if validation_error == "authority_required":
         owner = state.get("command_authority_owner")
         if owner is None:
-            client["_failure"] = Failure(
-                FailureCode.AUTHORITY_REQUIRED,
-                "Command authority is required.",
-            )
-        else:
-            client["_failure"] = Failure(
-                FailureCode.AUTHORITY_BUSY,
-                "Command authority is held by another client.",
-                {"owner": owner},
-            )
-        reject_command_without_authority(client, message, state)
-        return
+            raise AuthorityRequiredException()
+        raise AuthorityBusyException(owner)
     if validation_error == "not_initialized":
-        client["_failure"] = Failure(
-            FailureCode.SERVER_NOT_READY,
-            "Motion Server is not ready.",
-        )
-        reject_command_when_not_initialized(client, message, state)
-        return
+        raise ServerNotReadyException(state.get("initialization_error"))
 
     if spec.is_authority:
         handle_authority(message_type, client, state)
@@ -202,11 +154,7 @@ def _route_message_to_handler(message, runtime, state, client):
     if handle_command(message_type, message, runtime, state, client):
         return
 
-    reject_command_message(
-        client,
-        raw_message_type,
-        f"No handler registered for command: {raw_message_type}",
-    )
+    raise UnknownCommandException(raw_message_type)
 
 
 def _live_response(context, client, captured_messages):
