@@ -47,6 +47,10 @@
 
 ### 문서 및 운영
 
+- `DEC-016`으로 DiagnosticStatus를 Definition, Source와 History의 조합으로 구성하고
+  latching 여부에 따른 acknowledge/resolve/clear 및 재발 규칙을 확정했다.
+- Source를 `SERVER`, `BUS`, `AXIS`, `IO` type과 종류별 설정 index의 조합으로 식별하고,
+  recovery policy는 RF-005에서 별도 설계하도록 DiagnosticDefinition에서 제외했다.
 - `DEC-015`를 개정하여 API 요청 결과를 Success/Error로, 지속되는 Diagnostic 상태를
   NORMAL/ALARM/FAULT로 분리하고 Error를 Diagnostic level에서 제외했다.
 - 관련 문서를 `docs/api/`와 `docs/diagnostic/`으로 분리하고 기존 전수 조사 자료를 분류 전

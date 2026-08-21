@@ -216,6 +216,33 @@ Device Profile + ESI
 운전이 제한·중단되거나 상태가 변경되는가? -> Fault
 ```
 
+## DEC-016 Diagnostic Status를 Definition·Source·History 조합으로 구성
+
+- 상태: `accepted`
+- 결정일: 2026-08-21
+- 결정:
+  - `DiagnosticStatus`는 고유 `diagnostic_id`, `DiagnosticDefinition`, `DiagnosticSource`,
+    `DiagnosticHistory`와 예약된 optional `detail/context`를 조합한 최상위 객체다.
+  - Definition은 `code`, `level`, `title`, `description`, `latching`을 정의하며 recovery policy는 포함하지 않는다.
+  - Source는 `SERVER`, `BUS`, `AXIS`, `IO` type과 장치 종류별 설정 index의 조합으로 식별한다.
+  - History는 `occurred_at`, `acknowledged_at`, `resolved_at`을 기록한다. 반복 시각과 횟수 및
+    별도의 `cleared_at`은 저장하지 않는다.
+  - non-latching Diagnostic은 resolve 시 자동 clear되고, latching Diagnostic은 resolve와
+    acknowledge가 모두 완료되었을 때 clear된다.
+  - clear 전 재검출은 동일 발생 건으로, clear 후 재발은 새 ID를 가진 발생 건으로 처리한다.
+  - `NORMAL`은 개별 Status로 생성하지 않고 관리 대상 Diagnostic이 없을 때의 계산된 상태로만 사용한다.
+- 이유: 고정 정의, 발생 위치, 발생 건의 시간 정보와 현재 표시 정보를 분리하면 중복 필드 없이 동일
+  Diagnostic의 수명 주기와 재발을 일관되게 판정할 수 있다.
+- 검토한 대안:
+  - Status에 code, level과 acknowledge/clear 값을 중복 저장하는 방식은 구성 객체와 상태가 어긋날 수 있어 채택하지 않는다.
+  - 포괄적인 `DEVICE` Source와 index만 사용하는 방식은 Axis와 IO의 index 공간이 충돌하므로 채택하지 않는다.
+  - Definition의 고정 recovery enum은 RF-005에서 정할 실제 복구 동작을 미리 제한하므로 보류한다.
+- 영향:
+  - 상세 데이터 계약은 [Diagnostic 데이터 모델](diagnostic/diagnostic_model.md)을 따른다.
+  - 현재 `runtime.last_diagnostics`의 장치 원시 readback은 이 모델의 `DiagnosticStatus`와 다른 개념으로 유지하고
+    후속 구현에서 이름과 책임을 분리한다.
+  - recovery handler, 보존 정책과 API serialization은 각각의 후속 설계에서 확정한다.
+
 ## 새 결정 작성 양식
 
 ```text

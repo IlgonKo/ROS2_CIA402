@@ -14,6 +14,8 @@ runtime fault의 상태, 사용자에게 보이는 진단 정보와 reset/reconn
 ## 관련 작업
 
 runtime 생성 단계의 degraded startup 세부 구조는 [TD-018](../td/TD-018-runtime-initialization-error.md)에서 추적한다.
+공통 Diagnostic 객체와 clear 조건은 [Diagnostic 데이터 모델](../../diagnostic/diagnostic_model.md)을 따른다.
+Definition에서 제외한 recovery policy와 handler 연결은 이 RF에서 확정한다.
 
 ## 검증 계획
 
