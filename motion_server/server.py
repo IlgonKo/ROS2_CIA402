@@ -39,6 +39,7 @@ from motion_server.diagnostic.startup import (
     detect_initialization_fault,
     resolve_initialization_fault,
 )
+from motion_server.diagnostic.runtime import RuntimeDiagnosticMonitor
 from motion_server.app.startup import (
     create_axis_runtime,
     initialize_drive,
@@ -119,6 +120,7 @@ def run_server_loop(server, runtime, state):
         state.get("dc_phase_max_correction", 0.001),
     )
     dc_cycle_scheduler = DcCycleScheduler(dc_phase_lock)
+    diagnostic_monitor = RuntimeDiagnosticMonitor(runtime.diagnostic_manager)
 
     while True:
         if dc_absolute_shift:
@@ -161,6 +163,8 @@ def run_server_loop(server, runtime, state):
                 sleep_after=False,
                 dc_cycle_scheduler=dc_cycle_scheduler,
             )
+
+        diagnostic_monitor.update(runtime)
 
         direct_tx_dc_time_ns = getattr(runtime, "last_direct_tx_dc_time_ns", None)
         estimated_tx_dc_time_ns = getattr(runtime, "last_tx_dc_time_ns", None)

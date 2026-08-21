@@ -73,6 +73,9 @@ class DiagnosticManager:
     def status(self, diagnostic_id):
         return self._by_id.get(str(diagnostic_id))
 
+    def status_for(self, code, source):
+        return self._by_key.get(self._key(code, source))
+
     def active_statuses(self, source=None):
         statuses = tuple(self._by_key.values())
         if source is None:

@@ -52,17 +52,17 @@ client의 복구 판단과 장애 분석이 불안정하다.
 | `TD-005-S07A` | Motion/Axis command와 PartialFailure | S02-S04 | `complete` |
 | `TD-005-S07B` | IO command와 PartialFailure | S02-S06 | `complete` |
 | `TD-005-S07C` | Status/Catalog handler | S02-S06 | `complete` |
-| `TD-005-S08` | Diagnostic core와 startup/runtime 연계 | S01-S07 | `pending` |
+| `TD-005-S08` | Diagnostic core와 startup/runtime 연계 | S01-S07 | `in_progress` |
 | `TD-005-S09` | Control Panel과 ROS의 기존/신규 응답 호환 | S02-S08 | `pending` |
 | `TD-005-S10` | 서버 Success/Fail envelope 최종 전환 | S09 | `pending` |
 | `TD-005-S11` | legacy 제거, broad catch allowlist와 자동 검사 | S10 | `pending` |
 
 ### 작업 재개 체크포인트
 
-- 현재 완료 단계: `TD-005-S08B`
-- 다음 실행 단계: `TD-005-S08C`
-- 다음 시작 위치: runtime Bus/Axis/IO 운전 영향 지점을 code와 source별 producer로 연결하되,
-  단발성 API 실패와 지속되는 Alarm/Fault 조건을 분리한다.
+- 현재 완료 단계: `TD-005-S08C1`
+- 다음 실행 단계: `TD-005-S08C2`
+- 다음 시작 위치: CPX-AP/IO-Link device profile에서 runtime health를 신뢰할 수 있게 판정할
+  PDO/OD source가 있는지 확인하고 IO Alarm/Fault code와 발생·resolve 조건을 확정한다.
 - 현재 호환 상태: 서버는 legacy 응답만 송신한다. 신규 Success/Fail envelope는 아직 live API에 연결되지 않았다.
 - 보존할 사용자 변경: `device/cmmt/required_od.py`의 OD 기본값 및 형식 변경은 `TD-023` 범위이며
   TD-005 변경에 포함하지 않는다.
@@ -388,7 +388,7 @@ S08은 운전 영향 범위를 한 번에 변경하지 않고 다음 순서로 �
 | --- | --- | --- | --- |
 | `TD-005-S08A` | Diagnostic model, 활성 저장소와 lifecycle core | S07C | `complete` |
 | `TD-005-S08B` | startup 필수 실패와 Initialization Fault 연결 | S08A | `complete` |
-| `TD-005-S08C` | runtime Bus/Axis/IO Alarm·Fault producer와 API Fail 병행 | S08B | `pending` |
+| `TD-005-S08C` | runtime Bus/Axis/IO Alarm·Fault producer와 API Fail 병행 | S08B | `in_progress` |
 | `TD-005-S08D` | 기존 status 경로의 Diagnostic 조회·직렬화 계약 연결 | S08C | `pending` |
 
 #### TD-005-S08A 계약
@@ -431,6 +431,29 @@ S08A 완료 증거:
   reset/reconnect 계열 recovery command는 기존처럼 허용된다.
 - S08B startup Diagnostic 테스트 9개와 전체 unittest 121개가 통과했다.
 - 현재 완료 단계는 `TD-005-S08B`, 다음 실행 단계는 `TD-005-S08C`다.
+
+#### TD-005-S08C 세부 단계
+
+| 하위 단계 | 범위 | 상태 |
+| --- | --- | --- |
+| `TD-005-S08C1` | Bus WKC와 Axis statusword 기반 runtime producer | `complete` |
+| `TD-005-S08C2` | IO device-profile health source와 Alarm/Fault 판정 | `pending` |
+
+S08C1 완료 증거:
+
+- `RuntimeDiagnosticMonitor`를 정상 server cycle의 process-data 교환 직후에 실행한다.
+- 한 번의 WKC 누락은 Diagnostic을 만들지 않고 3회 연속 불일치할 때
+  `BUS_PROCESS_DATA_INCOMPLETE` latching Fault를 생성한다. 정상 WKC가 돌아오면 resolve한다.
+- Axis별 CiA 402 statusword fault bit는 `AXIS_DRIVE_FAULT` latching Fault, warning bit는
+  `AXIS_DRIVE_WARNING` non-latching Alarm으로 생성·resolve한다.
+- 단일 SDO timeout API Fail은 runtime Diagnostic을 생성하지 않는다.
+- Bus/Axis runtime Diagnostic 테스트 8개와 전체 unittest 129개가 통과했다.
+
+S08C2 시작 조건:
+
+- 현재 IO PDO model에는 공통 health/fault signal이 없으므로 Bus WKC를 특정 IO source로 추정하지 않는다.
+- CPX-AP 및 향후 IO profile이 제공하는 health source, bit/status 의미와 Alarm/Fault 기준을 먼저 확정한다.
+- source가 없는 상태에서 IO Diagnostic을 임의 생성하거나 AP/ISDU 요청의 단발 실패를 승격하지 않는다.
 
 ### TD-005-S09 Control Panel/ROS 호환 읽기
 
