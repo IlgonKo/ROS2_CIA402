@@ -183,6 +183,34 @@ Device Profile + ESI
   - 완료 증거는 명세 항목, 구현 위치와 테스트를 대조하여 합의되지 않은 범위 확대가 없음을 확인한다.
   - 저장소 작업 지침은 계약 확대가 필요할 경우 구현을 중단하고 설계 결정을 먼저 갱신하도록 요구한다.
 
+## DEC-015 사용자 노출 오류 수준을 Error·Alarm·Fault로 구분
+
+- 상태: `accepted`
+- 결정일: 2026-08-21
+- 결정:
+  - 사용자에게 노출하는 실패와 이상 상태는 `Error`, `Alarm`, `Fault` 세 수준으로 구분한다.
+  - `Error`는 개별 요청이 실패했지만 Motion Server와 장치의 정상 운전 상태에는 영향이 없는 경우다.
+  - `Alarm`은 이상이 발생하여 사용자의 확인이나 대응이 필요하지만 정상 운전을 계속할 수 있는 경우다.
+  - `Fault`는 Motion Server 또는 장치의 정상 운전 상태가 제한, 중단, degraded 또는 unavailable로 변경되는 경우다.
+  - Python `Exception`은 위 상태를 내부 계층 사이에서 전달하고 처리하는 구현 수단이며 사용자 분류로 노출하지 않는다.
+- 이유: transport/protocol/device 같은 내부 원인 분류와 운전 상태, notification을 모두 사용자에게 노출하면
+  사용자가 현재 운전 가능 여부와 필요한 대응을 직관적으로 판단하기 어렵다. 세 수준은 요청 실패,
+  확인이 필요한 이상과 운전 불가 상태를 직접 구분한다.
+- 검토한 대안:
+  - `Error -> Alarm -> Fault` 포함 계층은 Alarm을 모든 Fault의 상위 개념으로 해석하게 되어 사용자에게 불필요하게 복잡하다.
+  - transport/protocol/device 원인 taxonomy를 사용자 API에 직접 노출하는 방식은 내부 구조와 API를 과도하게 결합한다.
+- 영향:
+  - 동일 원인도 발생 횟수와 운전 영향에 따라 Error 또는 Alarm에서 Fault로 승격될 수 있다.
+  - 내부 exception taxonomy와 사용자 노출 수준은 분리하되, 각 API 응답과 로그는 안정적인 code와 수준을 함께 제공한다.
+  - 단순 validation 실패는 Error, 운전 가능한 이상은 Alarm, 상태 전환이나 기능 차단은 Fault로 판정한다.
+  - Error·Alarm·Fault 관련 inventory와 설계 문서는 `docs/error_alarm_fault/`에서 함께 관리한다.
+
+```text
+요청만 실패하고 운전 상태가 정상인가? -> Error
+이상이 있지만 정상 운전을 계속할 수 있는가? -> Alarm
+운전이 제한·중단되거나 상태가 변경되는가? -> Fault
+```
+
 ## 새 결정 작성 양식
 
 ```text

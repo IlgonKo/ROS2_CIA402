@@ -23,7 +23,8 @@
 | `remaining_tasks.md` | 미완료 기능, 기술 부채와 완료 조건 | 완료 작업의 상세 이력 |
 | `tasks/rf/RF-*.md` | RF별 사용자 가치, 구현 범위, 제약과 검증 계획 | 전체 작업의 상태 요약 |
 | `tasks/td/TD-*.md` | TD별 현재 구조, 위험, 구현 범위와 검증 계획 | 전체 작업의 상태 요약 |
-| `alarm_handling/alarm_point_list.md` | alarm/error 발생·catch 지점의 현행 inventory와 migration 추적 | 확정되지 않은 목표 계약을 현재 동작처럼 표현하는 내용 |
+| `error_alarm_fault/README.md` | Error·Alarm·Fault 문서 구조와 확정된 용어 범위 | 개별 발생 지점의 상세 목록 |
+| `error_alarm_fault/point_list.md` | Error·Alarm·Fault 후보 발생·catch 지점의 현행 inventory와 migration 추적 | 확정되지 않은 목표 계약을 현재 동작처럼 표현하는 내용 |
 | `worklog.md` | 실제 완료된 변경의 요약 | 미확정 계획과 장기 설계 설명 |
 
 ## 갱신 규칙
