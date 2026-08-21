@@ -5,11 +5,13 @@ from device.cmmt.pdo_configuration import pdo_configuration_from_env, pdo_od_rol
 from device.cmmt.required_od import required_od, required_od_roles as cmmt_required_od_roles
 from device.cmmt.rxpdo import RxPDO
 from device.cmmt.txpdo import TxPDO
+from device.capabilities import DeviceCapability
 
 
 class CMMTDeviceProfile:
     name = "cmmt"
     variant = None
+    capabilities = frozenset({DeviceCapability.AXIS_RESTART})
 
     PROFILE_POSITION_MODE = 1
     PROFILE_VELOCITY_MODE = 3
@@ -784,35 +786,26 @@ class CMMTDeviceProfile:
             "return_value": int(return_value),
         }
 
-    def restart_axis(self, master, axis_index):
-        self.clear_axis_restart_command(master, axis_index)
-        master.sdo.write_uint8(
-            axis_index,
-            self.DEVICE_RESET_INDEX,
-            self.DEVICE_RESET_COMMAND_SUBINDEX,
-            1,
-        )
-        return {
-            "object": (
-                f"0x{self.DEVICE_RESET_INDEX:04X}:"
-                f"{self.DEVICE_RESET_COMMAND_SUBINDEX:02X}"
-            ),
-            "command": 1,
-        }
+    def request_axis_restart(self, master, axis_index):
+        self.write_axis_restart_command(master, axis_index, 0)
+        return self.write_axis_restart_command(master, axis_index, 1)
 
-    def clear_axis_restart_command(self, master, axis_index):
+    def clear_axis_restart_request(self, master, axis_index):
+        return self.write_axis_restart_command(master, axis_index, 0)
+
+    def write_axis_restart_command(self, master, axis_index, value):
         master.sdo.write_uint8(
             axis_index,
             self.DEVICE_RESET_INDEX,
             self.DEVICE_RESET_COMMAND_SUBINDEX,
-            0,
+            int(value),
         )
         return {
             "object": (
                 f"0x{self.DEVICE_RESET_INDEX:04X}:"
                 f"{self.DEVICE_RESET_COMMAND_SUBINDEX:02X}"
             ),
-            "command": 0,
+            "command": int(value),
         }
 
 

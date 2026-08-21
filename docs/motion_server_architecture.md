@@ -120,8 +120,8 @@ Motion Server는 PDO remap을 런타임에 수행하지 않는다. 사용할 PDO
 ```text
 MockMaster
   -> MockSlave
-  -> Axis wrapper
   -> VirtualCiA402Servo
+  -> OD Model / OD Bridge
 ```
 
 mock backend도 같은 TCP API, 같은 command path를 사용한다. 따라서 UI, ROS Bridge, 사용자 프로그램은 backend 차이를 크게 의식하지 않아도 된다.

@@ -4,6 +4,7 @@ from device.cmmt.profile import (
     CMMTSTDeviceProfile,
 )
 from device.cpx_ap_i_ec.profile import CPXApIEcDeviceProfile
+from device.capabilities import validate_device_capabilities
 
 
 DEVICE_PROFILES = {
@@ -27,4 +28,6 @@ def get_device_profile(name, **kwargs):
             f"Unsupported device profile: {name}. "
             f"Supported profiles: {', '.join(available_device_names())}"
         ) from exc
-    return profile_class(**kwargs)
+    profile = profile_class(**kwargs)
+    validate_device_capabilities(profile)
+    return profile
