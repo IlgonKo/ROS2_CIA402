@@ -11,6 +11,7 @@ from control_panel.axis_control_panel.panel_update_data import (
     merge_system_feedback,
 )
 from control_panel.axis_control_panel.units import api_to_user_unit_factor
+from motion_server_client import is_fail_response, normalize_response
 
 RECONNECT_PERIOD = 1.0
 
@@ -44,7 +45,7 @@ def request_initial_system_status(host, port, timeout=2.0):
                 line = sock_file.readline()
                 if not line:
                     break
-                message = json.loads(line.decode("utf-8"))
+                message = normalize_response(json.loads(line.decode("utf-8")))
                 if message.get("type") == "system/axes/status":
                     return message
     except (OSError, ValueError, json.JSONDecodeError):
@@ -142,8 +143,10 @@ class AxisServerClient:
             if not line:
                 raise OSError("server closed connection")
 
-            message = json.loads(line)
-            if message.get("type") == "system/axes/status":
+            message = normalize_response(json.loads(line))
+            if is_fail_response(message):
+                self._store_notice(message)
+            elif message.get("type") == "system/axes/status":
                 self._store_feedback(message)
             elif message.get("type") == "system/axis/status":
                 self._merge_axis_status(message)
@@ -197,11 +200,10 @@ class AxisServerClient:
                     ),
                     "available": bool(message.get("available", False)),
                 }
-            elif (
-                message.get("type") == "command_rejected"
-                and message.get("reason")
-                in {"authority_required", "authority_busy"}
-            ):
+            elif message.get("reason") in {
+                "authority_required",
+                "authority_busy",
+            }:
                 self.feedback["command_authority"] = {
                     "owner": message.get("owner"),
                     "owned_by_this_client": False,
@@ -320,7 +322,7 @@ class AxisServerClient:
             )
 
     def _diagnostics_for_axis(self, axis_index):
-        diagnostics = self.feedback.setdefault("diagnostics", [])
+        diagnostics = self.feedback.setdefault("device_diagnostics", [])
         while len(diagnostics) <= axis_index:
             diagnostics.append({})
         return diagnostics[axis_index]

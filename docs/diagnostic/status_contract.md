@@ -28,8 +28,9 @@ diagnostic readback과 구분되는 Motion Server 공통 Diagnostic 상태다.
 | `system/axes/status` | 모든 `AXIS` source |
 | `system/io/status` | 모든 `IO` source |
 
-Axis status의 기존 `diagnostics` field는 CMMT 원시 SDO readback이며 `diagnostic_status`와 다른 계약이다.
-기존 client 호환을 위해 이 field의 이름과 payload는 TD-005-S08D에서 변경하지 않는다.
+Axis status의 `device_diagnostics` field는 CMMT 원시 SDO readback이며 `diagnostic_status`와 다른 계약이다.
+TD-005-S09의 legacy status adapter는 구버전 client를 위해 같은 payload를 `diagnostics` 별칭으로도
+보내지만 신규 Success data의 정식 이름은 `device_diagnostics`다.
 
 ## 활성 Status 구조
 

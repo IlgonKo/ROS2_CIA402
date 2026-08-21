@@ -27,6 +27,7 @@ from trajectory_msgs.msg import JointTrajectoryPoint
 
 from ros.axis_runtime_config import get_axis_count
 from ros.axis_runtime_config import get_axis_names
+from motion_server_client import is_fail_response, normalize_response
 
 
 DEFAULT_HOST = "192.168.0.12"
@@ -823,23 +824,26 @@ class Cia402CommandBridgeNode(Node):
             if not line:
                 raise OSError("server closed connection")
 
-            message = json.loads(line)
-            if message.get("type") == "feedback":
+            message = normalize_response(json.loads(line))
+            if message.get("type") in {"feedback", "system/feedback"}:
                 self.publish_feedback(message)
             elif message.get("type") == "log":
                 self.get_logger().info(message.get("text", ""))
+            elif is_fail_response(message):
+                self.update_motion_server_authority_state(message)
+                self.publish_string(self.command_rejected_pub, message)
+                self.get_logger().warn(message.get("message", "Command rejected"))
             elif message.get("type") in {
                 "authority/acquire",
                 "authority/release",
                 "authority/status",
+                "system/authority/request",
+                "system/authority/release",
+                "system/authority/status",
             }:
                 self.update_motion_server_authority_state(message)
                 self.publish_string(self.command_authority_pub, message)
                 self.get_logger().info(message.get("message", ""))
-            elif message.get("type") == "command_rejected":
-                self.update_motion_server_authority_state(message)
-                self.publish_string(self.command_rejected_pub, message)
-                self.get_logger().warn(message.get("message", "Command rejected"))
 
     def publish_feedback(self, message):
         target_positions = [
@@ -883,7 +887,7 @@ class Cia402CommandBridgeNode(Node):
             actual_velocities,
         )
         self.publish_statuswords(message.get("statuswords", []))
-        self.publish_diagnostics(message.get("diagnostics", []))
+        self.publish_diagnostics(message.get("device_diagnostics", []))
         self.publish_float_array(
             self.motion_limit_pub,
             message.get("motion_limits", []),

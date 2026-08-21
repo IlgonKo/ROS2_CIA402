@@ -8,6 +8,12 @@
 
 ### 완료
 
+- `TD-005-S09`를 완료하여 Axis/I/O Control Panel과 ROS Bridge 수신 경계에 legacy/new Success/Fail
+  공통 decoder를 적용했다.
+- 성공 data, Failure code/message와 승인 details를 기존 client view로 안전하게 변환하고 malformed
+  응답도 연결 loop를 중단하지 않는 실패로 처리했다.
+- Axis 원시 CMMT readback을 정식 `device_diagnostics`로 이관하고 현재 legacy adapter에서만
+  `diagnostics` 별칭을 유지했다. 호환 테스트 7개와 전체 unittest 140개가 통과했으며 다음 단계는 S10이다.
 - `TD-005-S08D`를 완료하여 기존 server/bus/axis/axes/io status에 source 범위별 공통
   `diagnostic_status` snapshot을 연결했다.
 - Definition/Source/History, 범위별 현재 level, 안정적인 Fault 우선 정렬과 UTC timestamp를 직렬화하고,

@@ -98,6 +98,11 @@ def send_client_message(client, message):
 def send_legacy_status_response(client, response, request=None, include_ok=True):
     if response["result"] == "success":
         legacy = dict(response["data"])
+        if (
+            response["type"] in {"system/axis/status", "system/axes/status"}
+            and "device_diagnostics" in legacy
+        ):
+            legacy["diagnostics"] = legacy["device_diagnostics"]
         legacy["type"] = response["type"]
         if include_ok:
             legacy["ok"] = True

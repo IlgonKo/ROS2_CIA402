@@ -52,17 +52,17 @@ client의 복구 판단과 장애 분석이 불안정하다.
 | `TD-005-S07A` | Motion/Axis command와 PartialFailure | S02-S04 | `complete` |
 | `TD-005-S07B` | IO command와 PartialFailure | S02-S06 | `complete` |
 | `TD-005-S07C` | Status/Catalog handler | S02-S06 | `complete` |
-| `TD-005-S08` | Diagnostic core와 startup/runtime 연계 | S01-S07 | `in_progress` |
-| `TD-005-S09` | Control Panel과 ROS의 기존/신규 응답 호환 | S02-S08 | `pending` |
+| `TD-005-S08` | Diagnostic core와 startup/runtime 연계 | S01-S07 | `complete` |
+| `TD-005-S09` | Control Panel과 ROS의 기존/신규 응답 호환 | S02-S08 | `complete` |
 | `TD-005-S10` | 서버 Success/Fail envelope 최종 전환 | S09 | `pending` |
 | `TD-005-S11` | legacy 제거, broad catch allowlist와 자동 검사 | S10 | `pending` |
 
 ### 작업 재개 체크포인트
 
-- 현재 완료 단계: `TD-005-S08D`
-- 다음 실행 단계: `TD-005-S09`
-- 다음 시작 위치: Control Panel과 ROS client가 legacy 응답과 신규 Success/Fail envelope를 모두 읽는
-  공통 decoder와 호환 경계를 구현한다.
+- 현재 완료 단계: `TD-005-S09`
+- 다음 실행 단계: `TD-005-S10`
+- 다음 시작 위치: API specification의 모든 request/response 송신을 신규 Success/Fail envelope로
+  전환하고 legacy 서버 응답 생성을 제거한다.
 - 현재 호환 상태: 서버는 legacy 응답만 송신한다. 신규 Success/Fail envelope는 아직 live API에 연결되지 않았다.
 - 보존할 사용자 변경: `device/cmmt/required_od.py`의 OD 기본값 및 형식 변경은 `TD-023` 범위이며
   TD-005 변경에 포함하지 않는다.
@@ -482,11 +482,26 @@ S08C2 조사 결과와 결정:
 | 구분 | 계획 |
 | --- | --- |
 | 목표 | 서버 cutover 전에 Control Panel과 ROS client가 legacy 응답과 신규 Success/Fail envelope를 모두 읽게 한다. |
-| 주요 변경 | 공통 client response decoder/adapter를 우선 만들고 Axis/IO Control Panel 및 현재 범위의 ROS bridge 호출부를 이관한다. |
+| 주요 변경 | 공통 client response decoder/adapter를 우선 만들고 Axis/IO Control Panel 및 현재 범위의 ROS bridge 호출부를 이관한다. Axis 원시 `diagnostics`는 정식 `device_diagnostics`로 이관하고 기존 이름은 호환 adapter에서만 유지한다. |
 | 필수 계약 | 같은 요청에 대해 legacy와 신규 응답이 동일한 사용자 결과/실패 의미로 해석된다. 알 수 없는 code와 malformed response는 안전하게 표시하고 연결 loop를 중단시키지 않는다. |
 | 제외 범위 | 서버 dual-write, UI 재설계, ROS 기능 이관 전체(RF-008)는 하지 않는다. |
 | 완료 조건 | 저장된 legacy/new fixture 기반 dual-read 테스트, panel/ROS 주요 command smoke test와 malformed response 테스트가 통과한다. |
 | 인계 | 모든 배포 client가 신규 envelope를 읽을 수 있다는 증거가 확보돼야 S10을 시작한다. |
+
+S09 완료 증거:
+
+- 독립 `motion_server_client` response decoder가 legacy 응답과 신규 Success/Fail envelope를 같은 client
+  view로 정규화한다.
+- 신규 Fail의 code/message와 승인된 authority/target details를 안전하게 변환하고 malformed response는
+  `MALFORMED_RESPONSE`로 처리한다.
+- Axis Control Panel, I/O Control Panel과 ROS Bridge 수신 경계가 공통 decoder를 사용한다.
+- Axis/axes status의 원시 CMMT readback 정식 이름을 `device_diagnostics`로 변경했다. client는 기존
+  `diagnostics`도 새 이름으로 읽고, 현재 서버 legacy adapter만 구버전 client용 별칭을 함께 송신한다.
+- 공통 Motion Server Alarm/Fault는 `diagnostic_status`로 유지하여 원시 장치 readback과 구분한다.
+- ROS의 과거 command namespace와 전체 기능 이관은 S09에서 확장하지 않고 RF-008에 유지한다.
+- legacy/new 성공·실패, authority detail, malformed 응답과 원시 Diagnostic 명칭 호환 테스트 7개 및
+  전체 unittest 140개가 통과했다. ROS Bridge source compile 검사를 함께 수행한다.
+- 다음 실행 단계는 서버 송신을 신규 envelope로 전환하는 `TD-005-S10`이다.
 
 ### TD-005-S10 서버 Success/Fail envelope 전환
 

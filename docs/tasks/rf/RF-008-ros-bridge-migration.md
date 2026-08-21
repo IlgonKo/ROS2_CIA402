@@ -10,6 +10,7 @@ ROS Bridge, ROS Control Panel과 Docker 구성을 최신 Motion Server 계약에
 
 ## 구현 범위
 
+- TD-005-S09에서 공통 legacy/new response decoder의 수신 경계 적용은 완료했다.
 - command namespace, authority, feedback와 axis/I/O status 변경을 반영한다.
 - Motion Server mm/deg와 ROS SI unit 사이의 변환 경계를 확정한다.
 - ROS Docker, Control Panel과 Bridge connection 설정을 공통 configuration model에 맞춘다.

@@ -603,7 +603,7 @@ class AxisServerControlPanel(
             self.statusword_state_text(selected_statusword)
         )
 
-        diagnostics = feedback.get("diagnostics", [])
+        diagnostics = feedback.get("device_diagnostics", [])
         diag = diagnostics[selected_axis] if selected_axis < len(diagnostics) else {}
         self.error_code_var.set(self._format_error_code(diag))
         self._refresh_selected_axis_settings_fields(update_data, selected_axis)

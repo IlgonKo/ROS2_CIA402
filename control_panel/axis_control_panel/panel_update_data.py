@@ -17,7 +17,7 @@ def initial_feedback(axis_count):
         "motion_mode": "pp",
         "server_mode": "basic",
         "capabilities": {},
-        "diagnostics": [],
+        "device_diagnostics": [],
         "command_authority": {
             "owner": None,
             "owned_by_this_client": False,
@@ -148,9 +148,9 @@ def merge_axis_status(feedback, message, axis_count):
         if key in message:
             feedback[key] = message[key]
 
-    if "diagnostics" in message:
+    if "device_diagnostics" in message:
         diagnostics = _diagnostics(feedback, axis_count)
-        diagnostics[axis_index] = message["diagnostics"]
+        diagnostics[axis_index] = message["device_diagnostics"]
 
     return True
 
@@ -167,7 +167,7 @@ def set_axis_list_value(feedback, key, fields_per_axis, axis_count, axis_index, 
 
 
 def _diagnostics(feedback, axis_count):
-    diagnostics = feedback.setdefault("diagnostics", [])
+    diagnostics = feedback.setdefault("device_diagnostics", [])
     _extend(diagnostics, axis_count, {})
     return diagnostics
 

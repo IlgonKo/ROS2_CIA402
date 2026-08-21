@@ -105,7 +105,7 @@ def axis_status_message(runtime, state, axis_index, client_id=None):
         ),
         "trajectory": public_axis_trajectory_state(state, axis_index),
         "homing": public_axis_homing_state(state, axis_index),
-        "diagnostics": (
+        "device_diagnostics": (
             runtime.last_diagnostics[axis_index]
             if axis_index < len(runtime.last_diagnostics)
             else {}
@@ -180,7 +180,7 @@ def axes_status_message(runtime, state, client_id=None):
         "capabilities": state["capabilities"],
         "trajectory": public_trajectory_state(state),
         "homing": public_homing_state(state),
-        "diagnostics": runtime.last_diagnostics,
+        "device_diagnostics": runtime.last_diagnostics,
         "diagnostic_status": diagnostic_status_snapshot(
             runtime,
             source_type=DiagnosticSourceType.AXIS,
