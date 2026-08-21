@@ -216,7 +216,7 @@ class EthercatParameterHandlerTest(unittest.TestCase):
                 active_runtime,
             )
 
-    def test_live_handler_keeps_legacy_response_shape(self):
+    def test_live_handler_sends_success_envelope(self):
         connection = RecordingConnection()
         message = {
             "type": "system/axis/param_read",
@@ -228,11 +228,12 @@ class EthercatParameterHandlerTest(unittest.TestCase):
         read_parameter(message, runtime(), {"conn": connection})
 
         response = connection.messages[0]
-        self.assertTrue(response["ok"])
-        self.assertNotIn("result", response)
+        self.assertEqual(response["result"], "success")
+        self.assertIn("data", response)
+        self.assertNotIn("ok", response)
         self.assertNotIn("failure", response)
 
-    def test_live_failure_keeps_legacy_shape_without_internal_error(self):
+    def test_live_failure_sends_safe_fail_envelope(self):
         connection = RecordingConnection()
         message = {
             "type": "system/io/param_write",
@@ -245,10 +246,10 @@ class EthercatParameterHandlerTest(unittest.TestCase):
             write_io_parameter(message, runtime(), {"conn": connection})
 
         response = connection.messages[0]
-        self.assertFalse(response["ok"])
-        self.assertEqual(response["error"], "The requested resource does not exist.")
-        self.assertNotIn("result", response)
-        self.assertNotIn("failure", response)
+        self.assertEqual(response["result"], "fail")
+        self.assertEqual(response["failure"]["code"], "RESOURCE_NOT_FOUND")
+        self.assertNotIn("ok", response)
+        self.assertNotIn("error", response)
 
 
 if __name__ == "__main__":

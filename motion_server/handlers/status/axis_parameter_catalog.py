@@ -1,5 +1,5 @@
 from motion_server.api import parse_int
-from motion_server.api.encoder import legacy_status_request_response
+from motion_server.api.encoder import send_status_request_response
 from motion_server.failure import (
     InvalidArgumentException,
     ResourceNotFoundException,
@@ -9,7 +9,7 @@ from motion_server.failure import (
 
 
 def axis_param_catalog(message, runtime, client):
-    return legacy_status_request_response(
+    return send_status_request_response(
         message,
         client,
         lambda: axis_param_catalog_data(message, runtime),

@@ -160,5 +160,5 @@ def handle_command(command_name, message, runtime, state, client):
     command = COMMAND_HANDLERS.get(command_name)
     if command is None:
         return False
-    command(message, runtime, state, client)
+    client["_operation_result"] = command(message, runtime, state, client)
     return True

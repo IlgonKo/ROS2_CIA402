@@ -148,11 +148,12 @@ class IolParameterHandlerTest(unittest.TestCase):
             _read_iol_parameter(message(), runtime(exception=expected))
         self.assertIs(caught.exception, expected)
 
-    def test_live_handler_keeps_legacy_shape(self):
+    def test_live_handler_sends_success_envelope(self):
         connection = Connection()
         read_iol_parameter(message(), runtime(), {"conn": connection})
-        self.assertTrue(connection.messages[0]["ok"])
-        self.assertNotIn("result", connection.messages[0])
+        self.assertEqual(connection.messages[0]["result"], "success")
+        self.assertIn("data", connection.messages[0])
+        self.assertNotIn("ok", connection.messages[0])
 
 
 if __name__ == "__main__":

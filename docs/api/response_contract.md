@@ -2,10 +2,9 @@
 
 ## 적용 범위
 
-이 문서는 client 요청에 대해 Motion Server가 한 번 반환하는 공통 response envelope의 목표 계약을
+이 문서는 client 요청에 대해 Motion Server가 한 번 반환하는 공통 response envelope의 현재 계약을
 정의한다. 주기적인 feedback과 서버가 자발적으로 보내는 notification에는 이 envelope를 적용하지 않는다.
-현재 구현에는 `ok`, `accepted`, `reason`, 최상위 `error`와 `command_rejected` type이 혼재하므로
-TD-005에서 이 계약으로 migration한다.
+TD-005-S10부터 모든 등록 request는 이 계약으로 응답한다.
 
 ## Success response
 
@@ -63,7 +62,7 @@ failure code와 내부 정보 비노출 규칙은 [Failure Code](failure_codes.m
 비동기 명령의 Success는 요청이 승인되어 작업을 시작했다는 의미이며 작업 완료를 의미하지 않는다.
 진행, 완료, 중단과 Diagnostic 발생은 후속 status 또는 notification으로 전달한다.
 
-## Migration 대상
+## 제거된 기존 응답 표현
 
 목표 계약에서는 다음 기존 표현을 제거한다.
 
@@ -73,4 +72,5 @@ failure code와 내부 정보 비노출 규칙은 [Failure Code](failure_codes.m
 - 최상위 `error`
 - 실패 응답의 `type: command_rejected`
 
-호환 기간에 기존 필드와 새 envelope를 함께 보낼지는 TD-005 구현 계획에서 별도로 결정한다.
+서버는 기존 필드와 신규 envelope를 함께 보내지 않는다. S09에서 이관한 client decoder는 배포본의
+호환을 위해 기존 응답 읽기를 S11 검토 전까지 유지한다.

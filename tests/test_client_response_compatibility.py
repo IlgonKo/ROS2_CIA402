@@ -1,20 +1,10 @@
-import json
 import unittest
 
 from control_panel.axis_control_panel.panel_update_data import (
     initial_feedback,
     merge_axis_status,
 )
-from motion_server.api.encoder import send_legacy_status_response
 from motion_server_client import is_fail_response, normalize_response
-
-
-class Connection:
-    def __init__(self):
-        self.messages = []
-
-    def sendall(self, payload):
-        self.messages.append(json.loads(payload.decode("utf-8")))
 
 
 class ClientResponseCompatibilityTest(unittest.TestCase):
@@ -92,24 +82,6 @@ class ClientResponseCompatibilityTest(unittest.TestCase):
             [{"error_code": 9}],
         )
         self.assertNotIn("diagnostics", feedback)
-
-    def test_legacy_server_response_keeps_diagnostics_alias(self):
-        connection = Connection()
-        client = {"conn": connection}
-
-        send_legacy_status_response(
-            client,
-            {
-                "type": "system/axes/status",
-                "result": "success",
-                "data": {"device_diagnostics": [{"error_code": 0}]},
-            },
-            include_ok=False,
-        )
-
-        message = connection.messages[0]
-        self.assertEqual(message["device_diagnostics"], message["diagnostics"])
-
 
 if __name__ == "__main__":
     unittest.main()

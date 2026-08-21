@@ -38,7 +38,7 @@ def read_ap_parameter(message, runtime, client):
         message,
         lambda: _read_ap_parameter(message, runtime),
     )
-    send_client_message(client, legacy_ap_parameter_response(message, response))
+    send_client_message(client, response)
 
 
 def write_ap_parameter(message, runtime, client):
@@ -46,11 +46,11 @@ def write_ap_parameter(message, runtime, client):
         message,
         lambda: _write_ap_parameter(message, runtime),
     )
-    send_client_message(client, legacy_ap_parameter_response(message, response))
+    send_client_message(client, response)
 
 
 def parameter_request_response(message, operation):
-    # TECH_DEBT[TD-005]: Router owns this boundary after the S10 cutover.
+    # TECH_DEBT[TD-005]: S11 moves this nested boundary to the live router.
     from motion_server.api.router import request_response
 
     return request_response(message, operation)
@@ -421,32 +421,3 @@ def ap_parameter_data(request, **values):
     }
     data.update(values)
     return data
-
-
-def legacy_ap_parameter_response(message, response):
-    # TECH_DEBT[TD-005]: Remove this adapter when S10 enables envelopes.
-    if response["result"] == "success":
-        return {"type": response["type"], "ok": True, **response["data"]}
-    parameter_id = message.get("parameter_id")
-    module = message.get("module", message.get("slot"))
-    try:
-        parameter_id_hex = f"0x{parse_int(parameter_id, 0):08X}"
-    except (TypeError, ValueError):
-        parameter_id_hex = None
-    try:
-        ap_access_module = ap_access_module_number(parse_int(module, 0))
-    except (TypeError, ValueError):
-        ap_access_module = None
-    return {
-        "type": response["type"],
-        "ok": False,
-        "io": message.get("io"),
-        "object_index": f"0x{AP_PARAMETER_ACCESS_INDEX:04X}",
-        "module": module,
-        "ap_access_module": ap_access_module,
-        "parameter_id": parameter_id,
-        "parameter_id_hex": parameter_id_hex,
-        "instance": message.get("instance", 0),
-        "data_type": str(message.get("data_type", "bytes")).strip().lower(),
-        "error": response["failure"]["message"],
-    }

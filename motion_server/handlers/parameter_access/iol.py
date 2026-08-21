@@ -39,18 +39,18 @@ def read_iol_parameter(message, runtime, client):
     response = parameter_request_response(
         message, lambda: _read_iol_parameter(message, runtime),
     )
-    send_client_message(client, legacy_isdu_response(message, response))
+    send_client_message(client, response)
 
 
 def write_iol_parameter(message, runtime, client):
     response = parameter_request_response(
         message, lambda: _write_iol_parameter(message, runtime),
     )
-    send_client_message(client, legacy_isdu_response(message, response))
+    send_client_message(client, response)
 
 
 def parameter_request_response(message, operation):
-    # TECH_DEBT[TD-005]: Router owns this boundary after the S10 cutover.
+    # TECH_DEBT[TD-005]: S11 moves this nested boundary to the live router.
     from motion_server.api.router import request_response
 
     return request_response(message, operation)
@@ -481,26 +481,3 @@ def isdu_data(request, **values):
     }
     data.update(values)
     return data
-
-
-def legacy_isdu_response(message, response):
-    # TECH_DEBT[TD-005]: Remove this adapter when S10 enables envelopes.
-    if response["result"] == "success":
-        return {"type": response["type"], "ok": True, **response["data"]}
-    try:
-        module = parse_int(message.get("module"), 0)
-        object_index = f"0x{isdu_access_object_index(module):04X}"
-    except (TypeError, ValueError):
-        object_index = None
-    return {
-        "type": response["type"],
-        "ok": False,
-        "io": message.get("io"),
-        "object_index": object_index,
-        "module": message.get("module"),
-        "port": message.get("port"),
-        "index": message.get("index"),
-        "subindex": message.get("subindex", 0),
-        "data_type": str(message.get("data_type", "bytes")).strip().lower(),
-        "error": response["failure"]["message"],
-    }

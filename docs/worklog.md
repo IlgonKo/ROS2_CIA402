@@ -8,6 +8,11 @@
 
 ### 완료
 
+- `TD-005-S10`을 완료하여 모든 등록 request/response의 실제 서버 송신을 Success/Fail envelope로
+  전환했다. 요청당 한 응답, request ID 반환, 빈 비동기 Success와 최상위 예상 밖 오류 비노출을 보장한다.
+- status 및 EtherCAT/AP/IO-Link parameter의 legacy 변환 helper와 Axis `diagnostics` 송신 별칭을 제거했다.
+  주기 feedback/notification은 독립 payload로 유지하고 command 내부 직접 송신 capture는 S11 정리 대상으로 남겼다.
+- S10 live cutover 테스트 6개와 전체 unittest 145개 및 source compile 검사가 통과했다. 다음 단계는 S11이다.
 - `TD-005-S09`를 완료하여 Axis/I/O Control Panel과 ROS Bridge 수신 경계에 legacy/new Success/Fail
   공통 decoder를 적용했다.
 - 성공 data, Failure code/message와 승인 details를 기존 client view로 안전하게 변환하고 malformed

@@ -94,50 +94,42 @@ def selected_single_axis(message, runtime, command):
 
 
 def read_parameter(message, runtime, client):
-    _send_legacy_parameter_response(
+    send_client_message(
         client,
-        message,
         parameter_request_response(
             message,
             lambda: _read_axis_parameter(message, runtime),
         ),
-        "axis",
     )
 
 
 def write_parameter(message, runtime, client):
-    _send_legacy_parameter_response(
+    send_client_message(
         client,
-        message,
         parameter_request_response(
             message,
             lambda: _write_axis_parameter(message, runtime),
         ),
-        "axis",
     )
 
 
 def read_io_parameter(message, runtime, client):
-    _send_legacy_parameter_response(
+    send_client_message(
         client,
-        message,
         parameter_request_response(
             message,
             lambda: _read_io_parameter(message, runtime),
         ),
-        "io",
     )
 
 
 def write_io_parameter(message, runtime, client):
-    _send_legacy_parameter_response(
+    send_client_message(
         client,
-        message,
         parameter_request_response(
             message,
             lambda: _write_io_parameter(message, runtime),
         ),
-        "io",
     )
 
 
@@ -150,7 +142,7 @@ def _read_axis_parameter(message, runtime):
 
 
 def parameter_request_response(message, operation):
-    # TECH_DEBT[TD-005]: Router owns this boundary after the S10 cutover.
+    # TECH_DEBT[TD-005]: S11 moves this nested boundary to the live router.
     from motion_server.api.router import request_response
 
     return request_response(message, operation)
@@ -213,25 +205,6 @@ def validate_io_selector(runtime, io_selector):
         runtime.device_manager.io.slave_index(io_selector)
     except (TypeError, ValueError) as exception:
         raise ResourceNotFoundException("io", io_selector) from exception
-
-
-def _send_legacy_parameter_response(client, message, response, target_name):
-    # TECH_DEBT[TD-005]: Remove this adapter when S10 enables envelopes.
-    if response["result"] == "success":
-        legacy = {"type": response["type"], "ok": True, **response["data"]}
-    else:
-        legacy = {
-            "type": response["type"],
-            "ok": False,
-            target_name: message.get(target_name),
-            "index": message.get("index"),
-            "subindex": message.get("subindex", 0),
-            "data_type": normalize_sdo_data_type(
-                message.get("data_type", "uint32"),
-            ),
-            "error": response["failure"]["message"],
-        }
-    send_client_message(client, legacy)
 
 
 def normalize_sdo_data_type(data_type):

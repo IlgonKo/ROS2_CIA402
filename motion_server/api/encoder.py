@@ -95,29 +95,6 @@ def send_client_message(client, message):
     client["conn"].sendall((json.dumps(message) + "\n").encode("utf-8"))
 
 
-def send_legacy_status_response(client, response, request=None, include_ok=True):
-    if response["result"] == "success":
-        legacy = dict(response["data"])
-        if (
-            response["type"] in {"system/axis/status", "system/axes/status"}
-            and "device_diagnostics" in legacy
-        ):
-            legacy["diagnostics"] = legacy["device_diagnostics"]
-        legacy["type"] = response["type"]
-        if include_ok:
-            legacy["ok"] = True
-    else:
-        legacy = {
-            "type": response["type"],
-            "ok": False,
-            "error": response["failure"]["message"],
-        }
-        for field in ("axis", "io", "module", "slot", "port"):
-            if request is not None and field in request:
-                legacy[field] = request[field]
-    send_client_message(client, legacy)
-
-
 def status_data(message):
     data = dict(message)
     data.pop("type", None)
@@ -125,17 +102,11 @@ def status_data(message):
     return data
 
 
-def legacy_status_request_response(message, client, operation, *, include_ok=True):
-    # TECH_DEBT[TD-005]: S10 sends this response directly after client migration.
+def send_status_request_response(message, client, operation):
     from motion_server.api.router import request_response
 
     response = request_response(message, operation)
-    send_legacy_status_response(
-        client,
-        response,
-        message,
-        include_ok=include_ok,
-    )
+    send_client_message(client, response)
     return response
 
 

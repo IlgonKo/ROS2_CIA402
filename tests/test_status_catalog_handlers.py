@@ -53,7 +53,7 @@ def axis_catalog_runtime(catalog):
 
 
 class StatusBoundaryTest(unittest.TestCase):
-    def test_server_status_new_data_and_legacy_shape_match(self):
+    def test_server_status_sends_success_envelope(self):
         runtime = SimpleNamespace(slaves=[object()], cycle_time=0.008)
         active_client = client()
 
@@ -68,9 +68,9 @@ class StatusBoundaryTest(unittest.TestCase):
         self.assertEqual(response["result"], "success")
         self.assertNotIn("type", response["data"])
         self.assertFalse(response["data"]["drive_initialized"])
-        legacy = active_client["conn"].messages[0]
-        self.assertEqual(legacy["type"], "system/server/status")
-        self.assertTrue(legacy["ok"])
+        sent = active_client["conn"].messages[0]
+        self.assertEqual(sent, response)
+        self.assertNotIn("ok", sent)
 
     def test_axis_status_missing_selector_is_safe_invalid_request(self):
         active_client = client()
@@ -84,7 +84,7 @@ class StatusBoundaryTest(unittest.TestCase):
         )
 
         self.assertEqual(response["failure"]["code"], "INVALID_REQUEST")
-        self.assertEqual(active_client["conn"].messages[0]["ok"], False)
+        self.assertEqual(active_client["conn"].messages[0], response)
 
     def test_axis_status_unknown_axis_is_resource_not_found(self):
         active_client = client()

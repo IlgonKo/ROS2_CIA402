@@ -20,9 +20,9 @@ TD-005-S09에서는 서버의 Success/Fail 최종 전환 전에 배포 client가
 
 - 신규 정식 field는 `device_diagnostics`다.
 - 기존 응답의 `diagnostics`는 decoder가 `device_diagnostics`로 읽는다.
-- S09 기간의 서버 legacy status adapter는 구버전 client를 위해 `diagnostics` 별칭을 함께 보낸다.
+- S09 기간에는 서버 legacy status adapter가 `diagnostics` 별칭을 함께 보냈다.
 - Motion Server 공통 Alarm/Fault snapshot은 별도 `diagnostic_status` field를 사용한다.
-- S10에서 신규 envelope 송신으로 전환하면 정식 data에는 `device_diagnostics`만 포함한다.
+- S10의 신규 envelope 송신부터 정식 data에는 `device_diagnostics`만 포함한다.
 - S11에서 legacy 송신 별칭과 client fallback의 제거 여부를 최종 검증한다.
 
 ## Client 적용 범위

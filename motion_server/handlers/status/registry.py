@@ -2,7 +2,7 @@ from motion_server.api.decoder import selected_single_axis
 from motion_server.api.encoder import (
     reject_command_message,
     send_client_message,
-    legacy_status_request_response,
+    send_status_request_response,
     status_data,
 )
 from motion_server.failure import InvalidRequestException
@@ -109,12 +109,11 @@ def invalid_axis_status_request():
 
 
 def send_status_operation(message, client, operation, *, include_ok=True):
-    # TECH_DEBT[TD-005]: S10 sends this response directly after client migration.
-    return legacy_status_request_response(
+    # TECH_DEBT[TD-005]: S11 removes the nested status request boundary.
+    return send_status_request_response(
         message,
         client,
         operation,
-        include_ok=include_ok,
     )
 
 

@@ -54,16 +54,17 @@ client의 복구 판단과 장애 분석이 불안정하다.
 | `TD-005-S07C` | Status/Catalog handler | S02-S06 | `complete` |
 | `TD-005-S08` | Diagnostic core와 startup/runtime 연계 | S01-S07 | `complete` |
 | `TD-005-S09` | Control Panel과 ROS의 기존/신규 응답 호환 | S02-S08 | `complete` |
-| `TD-005-S10` | 서버 Success/Fail envelope 최종 전환 | S09 | `pending` |
+| `TD-005-S10` | 서버 Success/Fail envelope 최종 전환 | S09 | `complete` |
 | `TD-005-S11` | legacy 제거, broad catch allowlist와 자동 검사 | S10 | `pending` |
 
 ### 작업 재개 체크포인트
 
-- 현재 완료 단계: `TD-005-S09`
-- 다음 실행 단계: `TD-005-S10`
-- 다음 시작 위치: API specification의 모든 request/response 송신을 신규 Success/Fail envelope로
-  전환하고 legacy 서버 응답 생성을 제거한다.
-- 현재 호환 상태: 서버는 legacy 응답만 송신한다. 신규 Success/Fail envelope는 아직 live API에 연결되지 않았다.
+- 현재 완료 단계: `TD-005-S10`
+- 다음 실행 단계: `TD-005-S11`
+- 다음 시작 위치: command handler의 임시 response capture와 client legacy fallback을 정리하고,
+  broad catch allowlist 및 envelope 위반 자동 검사를 추가한다.
+- 현재 호환 상태: 서버 request/response는 신규 Success/Fail envelope만 송신한다. 주기 feedback과
+  자발적 notification은 envelope 대상이 아니다.
 - 보존할 사용자 변경: `device/cmmt/required_od.py`의 OD 기본값 및 형식 변경은 `TD-023` 범위이며
   TD-005 변경에 포함하지 않는다.
 - 재개 방법: 아래에서 가장 앞선 `pending` 단계를 선택하고, 선행 작업과 인계 조건을 확인한 뒤
@@ -513,6 +514,21 @@ S09 완료 증거:
 | 제외 범위 | client legacy 읽기 제거, notification protocol 재설계, recovery 기능 추가는 하지 않는다. |
 | 완료 조건 | API specification의 모든 request type에 대해 success/fail schema 검사가 통과하고 실제 client smoke test에서 회귀가 없다. legacy 필드 검색 결과는 승인된 비응답 위치만 남는다. |
 | 인계 | S11에서 client legacy adapter와 임시 compatibility code를 안전하게 제거할 수 있어야 한다. |
+
+S10 완료 증거:
+
+- live router가 모든 등록 request를 요청과 같은 `type`의 Success/Fail envelope로 정확히 한 번 송신한다.
+- 요청에 `request_id`가 있으면 그대로 반환하고, 결과가 없는 비동기 command도 빈 `data` Success를 보낸다.
+- unknown command, mode, authority와 initialization validation을 안정적인 FailureCode로 변환한다.
+- status와 EtherCAT/AP/IO-Link parameter 경로는 typed request boundary의 envelope를 직접 송신하며 기존
+  `ok/error` 변환 helper를 제거했다.
+- Axis 원시 readback은 신규 data에서 `device_diagnostics`만 사용하고 `diagnostics` 송신 별칭을 제거했다.
+- command handler 내부의 기존 직접 송신은 외부 전송 전에 중앙에서 수집하여 단일 envelope로 변환한다.
+  이 임시 `_RequestCaptureConnection`은 handler가 data 반환/typed Exception 계약으로 정리되는 S11에서 제거한다.
+- 주기 `system/feedback`과 자발적 notification은 기존 독립 payload를 유지한다.
+- live status, unknown command, authority failure/status, 빈 command Success와 예상 밖 내부 오류 비노출
+  cutover 테스트 6개를 추가했으며 전체 unittest 145개와 source compile 검사가 통과했다.
+- 다음 실행 단계는 legacy 및 broad catch 정리를 수행하는 `TD-005-S11`이다.
 
 ### TD-005-S11 정리와 회귀 방지
 
