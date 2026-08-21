@@ -8,6 +8,15 @@
 상세 계약이 확정되면 API 결과는 `docs/api/`, 운전 상태는 `docs/diagnostic/`의 별도 설계 문서로
 옮기고, 이 문서는 migration 추적 자료로 유지한다.
 
+## TD-005 종결 상태
+
+- 아래 line inventory는 2026-08-21 최초 조사 snapshot으로 보존하며 현재 줄 번호 목록으로 사용하지 않는다.
+- 각 지점의 목표 분류와 TD-005 migration을 완료했다. TD-005 범위 밖 기능은 해당 TD/RF 문서로 분리했다.
+- 현재 broad catch 승인 목록은 `tests/test_error_contract_static.py`가 파일·함수 단위로 검사한다.
+- 승인 목적, logging 및 변경 절차는 [Error boundary 계약](../api/error_boundary_contract.md)을 따른다.
+- request handler/control 계층의 직접 송신, 임시 request capture와 legacy rejection은 자동으로 재발을
+  검사한다.
+
 ## 조사 기준
 
 - 조사일: 2026-08-21
@@ -17,7 +26,7 @@
 - broad catch: 줄 시작의 `except Exception`
 - 발생 지점: 줄 시작의 `raise`
 - generic runtime 발생: 줄 시작의 `raise RuntimeError`
-- 자동 재조사 명령은 완료 단계에서 별도 검사 script로 고정한다.
+- 자동 재조사는 `tests/test_error_contract_static.py`로 고정한다.
 
 ## 전체 집계
 

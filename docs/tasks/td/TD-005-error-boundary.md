@@ -55,14 +55,12 @@ client의 복구 판단과 장애 분석이 불안정하다.
 | `TD-005-S08` | Diagnostic core와 startup/runtime 연계 | S01-S07 | `complete` |
 | `TD-005-S09` | Control Panel과 ROS의 기존/신규 응답 호환 | S02-S08 | `complete` |
 | `TD-005-S10` | 서버 Success/Fail envelope 최종 전환 | S09 | `complete` |
-| `TD-005-S11` | legacy 제거, broad catch allowlist와 자동 검사 | S10 | `pending` |
+| `TD-005-S11` | legacy 제거, broad catch allowlist와 자동 검사 | S10 | `complete` |
 
 ### 작업 재개 체크포인트
 
-- 현재 완료 단계: `TD-005-S11B2B` (`S11B` 전체 완료)
-- 다음 실행 단계: `TD-005-S11C`
-- 다음 시작 위치: broad catch allowlist와 envelope/mapping 정적 검사를 추가하고 error point inventory의
-  모든 항목을 완료·제외·후속 작업 중 하나로 종결한다.
+- 현재 완료 단계: `TD-005-S11C` (`TD-005` 전체 완료)
+- 다음 실행 단계: 없음. 후속 오류 변경은 확정된 계약과 정적 검사를 따른다.
 - 현재 호환 상태: 서버 request/response는 신규 Success/Fail envelope만 송신한다. 주기 feedback과
   자발적 notification은 envelope 대상이 아니다.
 - 보존할 사용자 변경: `device/cmmt/required_od.py`의 OD 기본값 및 형식 변경은 `TD-023` 범위이며
@@ -549,7 +547,7 @@ S11은 정리 범위를 한 번에 변경하지 않고 다음 순서로 진행�
 | `TD-005-S11B1` | status, parameter, authority operation의 data 반환/typed Exception 전환 | `complete` |
 | `TD-005-S11B2A` | router validation과 server/bus/I/O command 반환 계약 전환 | `complete` |
 | `TD-005-S11B2B` | Axis command 반환/typed Exception 전환과 request capture 제거 | `complete` |
-| `TD-005-S11C` | broad catch allowlist, envelope/mapping 정적 검사와 TD-005 완료 | `pending` |
+| `TD-005-S11C` | broad catch allowlist, envelope/mapping 정적 검사와 TD-005 완료 | `complete` |
 
 S11A 완료 증거:
 
@@ -594,3 +592,14 @@ S11B2B 완료 증거:
 - `send_client_message`는 request boundary인 router에만 남아 있으며 전체 unittest 145개와 source
   compile 검사가 통과했다.
 - 사용자 결정에 따라 S11B를 더 세분화하지 않으며 다음 단계는 바로 S11C다.
+
+S11C 완료 증거:
+
+- broad catch를 line number가 아닌 파일·함수 단위 allowlist로 고정하고 승인 목적과 변경 절차를
+  `docs/api/error_boundary_contract.md`에 문서화했다.
+- 정적 검사는 broad catch 목록, Exception mapping의 공개 FailureCode 사용, request capture/legacy
+  rejection 부재와 handler/control 직접 송신 금지를 검증한다.
+- 최초 error point inventory는 조사 snapshot으로 보존하고 현재 계약은 자동 검사와 API/Diagnostic
+  설계 문서를 기준으로 관리한다.
+- 정적 검사 4개를 포함한 전체 unittest 149개와 source compile 검사가 통과했다.
+- Remaining Tasks의 TD-005 상태를 `complete`로 변경했다.

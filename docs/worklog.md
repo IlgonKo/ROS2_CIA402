@@ -8,6 +8,11 @@
 
 ### 완료
 
+- `TD-005-S11C`에서 파일·함수 단위 broad catch allowlist와 Exception mapping, legacy 제거, handler 직접
+  송신 금지 정적 검사 4개를 추가했다.
+- broad catch 승인 목적과 변경 절차를 API error boundary 계약으로 문서화하고 최초 error point
+  inventory를 migration 완료 snapshot으로 전환했다.
+- 전체 unittest 149개와 source compile 검사가 통과하여 `TD-005`를 `complete`로 종결했다.
 - `TD-005-S11B2B`를 완료하여 Axis motion/state/settings, jog, homing, trajectory와 parameter-save의
   요청 결과를 data 반환/typed Exception/`PartialFailure` 계약으로 통일했다.
 - router의 `_RequestCaptureConnection`, legacy 판별과 `_operation_result` 임시 저장을 제거했다.

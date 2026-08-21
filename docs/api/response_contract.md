@@ -72,5 +72,5 @@ failure code와 내부 정보 비노출 규칙은 [Failure Code](failure_codes.m
 - 최상위 `error`
 - 실패 응답의 `type: command_rejected`
 
-서버는 기존 필드와 신규 envelope를 함께 보내지 않는다. S09에서 이관한 client decoder는 배포본의
-호환을 위해 기존 응답 읽기를 S11 검토 전까지 유지한다.
+서버는 기존 필드와 신규 envelope를 함께 보내지 않는다. S11A부터 client도 현재 envelope와 승인된
+notification만 해석하며 기존 응답은 malformed response로 거부한다.
