@@ -47,6 +47,8 @@
 
 ### 문서 및 운영
 
+- `DEC-019`의 구체 Exception 계층과 failure code mapping을 확정하고, 구조화 속성 allowlist,
+  Python exception chaining 및 별도 PartialFailure 집계 객체 원칙을 추가했다.
 - `DEC-019`로 내부 Exception과 API Failure를 중앙 mapping table에서 연결하고 별도
   Failure Definition Registry 없이 FailureCode Enum과 mapper만 사용하는 구조를 확정했다.
 - `DEC-018`로 client 대응 기준의 초기 20개 API failure code와 Exception 변환·내부정보 비노출

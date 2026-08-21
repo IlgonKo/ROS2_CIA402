@@ -27,8 +27,7 @@ API 요청의 `Success`와 `Fail`은 Diagnostic에 포함하지 않는다. Pytho
 아래 순서를 고정하며 앞 단계의 계약을 확정하기 전에 다음 단계 구현을 시작하지 않는다.
 
 1. **완료:** Diagnostic 데이터 모델과 수명 주기를 확정한다.
-2. **진행 중:** API Success/Fail 응답 계약, failure code와 exception 변환 규칙을 확정한다.
-   공통 envelope, code catalog와 mapper 구조는 완료했고 구체적인 내부 Exception 계층이 남아 있다.
+2. **완료:** API Success/Fail 응답 계약, failure code, 내부 Exception 계층과 변환 규칙을 확정한다.
 3. **대기:** [Exception inventory](error_point_inventory.md)의 각 지점을 `API Fail`, `Alarm`, `Fault`,
    `Internal only`로 분류한다. 한 지점은 API Fail과 Diagnostic을 동시에 만들 수 있다.
 4. **대기:** 분류 결과를 바탕으로 TD-005의 exception 계층, API failure mapper, Diagnostic 관리,

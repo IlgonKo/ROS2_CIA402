@@ -24,13 +24,32 @@ API Fail response
 ```text
 MotionServerException
 ├─ RequestException
+│  ├─ InvalidRequestException
+│  ├─ UnknownCommandException
+│  ├─ UnsupportedOperationException
+│  ├─ InvalidArgumentException
+│  └─ ResourceNotFoundException
 ├─ AuthorityException
+│  ├─ AuthorityRequiredException
+│  ├─ AuthorityBusyException
+│  └─ PermissionDeniedException
 ├─ StateException
+│  ├─ ServerNotReadyException
+│  ├─ InvalidStateException
+│  ├─ OperationConflictException
+│  ├─ OperationBlockedException
+│  └─ LimitViolationException
 ├─ CommunicationException
-└─ DeviceAccessException
+│  └─ CommunicationTimeoutException
+├─ DeviceException
+│  ├─ DeviceAccessException
+│  └─ DeviceRejectedException
+└─ OperationException
+   └─ OperationTimeoutException
 ```
 
-구체적인 하위 Exception 목록은 inventory 분류 전에 별도로 확정한다.
+상위 Exception은 catch와 fallback mapping 경계다. 발생 위치에서 의미를 구분할 수 있으면 구체
+Exception을 사용하고, 모든 failure code를 기계적으로 Exception과 1:1로 만들지는 않는다.
 
 ### FailureCode
 
@@ -60,6 +79,33 @@ EXCEPTION_FAILURE_MAPPINGS = {
 }
 ```
 
+| Exception | FailureCode |
+| --- | --- |
+| `RequestException` | `INVALID_REQUEST` |
+| `InvalidRequestException` | `INVALID_REQUEST` |
+| `UnknownCommandException` | `UNKNOWN_COMMAND` |
+| `UnsupportedOperationException` | `UNSUPPORTED_OPERATION` |
+| `InvalidArgumentException` | `INVALID_ARGUMENT` |
+| `ResourceNotFoundException` | `RESOURCE_NOT_FOUND` |
+| `AuthorityException` | `PERMISSION_DENIED` |
+| `AuthorityRequiredException` | `AUTHORITY_REQUIRED` |
+| `AuthorityBusyException` | `AUTHORITY_BUSY` |
+| `PermissionDeniedException` | `PERMISSION_DENIED` |
+| `StateException` | `INVALID_STATE` |
+| `ServerNotReadyException` | `SERVER_NOT_READY` |
+| `InvalidStateException` | `INVALID_STATE` |
+| `OperationConflictException` | `OPERATION_CONFLICT` |
+| `OperationBlockedException` | `OPERATION_BLOCKED` |
+| `LimitViolationException` | `LIMIT_VIOLATION` |
+| `CommunicationException` | `COMMUNICATION_FAILED` |
+| `CommunicationTimeoutException` | `TIMEOUT` |
+| `DeviceException` | `DEVICE_ACCESS_FAILED` |
+| `DeviceAccessException` | `DEVICE_ACCESS_FAILED` |
+| `DeviceRejectedException` | `DEVICE_REJECTED` |
+| `OperationException` | `OPERATION_FAILED` |
+| `OperationTimeoutException` | `TIMEOUT` |
+| 미등록 Exception | `INTERNAL_FAILURE` |
+
 별도의 `FailureDefinitionRegistry`는 두지 않는다. 현재 필요한 유효 code 검증은 `FailureCode`가,
 기본 message는 mapping table이 담당한다. retry 가능 여부나 localization 같은 공통 metadata가
 실제로 필요해질 때만 별도 registry 도입을 다시 검토한다.
@@ -77,6 +123,53 @@ mapper는 다음 우선순위로 mapping을 선택한다.
 예상하지 못한 Exception은 고정된 `INTERNAL_FAILURE`와 안전한 message로 변환한다. 원래 Exception,
 stack trace와 외부에 노출하면 안 되는 상세정보는 서버 log에만 남긴다.
 
+## Exception 데이터와 원인 보존
+
+공통 base에 자유 형식의 public `message`, `details` 또는 `cause`를 두지 않는다. 구체 Exception은
+해당 실패에 필요한 구조화 속성만 명시하고 mapper가 허용한 속성만 API details로 변환한다.
+
+```python
+class ResourceNotFoundException(RequestException):
+    def __init__(self, resource_type: str, resource_id: object):
+        self.resource_type = resource_type
+        self.resource_id = resource_id
+        super().__init__(f"{resource_type} not found: {resource_id}")
+```
+
+저수준 원인은 별도 필드가 아니라 Python exception chaining으로 보존한다.
+
+```python
+try:
+    ...
+except OSError as exc:
+    raise CommunicationException() from exc
+```
+
+`__cause__`와 내부 Exception 문자열은 log에만 사용하고 API에 직접 노출하지 않는다.
+
+## Partial Failure
+
+`PARTIAL_FAILURE`와 `INTERNAL_FAILURE`에 대응하는 Exception class는 만들지 않는다.
+
+여러 대상 중 일부만 실패한 경우는 하나의 예외가 아니라 실행 결과 집계이므로 별도 객체로 표현한다.
+
+```python
+@dataclass
+class ItemFailure:
+    target: object
+    exception: MotionServerException
+
+
+@dataclass
+class PartialFailure:
+    succeeded: list[object]
+    failed: list[ItemFailure]
+```
+
+상위 작업은 대상별 성공과 실패를 모두 수집한다. mapper는 각 `ItemFailure.exception`을 개별 code로
+변환하고 전체 Fail response의 code를 `PARTIAL_FAILURE`로 설정한다. `INTERNAL_FAILURE`는 미등록
+Exception의 fallback으로만 생성한다.
+
 ## 변환 경계
 
 - 하위 계층은 예상 가능한 실패만 `MotionServerException` 하위 type으로 발생시킨다.
@@ -85,9 +178,8 @@ stack trace와 외부에 노출하면 안 되는 상세정보는 서버 log에�
 - mapper가 허용한 안전한 message와 details만 Fail response에 포함한다.
 - 운전 상태에도 영향이 있으면 API Fail과 별도로 Diagnostic을 생성한다.
 
-## 후속 결정
+## 후속 구현 범위
 
-- 상위 범주와 구체 Exception의 최종 계층
-- Exception에 포함할 public message/details 데이터 계약
-- partial failure를 Exception으로 전달할지 결과 집계 객체로 만들지
 - 기존 handler별 catch를 최상위 boundary로 이동하는 migration 범위
+- Exception별 구조화 속성과 API details allowlist
+- mapping table의 누락·중복·상속 우선순위 자동 검증

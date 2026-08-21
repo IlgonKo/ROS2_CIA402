@@ -297,6 +297,11 @@ Device Profile + ESI
   - 별도의 `FailureDefinitionRegistry`는 두지 않고 유효 code는 `FailureCode` Enum이 보장한다.
   - 예상 가능한 실패만 MotionServerException 계층을 사용하고 programming error는 최상위 API
     boundary까지 전달하여 log 후 `INTERNAL_FAILURE`로 변환한다.
+  - 상위 계층은 Request, Authority, State, Communication, Device와 Operation Exception으로 구분하고
+    client 대응이 달라지는 예상 가능한 실패에만 구체 Exception을 정의한다.
+  - 공통 base에 자유 형식 public details를 두지 않고 구체 Exception의 명시적 속성만 mapper가 허용한다.
+  - 저수준 원인은 Python exception chaining으로 보존하며 API에 직접 노출하지 않는다.
+  - partial failure는 Exception이 아니라 대상별 성공과 실패를 가진 집계 객체로 표현한다.
 - 이유: mapping을 발생 지점에 하드코딩하면 동일 Exception의 API 표현이 달라질 수 있다. 반대로 별도
   Definition Registry까지 두면 Enum과 mapping table의 책임을 중복한다.
 - 검토한 대안:
@@ -305,8 +310,7 @@ Device Profile + ESI
     충족되므로 도입하지 않는다.
 - 영향:
   - 상세 mapper 계약은 [Exception과 API Failure Mapping](api/exception_mapping.md)을 따른다.
-  - 다음 설계에서 구체적인 Exception 하위 계층과 public details 계약을 확정한다.
-  - handler별 broad catch는 inventory 분류 후 최상위 boundary 중심으로 migration한다.
+  - handler별 broad catch와 Exception별 details allowlist는 inventory 분류 후 최상위 boundary 중심으로 migration한다.
 
 ## 새 결정 작성 양식
 
