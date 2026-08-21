@@ -1,11 +1,16 @@
 import struct
 import time
 
-from motion_server.api import (
-    command_name,
-    parse_int,
-    public_command_name,
-    send_client_message,
+from motion_server.api.encoder import send_client_message
+from motion_server.api.validator import parse_int
+from motion_server.failure import (
+    DeviceAccessException,
+    DeviceRejectedException,
+    InvalidArgumentException,
+    InvalidRequestException,
+    OperationTimeoutException,
+    PermissionDeniedException,
+    ResourceNotFoundException,
 )
 
 
@@ -31,107 +36,73 @@ ISDU_DATA_FORMATS = {
 
 
 def read_iol_parameter(message, runtime, client):
-    response_type = command_name(message) or "system/io/iol/param_read"
-    try:
-        request = parse_isdu_request(message, require_value=False)
-        validate_isdu_request_against_iodd(runtime, request, access="read")
-        slave_index = runtime.device_manager.io.slave_index(request["io"])
-        write_isdu_header(
-            runtime,
-            slave_index,
-            request,
-            direction=ISDU_DIRECTION_READ,
-            write_length=False,
-        )
-        status = poll_isdu_status(runtime, slave_index, request)
-        require_isdu_success(status, request)
-        data_length = isdu_sdo_step(
-            "read data length",
-            request,
-            runtime.ethercat_master.sdo.read_uint8,
-            slave_index,
-            request["object_index"],
-            6,
-        )
-        read_length = min(
-            request["length"],
-            max(0, int(data_length)),
-            ISDU_MAX_DATA_BYTES,
-        )
-        payload = read_isdu_data_payload(
-            runtime,
-            slave_index,
-            request,
-            read_length,
-        )
-        value = decode_isdu_payload(payload, request["data_type"])
-    except Exception as exc:
-        send_client_message(
-            client,
-            isdu_error_response(response_type, message, exc),
-        )
-        return
-
-    response = isdu_response(response_type, request)
-    response.update({
-        "ok": True,
-        "status": status,
-        "length": data_length,
-        "data": bytes(payload).hex(),
-        "value": value,
-    })
-    send_client_message(client, response)
+    response = parameter_request_response(
+        message, lambda: _read_iol_parameter(message, runtime),
+    )
+    send_client_message(client, legacy_isdu_response(message, response))
 
 
 def write_iol_parameter(message, runtime, client):
-    response_type = public_command_name(message)
-    try:
-        request = parse_isdu_request(message, require_value=True)
-        validate_isdu_request_against_iodd(runtime, request, access="write")
-        slave_index = runtime.device_manager.io.slave_index(request["io"])
-        payload = encode_isdu_payload(message["value"], request["data_type"])
-        if len(payload) > ISDU_MAX_DATA_BYTES:
-            raise ValueError(
-                f"ISDU payload too large: {len(payload)} bytes; "
-                f"max {ISDU_MAX_DATA_BYTES}"
-            )
-        request = dict(request)
-        payload = isdu_write_payload(message, request, payload)
-        request["length"] = len(payload)
-        write_isdu_header(
-            runtime,
-            slave_index,
-            request,
-            direction=None,
-            write_length=True,
-        )
-        write_isdu_data_payload(runtime, slave_index, request, payload)
-        isdu_sdo_step(
-            "write direction",
-            request,
-            runtime.ethercat_master.sdo.write_uint8,
-            slave_index,
-            request["object_index"],
-            1,
-            ISDU_DIRECTION_WRITE,
-        )
-        status = poll_isdu_status(runtime, slave_index, request)
-        require_isdu_success(status, request)
-    except Exception as exc:
-        send_client_message(
-            client,
-            isdu_error_response(response_type, message, exc),
-        )
-        return
+    response = parameter_request_response(
+        message, lambda: _write_iol_parameter(message, runtime),
+    )
+    send_client_message(client, legacy_isdu_response(message, response))
 
-    response = isdu_response(response_type, request)
-    response.update({
-        "ok": True,
-        "status": status,
-        "length": request["length"],
-        "data": bytes(payload).hex(),
-    })
-    send_client_message(client, response)
+
+def parameter_request_response(message, operation):
+    # TECH_DEBT[TD-005]: Router owns this boundary after the S10 cutover.
+    from motion_server.api.router import request_response
+
+    return request_response(message, operation)
+
+
+def _read_iol_parameter(message, runtime):
+    request = parse_isdu_request(message, require_value=False)
+    validate_isdu_request_against_iodd(runtime, request, access="read")
+    slave_index = validate_isdu_target(runtime, request)
+    write_isdu_header(
+        runtime, slave_index, request, direction=ISDU_DIRECTION_READ,
+        write_length=False,
+    )
+    status = poll_isdu_status(runtime, slave_index, request)
+    require_isdu_success(status, request)
+    data_length = isdu_sdo_step(
+        "read data length", request,
+        runtime.ethercat_master.sdo.read_uint8,
+        slave_index, request["object_index"], 6,
+    )
+    read_length = min(request["length"], max(0, int(data_length)), ISDU_MAX_DATA_BYTES)
+    payload = read_isdu_data_payload(runtime, slave_index, request, read_length)
+    value = decode_isdu_payload(payload, request["data_type"])
+    return isdu_data(
+        request, status=status, length=data_length,
+        data=bytes(payload).hex(), value=value,
+    )
+
+
+def _write_iol_parameter(message, runtime):
+    request = parse_isdu_request(message, require_value=True)
+    validate_isdu_request_against_iodd(runtime, request, access="write")
+    slave_index = validate_isdu_target(runtime, request)
+    payload = encode_isdu_payload(message["value"], request["data_type"])
+    if len(payload) > ISDU_MAX_DATA_BYTES:
+        raise InvalidArgumentException("value", "exceeds the ISDU payload limit")
+    request = dict(request)
+    payload = isdu_write_payload(message, request, payload)
+    request["length"] = len(payload)
+    write_isdu_header(runtime, slave_index, request, direction=None, write_length=True)
+    write_isdu_data_payload(runtime, slave_index, request, payload)
+    isdu_sdo_step(
+        "write direction", request,
+        runtime.ethercat_master.sdo.write_uint8,
+        slave_index, request["object_index"], 1, ISDU_DIRECTION_WRITE,
+    )
+    status = poll_isdu_status(runtime, slave_index, request)
+    require_isdu_success(status, request)
+    return isdu_data(
+        request, status=status, length=request["length"],
+        data=bytes(payload).hex(),
+    )
 
 
 def write_isdu_header(
@@ -196,13 +167,14 @@ def require_isdu_success(status, request):
     status = int(status)
     if status == 0:
         return
-    raise RuntimeError(
-        "IO-Link ISDU access failed: "
-        f"status=0x{status:04X} "
-        f"module={request['module']} "
-        f"port={request['port']} "
-        f"index=0x{request['index']:04X} "
-        f"subindex=0x{request['subindex']:02X}"
+    if status == ISDU_STATUS_BUSY:
+        raise OperationTimeoutException(
+            "iolink_isdu_access",
+            timeout_seconds=ISDU_STATUS_POLL_TIMEOUT,
+        )
+    raise DeviceRejectedException(
+        "iolink_isdu_access",
+        device_code=status,
     )
 
 
@@ -226,36 +198,34 @@ def poll_isdu_status(runtime, slave_index, request):
 
 def parse_isdu_request(message, require_value):
     if "io" not in message:
-        raise ValueError("IO-Link ISDU commands require io")
+        raise InvalidRequestException("IO-Link ISDU commands require io")
     if "module" not in message:
-        raise ValueError("IO-Link ISDU commands require module")
+        raise InvalidArgumentException("module", "is required")
     if "port" not in message:
-        raise ValueError("IO-Link ISDU commands require port")
+        raise InvalidArgumentException("port", "is required")
     if "index" not in message:
-        raise ValueError("IO-Link ISDU commands require index")
+        raise InvalidArgumentException("index", "is required")
     if require_value and "value" not in message:
-        raise ValueError("system/io/iol/param_write requires value")
+        raise InvalidArgumentException("value", "is required")
 
     data_type = str(message.get("data_type", "bytes")).strip().lower()
-    module = parse_int(message.get("module"), 0)
-    port = parse_int(message.get("port"), 0)
-    index = parse_int(message.get("index"), 0)
-    subindex = parse_int(message.get("subindex", 0), 0)
+    module = parse_isdu_int(message, "module")
+    port = parse_isdu_int(message, "port")
+    index = parse_isdu_int(message, "index")
+    subindex = parse_isdu_int(message, "subindex", default=0)
     length = parse_isdu_length(message, data_type)
     object_index = isdu_access_object_index(module)
 
     if module < 1 or module > 0xFF:
-        raise ValueError(
-            f"Invalid IO-Link module: {module}. CPX AP module numbering starts at 1."
-        )
+        raise InvalidArgumentException("module", "must be in range 1..255")
     if port < 0 or port > 0xFF:
-        raise ValueError(f"Invalid IO-Link port: {port}")
+        raise InvalidArgumentException("port", "is outside uint8 range")
     if index < 0 or index > 0xFFFF:
-        raise ValueError(f"Invalid IO-Link ISDU index: {index}")
+        raise InvalidArgumentException("index", "is outside uint16 range")
     if subindex < 0 or subindex > 0xFF:
-        raise ValueError(f"Invalid IO-Link ISDU subindex: {subindex}")
+        raise InvalidArgumentException("subindex", "is outside uint8 range")
     if length < 0 or length > ISDU_MAX_DATA_BYTES:
-        raise ValueError(f"Invalid IO-Link ISDU length: {length}")
+        raise InvalidArgumentException("length", "is outside the ISDU payload range")
     validate_isdu_length(data_type, length)
     validate_raw_isdu_length(message, data_type, length)
 
@@ -271,6 +241,26 @@ def parse_isdu_request(message, require_value):
     }
 
 
+def parse_isdu_int(message, field, *, default=None):
+    if field not in message:
+        if default is not None:
+            return default
+        raise InvalidArgumentException(field, "is required")
+    try:
+        return parse_int(message.get(field), 0)
+    except (TypeError, ValueError) as exception:
+        raise InvalidArgumentException(
+            field, "must be an integer", public_value=message.get(field),
+        ) from exception
+
+
+def validate_isdu_target(runtime, request):
+    try:
+        return runtime.device_manager.io.slave_index(request["io"])
+    except (TypeError, ValueError) as exception:
+        raise ResourceNotFoundException("io", request["io"]) from exception
+
+
 def isdu_access_object_index(module):
     return ISDU_ACCESS_BASE_INDEX + int(module) * ISDU_ACCESS_INDEX_STEP
 
@@ -283,11 +273,14 @@ def validate_isdu_request_against_iodd(runtime, request, access):
 
 
 def iodd_binding_for_request(runtime, request):
-    device = runtime.device_manager.io.selected_device(io_id=request["io"])
+    try:
+        device = runtime.device_manager.io.selected_device(io_id=request["io"])
+    except (TypeError, ValueError) as exception:
+        raise ResourceNotFoundException("io", request["io"]) from exception
     profile = getattr(device["slave"], "device_profile", None)
     config = getattr(profile, "config", None)
     if config is None:
-        raise ValueError(f"I/O device {request['io']} has no CPX configuration")
+        raise ResourceNotFoundException("io_configuration", request["io"])
 
     for binding in config.io_link_devices:
         if (
@@ -296,12 +289,9 @@ def iodd_binding_for_request(runtime, request):
         ):
             return binding
 
-    raise ValueError(
-        "No IODD device binding for IO-Link parameter access: "
-        f"io={request['io']} "
-        f"module={request['module']} "
-        f"port={request['port']}. "
-        "Configure MOTION_SERVER_IO_<io>_IOL_PORTS before using ISDU access."
+    raise ResourceNotFoundException(
+        "iolink_port_binding",
+        f"{request['io']}:{request['module']}:{request['port']}",
     )
 
 
@@ -309,12 +299,9 @@ def iodd_variable_for_index(binding, index):
     for variable in binding.device.variables:
         if int(variable.index) == int(index):
             return variable
-    raise ValueError(
-        "Unsupported IO-Link parameter index for configured IODD: "
-        f"device={binding.device.device_name!r} "
-        f"module={binding.module} "
-        f"port={binding.port} "
-        f"index=0x{int(index):04X}"
+    raise ResourceNotFoundException(
+        "iolink_parameter",
+        int(index),
     )
 
 
@@ -324,14 +311,7 @@ def validate_iodd_variable_access(variable, access, request):
         return
     if access == "write" and "w" in rights:
         return
-    raise ValueError(
-        "IO-Link parameter access is not allowed by IODD: "
-        f"index=0x{request['index']:04X} "
-        f"subindex=0x{request['subindex']:02X} "
-        f"requested={access} "
-        f"iodd_access={variable.access!r} "
-        f"name={variable.name!r}"
-    )
+    raise PermissionDeniedException(f"iolink_isdu_{access}")
 
 
 def validate_iodd_subindex(variable, request):
@@ -345,40 +325,19 @@ def validate_iodd_subindex(variable, request):
         if "subindex" in item
     }
     if not supported_subindices:
-        raise ValueError(
-            "IO-Link parameter subindex is not defined in IODD: "
-            f"index=0x{request['index']:04X} "
-            f"subindex=0x{subindex:02X} "
-            f"name={variable.name!r}"
+        raise ResourceNotFoundException(
+            "iolink_subindex",
+            f"{request['index']}:{subindex}",
         )
     if subindex not in supported_subindices:
-        formatted = ", ".join(
-            f"0x{item:02X}"
-            for item in sorted(supported_subindices)
-        )
-        raise ValueError(
-            "Unsupported IO-Link parameter subindex for configured IODD: "
-            f"index=0x{request['index']:04X} "
-            f"subindex=0x{subindex:02X} "
-            f"supported=[{formatted}] "
-            f"name={variable.name!r}"
+        raise ResourceNotFoundException(
+            "iolink_subindex",
+            f"{request['index']}:{subindex}",
         )
 
 
 def isdu_sdo_step(step, request, operation, *args, **kwargs):
-    try:
-        return operation(*args, **kwargs)
-    except Exception as exc:
-        raise RuntimeError(
-            "IO-Link ISDU SDO step failed: "
-            f"step={step} "
-            f"object=0x{request['object_index']:04X} "
-            f"module={request['module']} "
-            f"port={request['port']} "
-            f"index=0x{request['index']:04X} "
-            f"subindex=0x{request['subindex']:02X} "
-            f"error={exc}"
-        ) from exc
+    return operation(*args, **kwargs)
 
 
 def read_isdu_data_payload(runtime, slave_index, request, read_length):
@@ -411,7 +370,7 @@ def write_isdu_data_payload(runtime, slave_index, request, payload):
 
 def parse_isdu_length(message, data_type):
     if "length" in message:
-        return parse_int(message.get("length"), 0)
+        return parse_isdu_int(message, "length")
     data_format = ISDU_DATA_FORMATS.get(data_type)
     if data_format is not None:
         return struct.calcsize(data_format)
@@ -424,9 +383,8 @@ def validate_isdu_length(data_type, length):
         return
     expected = struct.calcsize(data_format)
     if int(length) != expected:
-        raise ValueError(
-            f"IO-Link ISDU length mismatch for {data_type}: "
-            f"expected {expected}, got {length}"
+        raise InvalidArgumentException(
+            "length", f"must be {expected} for {data_type}",
         )
 
 
@@ -434,22 +392,32 @@ def validate_raw_isdu_length(message, data_type, length):
     if data_type not in {"bytes", "hex", "byte_array", "char", "string", "ascii"}:
         return
     if "length" not in message and "value" not in message:
-        raise ValueError("IO-Link raw ISDU read requires length")
+        raise InvalidArgumentException("length", "is required for raw ISDU reads")
     if int(length) <= 0 and "value" not in message:
-        raise ValueError("IO-Link raw ISDU length must be greater than 0")
+        raise InvalidArgumentException("length", "must be greater than 0")
 
 
 def encode_isdu_payload(value, data_type):
-    if data_type in {"bytes", "hex", "byte_array"}:
-        return parse_hex_payload(value)
-    if data_type in {"char", "string", "ascii"}:
-        return str(value).encode("ascii")
-    data_format = ISDU_DATA_FORMATS.get(data_type)
-    if data_format is None:
-        raise ValueError(f"Unsupported IO-Link ISDU data_type: {data_type}")
-    if data_type == "float32":
-        return struct.pack(data_format, float(value))
-    return struct.pack(data_format, int(str(value), 0))
+    try:
+        if data_type in {"bytes", "hex", "byte_array"}:
+            return parse_hex_payload(value)
+        if data_type in {"char", "string", "ascii"}:
+            return str(value).encode("ascii")
+        data_format = ISDU_DATA_FORMATS.get(data_type)
+        if data_format is None:
+            raise InvalidArgumentException(
+                "data_type", "is not a supported ISDU data type",
+                public_value=data_type,
+            )
+        if data_type == "float32":
+            return struct.pack(data_format, float(value))
+        return struct.pack(data_format, int(str(value), 0))
+    except InvalidArgumentException:
+        raise
+    except (TypeError, ValueError, OverflowError, struct.error) as exception:
+        raise InvalidArgumentException(
+            "value", f"is invalid for {data_type}", public_value=value,
+        ) from exception
 
 
 def isdu_write_payload(message, request, payload):
@@ -461,9 +429,8 @@ def isdu_write_payload(message, request, payload):
         return payload
     length = int(request["length"])
     if len(payload) > length:
-        raise ValueError(
-            f"IO-Link ISDU payload too long for requested length: "
-            f"payload={len(payload)} length={length}"
+        raise InvalidArgumentException(
+            "value", "is longer than the requested ISDU payload length",
         )
     return payload + bytes(length - len(payload))
 
@@ -476,13 +443,13 @@ def decode_isdu_payload(payload, data_type):
         return payload.rstrip(b"\x00").decode("ascii", errors="replace")
     data_format = ISDU_DATA_FORMATS.get(data_type)
     if data_format is None:
-        raise ValueError(f"Unsupported IO-Link ISDU data_type: {data_type}")
+        raise InvalidArgumentException(
+            "data_type", "is not a supported ISDU data type",
+            public_value=data_type,
+        )
     size = struct.calcsize(data_format)
     if len(payload) < size:
-        raise ValueError(
-            f"IO-Link ISDU payload too short for {data_type}: "
-            f"expected {size}, actual {len(payload)}"
-        )
+        raise DeviceAccessException("iolink_isdu_short_payload")
     value = struct.unpack(data_format, payload[:size])[0]
     if data_type == "float32":
         return float(value)
@@ -500,9 +467,8 @@ def parse_hex_payload(value):
     return bytes(int(item) & 0xFF for item in value)
 
 
-def isdu_response(response_type, request):
-    return {
-        "type": response_type,
+def isdu_data(request, **values):
+    data = {
         "io": request["io"],
         "object_index": f"0x{request['object_index']:04X}",
         "module": request["module"],
@@ -513,16 +479,21 @@ def isdu_response(response_type, request):
         "subindex_hex": f"0x{request['subindex']:02X}",
         "data_type": request["data_type"],
     }
+    data.update(values)
+    return data
 
 
-def isdu_error_response(response_type, message, exc):
+def legacy_isdu_response(message, response):
+    # TECH_DEBT[TD-005]: Remove this adapter when S10 enables envelopes.
+    if response["result"] == "success":
+        return {"type": response["type"], "ok": True, **response["data"]}
     try:
         module = parse_int(message.get("module"), 0)
         object_index = f"0x{isdu_access_object_index(module):04X}"
-    except Exception:
+    except (TypeError, ValueError):
         object_index = None
     return {
-        "type": response_type,
+        "type": response["type"],
         "ok": False,
         "io": message.get("io"),
         "object_index": object_index,
@@ -531,5 +502,5 @@ def isdu_error_response(response_type, message, exc):
         "index": message.get("index"),
         "subindex": message.get("subindex", 0),
         "data_type": str(message.get("data_type", "bytes")).strip().lower(),
-        "error": str(exc),
+        "error": response["failure"]["message"],
     }
