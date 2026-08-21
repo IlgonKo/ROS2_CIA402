@@ -50,6 +50,8 @@
 
 ### 문서 및 운영
 
+- TD-005의 S01-S11 전체 세부 계획에 각 단계의 목표, 주요 변경, 필수 계약, 제외 범위,
+  완료 조건과 다음 단계 인계 기준을 추가하고 현재 완료 단계와 다음 시작점을 재개 체크포인트로 기록했다.
 - 기존 exception 관련 74개 파일, broad catch 85곳과 generic RuntimeError 42곳을 API Fail, Alarm,
   Fault와 Internal only로 분류하고 기능 경로별 migration boundary와 우선순위를 확정했다.
 - EtherCAT SDO 수직 경로를 표준 패턴으로 확정하고 전체 분류에서 발견된 ConfigurationException과
