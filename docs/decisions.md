@@ -163,6 +163,26 @@ Device Profile + ESI
              -> MockSlave -> MockMaster -> DeviceManager -> AxisRuntime
 ```
 
+## DEC-014 공개 계약과 내부 구현 Helper의 경계 명시
+
+- 상태: `accepted`
+- 결정일: 2026-08-21
+- 결정:
+  - interface, protocol과 capability는 외부 호출자가 의존하는 공개 계약과 필수 구현 항목을 명시적으로 열거한다.
+  - 선택 기능과 내부 helper는 공개 계약과 분리하여 문서화한다.
+  - 호출 계층에 포함된다는 이유만으로 내부 helper를 필수 method나 capability validation 대상으로 확대하지 않는다.
+  - 합의된 공개 계약을 확대해야 하면 구현 전에 별도 설계 결정을 확정한다.
+- 이유: TD-004 구현 과정에서 `AXIS_RESTART`의 내부 OD write helper가 request/clear-request 공개 계약과
+  같은 계층도에 있다는 이유로 capability 필수 method에 잘못 포함되었다. 기존 구현체만 검증하는 테스트는
+  구현체가 우연히 가진 추가 method 때문에 이 범위 확대를 발견하지 못했다.
+- 검토한 대안: method 명명 규칙만으로 공개·내부 경계를 추론하는 방식은 Python의 접근 제한이 강제되지 않고
+  호출 관계와 계약 관계를 다시 혼동할 수 있어 채택하지 않는다.
+- 영향:
+  - 관련 TD는 공개 계약, 필수 구현, 선택 기능, 내부 helper와 제외 범위를 계약표로 구분한다.
+  - capability/interface 테스트는 최소 구현체 통과, 필수 항목 누락 실패와 내부 helper 부재 통과를 포함한다.
+  - 완료 증거는 명세 항목, 구현 위치와 테스트를 대조하여 합의되지 않은 범위 확대가 없음을 확인한다.
+  - 저장소 작업 지침은 계약 확대가 필요할 경우 구현을 중단하고 설계 결정을 먼저 갱신하도록 요구한다.
+
 ## 새 결정 작성 양식
 
 ```text
