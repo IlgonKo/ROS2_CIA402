@@ -27,7 +27,7 @@ from trajectory_msgs.msg import JointTrajectoryPoint
 
 from ros.axis_runtime_config import get_axis_count
 from ros.axis_runtime_config import get_axis_names
-from motion_server_client import is_fail_response, normalize_response
+from motion_server_client import decode_server_message, is_fail_message
 
 
 DEFAULT_HOST = "192.168.0.12"
@@ -824,12 +824,12 @@ class Cia402CommandBridgeNode(Node):
             if not line:
                 raise OSError("server closed connection")
 
-            message = normalize_response(json.loads(line))
+            message = decode_server_message(json.loads(line))
             if message.get("type") in {"feedback", "system/feedback"}:
                 self.publish_feedback(message)
             elif message.get("type") == "log":
                 self.get_logger().info(message.get("text", ""))
-            elif is_fail_response(message):
+            elif is_fail_message(message):
                 self.update_motion_server_authority_state(message)
                 self.publish_string(self.command_rejected_pub, message)
                 self.get_logger().warn(message.get("message", "Command rejected"))

@@ -10,7 +10,7 @@ API 요청 결과는 `Success` 또는 `Fail`로 표현한다. `Fail`은 개별 �
 - [response_contract.md](response_contract.md): 확정된 공통 Success/Fail response envelope
 - [failure_codes.md](failure_codes.md): 초기 failure code catalog와 Exception 변환 원칙
 - [exception_mapping.md](exception_mapping.md): 내부 Exception과 API Failure의 중앙 mapping 계약
-- [client_response_compatibility.md](client_response_compatibility.md): client의 legacy/new dual-read 계약
+- [client_response_compatibility.md](client_response_compatibility.md): client의 현재 envelope 해석 계약
 
 기존 발생·catch 지점의 목표 분류와 migration 범위는 TD-005의 다음 설계 단계에서 확정한다.
 

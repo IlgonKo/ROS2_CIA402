@@ -59,10 +59,10 @@ client의 복구 판단과 장애 분석이 불안정하다.
 
 ### 작업 재개 체크포인트
 
-- 현재 완료 단계: `TD-005-S10`
-- 다음 실행 단계: `TD-005-S11`
-- 다음 시작 위치: command handler의 임시 response capture와 client legacy fallback을 정리하고,
-  broad catch allowlist 및 envelope 위반 자동 검사를 추가한다.
+- 현재 완료 단계: `TD-005-S11A`
+- 다음 실행 단계: `TD-005-S11B`
+- 다음 시작 위치: command handler의 직접 송신/catch를 data 반환 및 typed Exception으로 바꾸고
+  `_RequestCaptureConnection`을 제거한다.
 - 현재 호환 상태: 서버 request/response는 신규 Success/Fail envelope만 송신한다. 주기 feedback과
   자발적 notification은 envelope 대상이 아니다.
 - 보존할 사용자 변경: `device/cmmt/required_od.py`의 OD 기본값 및 형식 변경은 `TD-023` 범위이며
@@ -540,3 +540,21 @@ S10 완료 증거:
 | 제외 범위 | TD-005 조사에서 별도 RF/TD로 분리된 기능과 recovery 정책은 구현하지 않는다. |
 | 완료 조건 | inventory의 TD-005 대상이 구현·제외·후속 작업 중 하나로 모두 추적되고 전체 자동 테스트, broad catch allowlist, legacy 응답 부재 검사가 통과한다. TD-005 상태를 `complete`로 바꾸고 Work Log에 최종 증거를 기록한다. |
 | 인계 | 후속 오류 변경은 확정된 Exception/Failure/Diagnostic 계약과 자동 검사 안에서 수행한다. |
+
+S11은 정리 범위를 한 번에 변경하지 않고 다음 순서로 진행한다.
+
+| 하위 단계 | 범위 | 상태 |
+| --- | --- | --- |
+| `TD-005-S11A` | client legacy response 및 `diagnostics` fallback 제거 | `complete` |
+| `TD-005-S11B` | command 반환/typed Exception 전환과 request capture 제거 | `pending` |
+| `TD-005-S11C` | broad catch allowlist, envelope/mapping 정적 검사와 TD-005 완료 | `pending` |
+
+S11A 완료 증거:
+
+- 배포 이력이 없다는 결정에 따라 client의 legacy/new dual-read 계약을 폐기했다.
+- 공통 client decoder는 Success/Fail envelope와 승인된 notification만 읽는다. top-level `ok/error`,
+  `command_rejected`와 result 없는 request response는 `MALFORMED_RESPONSE`로 거부한다.
+- 삭제된 `diagnostics`를 `device_diagnostics`로 변환하던 fallback을 제거했다.
+- Axis/I/O Control Panel과 ROS Bridge가 새 `decode_server_message` 계약을 사용한다.
+- current envelope, legacy 거부, `diagnostics` 미변환과 notification 테스트 6개 및 전체 unittest 145개가
+  통과했다.

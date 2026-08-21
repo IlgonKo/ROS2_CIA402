@@ -11,7 +11,7 @@ from control_panel.axis_control_panel.panel_update_data import (
     merge_system_feedback,
 )
 from control_panel.axis_control_panel.units import api_to_user_unit_factor
-from motion_server_client import is_fail_response, normalize_response
+from motion_server_client import decode_server_message, is_fail_message
 
 RECONNECT_PERIOD = 1.0
 
@@ -45,7 +45,7 @@ def request_initial_system_status(host, port, timeout=2.0):
                 line = sock_file.readline()
                 if not line:
                     break
-                message = normalize_response(json.loads(line.decode("utf-8")))
+                message = decode_server_message(json.loads(line.decode("utf-8")))
                 if message.get("type") == "system/axes/status":
                     return message
     except (OSError, ValueError, json.JSONDecodeError):
@@ -143,8 +143,8 @@ class AxisServerClient:
             if not line:
                 raise OSError("server closed connection")
 
-            message = normalize_response(json.loads(line))
-            if is_fail_response(message):
+            message = decode_server_message(json.loads(line))
+            if is_fail_message(message):
                 self._store_notice(message)
             elif message.get("type") == "system/axes/status":
                 self._store_feedback(message)

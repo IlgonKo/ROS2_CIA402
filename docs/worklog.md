@@ -8,6 +8,11 @@
 
 ### 완료
 
+- `TD-005-S11A`에서 미배포 프로젝트에는 backward compatibility가 필요 없다는 결정에 따라 client의
+  legacy response와 `diagnostics` fallback을 완전히 제거했다.
+- Axis/I/O Control Panel과 ROS Bridge는 현재 Success/Fail envelope 및 승인 notification만 해석하며,
+  과거 `ok/error`, `command_rejected`와 result 없는 response는 malformed로 거부한다.
+- S11A 테스트 6개와 전체 unittest 145개가 통과했다. 다음 단계는 command capture를 제거하는 S11B다.
 - `TD-005-S10`을 완료하여 모든 등록 request/response의 실제 서버 송신을 Success/Fail envelope로
   전환했다. 요청당 한 응답, request ID 반환, 빈 비동기 Success와 최상위 예상 밖 오류 비노출을 보장한다.
 - status 및 EtherCAT/AP/IO-Link parameter의 legacy 변환 helper와 Axis `diagnostics` 송신 별칭을 제거했다.

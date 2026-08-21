@@ -5,7 +5,7 @@ import socket
 import threading
 import time
 
-from motion_server_client import is_fail_response, normalize_response
+from motion_server_client import decode_server_message, is_fail_message
 
 
 RECONNECT_PERIOD = 1.0
@@ -80,7 +80,7 @@ class MotionServerClient:
             line = self.stream.readline()
             if not line:
                 raise ConnectionError("Motion Server closed the connection")
-            message = normalize_response(json.loads(line))
+            message = decode_server_message(json.loads(line))
             self._store_message(message)
 
     def _store_message(self, message):
@@ -116,7 +116,7 @@ class MotionServerClient:
                 "command_rejected",
             }:
                 self.responses.append(message)
-                if is_fail_response(message):
+                if is_fail_message(message):
                     if message.get("reason") in {
                         "authority_required",
                         "authority_busy",
