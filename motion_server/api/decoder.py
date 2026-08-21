@@ -1,4 +1,5 @@
 from motion_server.api.validator import parse_int
+from motion_server.failure import InvalidArgumentException, ResourceNotFoundException
 
 
 def command_name(message):
@@ -14,22 +15,25 @@ def axis_count(runtime):
 
 
 def parse_axis_indices(message, runtime, command_name):
-    if "axes" in message:
-        axes = [parse_int(value) for value in message.get("axes", [])]
-    elif "axis" in message:
-        axes = [parse_int(message.get("axis"))]
-    else:
-        axes = list(range(axis_count(runtime)))
+    try:
+        if "axes" in message:
+            axes = [parse_int(value) for value in message.get("axes", [])]
+        elif "axis" in message:
+            axes = [parse_int(message.get("axis"))]
+        else:
+            axes = list(range(axis_count(runtime)))
+    except (TypeError, ValueError) as exc:
+        raise InvalidArgumentException("axes", "must contain integer indices") from exc
 
     if not axes:
-        raise ValueError(f"{command_name} requires at least one axis")
+        raise InvalidArgumentException("axes", "requires at least one axis")
     invalid_axes = [
         axis_index
         for axis_index in axes
         if axis_index < 0 or axis_index >= axis_count(runtime)
     ]
     if invalid_axes:
-        raise ValueError(f"{command_name} invalid axes: {invalid_axes}")
+        raise ResourceNotFoundException("axis", invalid_axes[0])
     return axes
 
 
@@ -40,7 +44,7 @@ def selected_axes(message, runtime, command):
 def selected_single_axis(message, runtime, command):
     axes = selected_axes(message, runtime, command)
     if len(axes) != 1:
-        raise ValueError(f"{command} requires exactly one axis")
+        raise InvalidArgumentException("axis", "requires exactly one axis")
     return axes[0]
 
 

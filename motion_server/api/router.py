@@ -12,12 +12,13 @@ from motion_server.api.decoder import (
 from motion_server.api.encoder import (
     ResponseContext,
     fail_response,
+    partial_fail_response,
     reject_command_message,
     send_client_message,
     success_response,
 )
 from motion_server.api.validator import validate_command
-from motion_server.failure import MotionServerException, map_exception
+from motion_server.failure import MotionServerException, PartialFailure, map_exception
 
 
 _LOGGER = logging.getLogger(__name__)
@@ -26,7 +27,10 @@ _LOGGER = logging.getLogger(__name__)
 def request_response(request, operation, *, logger=None):
     context = ResponseContext.from_request(request)
     try:
-        return success_response(context, operation())
+        result = operation()
+        if isinstance(result, PartialFailure):
+            return partial_fail_response(context, result)
+        return success_response(context, result)
     except MotionServerException as exception:
         active_logger = logger or _LOGGER
         active_logger.warning(

@@ -87,13 +87,19 @@ Diagnostic 때문에 작업이 차단되면 관련 발생 건을 연결할 수 �
 ```json
 {
   "code": "PARTIAL_FAILURE",
-  "message": "Motion mode was changed on 2 of 3 axes.",
+  "message": "The operation completed for only some targets.",
   "details": {
     "succeeded": [0, 1],
     "failed": [
       {
-        "axis": 2,
-        "code": "DEVICE_ACCESS_FAILED"
+        "target": 2,
+        "failure": {
+          "code": "DEVICE_ACCESS_FAILED",
+          "message": "Device access failed.",
+          "details": {
+            "operation": "axis_controlword_write"
+          }
+        }
       }
     ]
   }
