@@ -187,7 +187,7 @@ Tech Debt 상태 값은 `open`, `in_progress`, `complete`를 사용한다.
 
 ### TD-005 예외 경계와 오류 형식 불균일
 
-- 상태: `open`
+- 상태: `in_progress`
 - 우선순위: 높음
 - 요약: 계층별 오류 유형과 Motion Server API 오류 응답 형식을 통일한다.
 - 완료 조건:
