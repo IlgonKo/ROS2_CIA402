@@ -47,6 +47,8 @@
 
 ### 문서 및 운영
 
+- `DEC-018`로 client 대응 기준의 초기 20개 API failure code와 Exception 변환·내부정보 비노출
+  원칙을 확정하고 command/argument별 code 증가를 제한했다.
 - `DEC-017`로 요청과 같은 type, Success/Fail result, optional request_id 및 data/failure를 사용하는
   공통 API response envelope를 확정하고 기존 응답 필드를 TD-005 migration 대상으로 명시했다.
 - API 요청의 실패 결과 명칭을 `Error`가 아닌 `Fail`로 확정하고 관련 계약과 설계 순서의

@@ -262,7 +262,28 @@ Device Profile + ESI
 - 영향:
   - 목표 계약은 [API Success/Fail 응답 계약](api/response_contract.md)을 따른다.
   - 기존 응답 형식은 현재 동작으로 유지되며 TD-005 구현에서 새 envelope로 migration한다.
-  - failure code taxonomy, Exception mapping과 호환 기간은 후속 설계에서 확정한다.
+  - failure code taxonomy는 DEC-018을 따르고, 내부 Exception mapper와 호환 기간은 후속 설계에서 확정한다.
+
+## DEC-018 API Failure Code를 Client 대응 기준으로 정의
+
+- 상태: `accepted`
+- 결정일: 2026-08-21
+- 결정:
+  - failure code는 Python Exception이나 command 이름이 아니라 client의 대응이 달라지는 실패 의미를 나타낸다.
+  - code는 `UPPER_SNAKE_CASE`를 사용하며 `API_` prefix를 붙이지 않는다.
+  - 요청, 권한, 상태, 통신·장치 접근과 복합·내부 실패를 포괄하는 초기 20개 code를 사용한다.
+  - 구체적인 대상과 입력값은 code를 추가하지 않고 optional `failure.details`에 기록한다.
+  - 예상하지 못한 Exception은 `INTERNAL_FAILURE`와 안전한 message로 변환하고 내부 상세는 log에만 기록한다.
+  - 운전 상태에 영향이 있으면 API Fail과 별도로 Diagnostic을 생성한다.
+- 이유: Exception 이름이나 command별 code를 외부 계약으로 노출하면 내부 구현 변경에 따라 API가 불안정해지고
+  client가 동일한 복구 행동을 중복 구현하게 된다.
+- 검토한 대안:
+  - Axis, IO와 OD별로 not-found code를 나누는 방식은 client 대응이 같아 `RESOURCE_NOT_FOUND`로 통합한다.
+  - `ValueError`, `RuntimeError` 같은 Python 이름을 code로 사용하는 방식은 구현 언어와 API를 결합하므로 채택하지 않는다.
+- 영향:
+  - 초기 catalog와 매핑 원칙은 [API Failure Code](api/failure_codes.md)를 따른다.
+  - 내부 Exception 계층과 mapper 계약을 확정한 뒤 inventory의 각 발생·catch 지점을 분류한다.
+  - 새 code는 client 대응이 기존 code와 실제로 다를 때만 추가한다.
 
 ## 새 결정 작성 양식
 

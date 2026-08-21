@@ -31,7 +31,7 @@ TD-005에서 이 계약으로 migration한다.
   "result": "fail",
   "request_id": "optional-client-request-id",
   "failure": {
-    "code": "INVALID_AXIS",
+    "code": "RESOURCE_NOT_FOUND",
     "message": "Axis 10 does not exist.",
     "details": {
       "axis": 10
@@ -55,7 +55,8 @@ TD-005에서 이 계약으로 migration한다.
 - `message`: 사용자가 읽을 수 있는 실패 설명
 - `details`: 구조화된 선택 부가정보이며 없으면 생략
 
-failure code taxonomy, 내부 정보 비노출 규칙과 Exception mapping은 이 계약의 다음 설계 단계에서 확정한다.
+failure code와 내부 정보 비노출 규칙은 [Failure Code](failure_codes.md)를 따른다.
+구체적인 내부 Exception 계층과 mapper는 다음 설계 단계에서 확정한다.
 
 ## 비동기 명령의 Success
 
