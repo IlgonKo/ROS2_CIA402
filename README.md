@@ -4,8 +4,13 @@ This project has two execution paths.
 
 Motion Server documentation:
 
+- [Documentation guide](docs/README.md)
 - [Motion Server software architecture](docs/motion_server_architecture.md)
 - [Motion Server Basic mode API manual](docs/motion_server_api_basic.md)
+- [Design decisions](docs/decisions.md)
+- [Test procedure](docs/test_procedure.md)
+- [Remaining tasks](docs/remaining_tasks.md)
+- [Work log](docs/worklog.md)
 
 ## Mock path
 

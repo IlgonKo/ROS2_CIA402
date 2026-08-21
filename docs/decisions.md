@@ -1,0 +1,101 @@
+# Design Decisions
+
+이 문서는 구현 전반에 영향을 주며 장기간 유지해야 하는 결정을 기록한다.
+현재 상태만 설명하는 문서는 [Software Architecture](motion_server_architecture.md),
+미완료 작업은 [Remaining Tasks](remaining_tasks.md), 완료 이력은 [Work Log](worklog.md)에서 관리한다.
+
+결정 상태는 `proposed`, `accepted`, `superseded`, `deprecated`를 사용한다.
+기존 결정을 바꿀 때는 항목을 삭제하지 않고 새 결정에서 대체 관계를 명시한다.
+
+## DEC-001 Motion Server를 장치 제어 경계로 사용
+
+- 상태: `accepted`
+- 결정일: 2026-07-16
+- 결정: 상위 애플리케이션은 EtherCAT과 CiA402 세부 구현을 직접 다루지 않고
+  Motion Server의 TCP JSON API를 통해 축과 I/O 장치를 제어한다.
+- 이유: EtherCAT master가 실행되는 호스트와 ROS, GUI 또는 low-code client가 실행되는
+  환경을 분리하면서 동일한 장치 제어 계약을 제공해야 한다.
+- 영향: 장치별 SDO/PDO 처리와 상태 전이는 Motion Server 아래에 유지하고,
+  client는 공개 API의 명령, 상태와 단위만 사용한다.
+
+## DEC-002 실장치와 가상 장치에 동일한 상위 API 적용
+
+- 상태: `accepted`
+- 결정일: 2026-06-25
+- 결정: mock backend와 PySOEM backend는 동일한 Motion Server API와 가능한 한 동일한
+  device profile 동작을 제공한다.
+- 이유: 실장치 없이 기능을 개발하고 회귀 시험을 수행하되 실제 장치 경로와의 차이를 최소화한다.
+- 영향: 가상 장치 전용 동작을 상위 API에 노출하지 않으며, backend 차이는 EtherCAT/device 계층에서 처리한다.
+
+## DEC-003 API 경계의 공학 단위 표준화
+
+- 상태: `accepted`
+- 결정일: 2026-07-06
+- 결정: 선형 축은 `mm`, `mm/s`, `mm/s^2`, 회전 축은 `deg`, `deg/s`, `deg/s^2`를
+  Motion Server API 단위로 사용한다.
+- 이유: client가 drive별 object dictionary scale과 user-unit 설정을 알지 않아도 일관된 값을 사용해야 한다.
+- 영향: 실제 drive 단위와 API 단위 사이의 변환은 Motion Server가 장치 설정을 읽어 축별로 수행한다.
+
+## DEC-004 명령 제어권은 TCP 연결 단위로 관리
+
+- 상태: `accepted`
+- 결정일: 2026-07-09
+- 결정: 상태와 feedback은 여러 client에 제공하지만 상태 변경 및 motion command는
+  command authority를 획득한 TCP 연결만 실행할 수 있다.
+- 이유: 별도 token 전달 없이 여러 GUI, ROS Bridge와 도구가 동시에 연결된 상황의 충돌을 방지한다.
+- 영향: 소유 연결이 종료되거나 명시적으로 release하면 authority를 해제한다.
+  다른 연결의 명령은 현재 소유자 정보와 함께 거부한다.
+
+## DEC-005 실시간 EtherCAT 접근과 상위 client 실행 환경 분리
+
+- 상태: `accepted`
+- 결정일: 2026-06-26
+- 결정: 실제 EtherCAT NIC에 연결된 호스트에서 Motion Server와 PySOEM을 실행하고,
+  ROS2, MoveIt 및 원격 GUI는 TCP client로 연결할 수 있게 한다.
+- 이유: raw Ethernet 접근이 필요한 실행 환경을 상위 애플리케이션의 Docker 및 GUI 의존성과 분리한다.
+- 영향: Linux 배포는 Motion Server, ROS Bridge, Control Panel과 MoveIt 이미지를 역할별로 유지한다.
+  Windows 직접 실행은 장치가 Windows 호스트에 연결된 경우의 별도 경로로 지원한다.
+
+## DEC-006 ROS Bridge와 Trajectory API 후속 개발 보류
+
+- 상태: `accepted`
+- 결정일: 2026-08-20
+- 결정: 별도 재개 결정 전까지 ROS Bridge 이관과 Motion Server Trajectory API 개발을 보류하고,
+  Motion Server API와 device/runtime 구조 안정화에 우선순위를 둔다.
+- 이유: 하위 API와 설정 구조가 계속 바뀌는 동안 상위 연동을 동시에 수정하면 중복 작업과 검증 범위가 커진다.
+- 영향: 관련 작업은 `RF-008`, `RF-009`로 추적한다. 하위 계약 변경 시 후속 이관에 필요한 내용을
+  해당 항목에 남긴다.
+
+## DEC-007 공식 프로젝트명은 Motion Server로 사용
+
+- 상태: `accepted`
+- 결정일: 2026-08-21
+- 결정: 프로젝트의 공식 사용자 노출 명칭은 `Motion Server`로 사용한다.
+- 이유: 프로젝트 범위가 ROS2/CiA402 실험을 넘어 EtherCAT motion axis와 remote I/O를
+  공통 API로 제공하는 서버로 확장되었다.
+- 영향: 새 문서와 사용자 노출 명칭은 Motion Server를 사용한다. 기존 ROS package,
+  환경변수, 설치 경로와 service identifier는 호환성 영향을 검토한 뒤 별도 작업으로 변경한다.
+
+## DEC-008 RF/TD 단위의 단기 작업 브랜치 사용
+
+- 상태: `accepted`
+- 결정일: 2026-08-21
+- 결정: `main`을 유일한 기준 브랜치로 사용하고, 미완료 기능은
+  `rf/<번호>-<설명>`, 기술 부채는 `td/<번호>-<설명>` 브랜치에서 각각 하나씩 처리한다.
+- 이유: 요구사항과 기술 부채의 문서 식별자를 코드 변경, 검증과 병합 이력에 직접 연결한다.
+- 영향: 각 작업 브랜치는 최신 `main`에서 만들고 한 개의 RF 또는 TD만 포함한다.
+  완료와 검증 후 `main`에 병합하며 병합된 단기 브랜치는 삭제한다.
+
+## 새 결정 작성 양식
+
+```text
+## DEC-### 제목
+
+- 상태: proposed | accepted | superseded | deprecated
+- 결정일: YYYY-MM-DD
+- 대체 관계: 해당하는 경우 DEC-###을 대체함
+- 결정: 선택한 방향
+- 이유: 이 결정이 필요한 배경과 제약
+- 검토한 대안: 선택하지 않은 주요 대안과 이유
+- 영향: 코드, 설정, API, 배포 및 시험에 미치는 결과
+```
