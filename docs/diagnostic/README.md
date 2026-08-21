@@ -22,4 +22,15 @@ API 요청의 `Success`와 `Error`는 Diagnostic에 포함하지 않는다. Pyth
 - Alarm/Fault 판정, acknowledge, clear 및 recovery 정책
 - Diagnostic code와 source/context 계약
 
+## 설계 및 구현 순서
+
+아래 순서를 고정하며 앞 단계의 계약을 확정하기 전에 다음 단계 구현을 시작하지 않는다.
+
+1. Diagnostic 데이터 모델과 수명 주기를 확정한다.
+2. API Success/Error 응답 계약과 exception 변환 규칙을 확정한다.
+3. [Exception inventory](error_point_inventory.md)의 각 지점을 `API Error`, `Alarm`, `Fault`,
+   `Internal only`로 분류한다. 한 지점은 API Error와 Diagnostic을 동시에 만들 수 있다.
+4. 분류 결과를 바탕으로 TD-005의 exception 계층, API error mapper, Diagnostic 관리,
+   logging 및 오류 주입 테스트 구현 계획을 확정한다.
+
 확정 전 설계안은 현재 동작처럼 기록하지 않는다.
