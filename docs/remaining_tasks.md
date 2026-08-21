@@ -337,3 +337,15 @@ Tech Debt 상태 값은 `open`, `in_progress`, `complete`를 사용한다.
   - 정상 실행 로그는 전체 `PYTHONPATH` 대신 `Project root: <path>`만 출력한다.
   - 기존 외부 `PYTHONPATH` 항목의 순서와 값이 보존되고 PowerShell 구문 및 실행 검사가 통과한다.
 - 상세: [TD-021 기술 명세](tasks/td/TD-021-windows-pythonpath.md)
+
+### TD-022 Motion Server 초기화 로그의 책임 및 조건부 출력 정리
+
+- 상태: `open`
+- 우선순위: 낮음
+- 요약: 서버 초기화 로그에는 실제 적용된 server/runtime 설정만 출력하고 축별 device 상태는 분리한다.
+- 완료 조건:
+  - 초기화 INFO 로그가 server/runtime 요약 필드만 포함한다.
+  - DC와 CSP 세부 parameter는 해당 기능의 실제 활성 조건에서만 출력된다.
+  - `statuswords`, software position limits와 actual positions가 서버 초기화 요약에서 제거된다.
+  - backend, DC와 motion-mode 조합별 출력 테스트가 실제 적용 상태 및 필드 계약을 검증한다.
+- 상세: [TD-022 기술 명세](tasks/td/TD-022-startup-log-boundary.md)
