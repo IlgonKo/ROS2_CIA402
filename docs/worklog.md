@@ -8,6 +8,14 @@
 
 ### 완료
 
+- TD-015를 완료하여 Virtual Servo의 OD Model을 선택된 profile/ESI 기반의 전체 OD definition과
+  runtime value 단일 저장소로 전환했다.
+- required OD와 RxPDO/TxPDO metadata 공급을 device profile 계약으로 이동하고 Virtual Servo의
+  CMMT 구현 모듈 직접 의존을 제거했다.
+- mock과 실축이 동일한 축별 PDO configuration 선택 정책을 사용하도록 통일하고 잘못된 이름은
+  startup error로 처리했다.
+- OD direct access, RxPDO와 TxPDO가 같은 runtime value를 사용하는 자동 테스트 4개와
+  CMMT-AS 1축 mock runtime smoke test를 통과했다.
 - TD-003을 완료하고 server, Control Panel, ROS, script와 현재 문서의 사용자 노출 명칭을
   `Motion Server` 또는 `Axis Control Panel`로 통일했다.
 - 기존 Linux 설치 호환성을 위해 `ros-cia402-axis-server.service` 식별자는 유지하고 TD-020에서 추적하게 했다.

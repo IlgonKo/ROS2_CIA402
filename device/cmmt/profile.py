@@ -2,7 +2,7 @@ from device.cmmt.error_catalog import load_cmmt_error_catalog
 from device.cmmt.esi_catalog import cmmt_catalog_by_profile_name
 from device.cmmt.pdo_codec import CiA402PdoCodec
 from device.cmmt.pdo_configuration import pdo_configuration_from_env, pdo_od_role
-from device.cmmt.required_od import required_od, required_od_roles
+from device.cmmt.required_od import required_od, required_od_roles as cmmt_required_od_roles
 from device.cmmt.rxpdo import RxPDO
 from device.cmmt.txpdo import TxPDO
 
@@ -235,7 +235,7 @@ class CMMTDeviceProfile:
                 "PDO configuration",
             )
 
-        for role in required_od_roles():
+        for role in self.required_od_roles():
             self.validate_catalog_od_role(
                 role.role,
                 role.index,
@@ -280,6 +280,14 @@ class CMMTDeviceProfile:
             "",
             data_type,
         ).bit_length
+
+    def required_od_roles(self):
+        return cmmt_required_od_roles()
+
+    def object_dictionary_entries(self):
+        if self.esi_catalog is None:
+            return ()
+        return tuple(self.esi_catalog.objects.items())
 
     def expected_rxpdo_mapping_entries(self):
         return self.pdo_configuration.rxpdo_mapping_entries()
