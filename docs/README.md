@@ -30,6 +30,7 @@
 | `diagnostic/README.md` | NORMAL/ALARM/FAULT 운전 상태와 문서 구조 | 개별 API 요청의 성공·실패 결과 |
 | `diagnostic/diagnostic_model.md` | Diagnostic Definition, Source, History, Status와 clear 규칙 | API Fail 응답과 recovery 구현 정책 |
 | `diagnostic/error_point_inventory.md` | exception 발생·catch 지점의 현행 inventory와 migration 추적 | 미분류 지점을 확정된 API Fail이나 Diagnostic처럼 표현하는 내용 |
+| `diagnostic/exception_point_classification.md` | 전체 exception 지점의 API Fail/Alarm/Fault/Internal 목표 분류 | 현재 구현이 migration되었다는 주장 |
 | `worklog.md` | 실제 완료된 변경의 요약 | 미확정 계획과 장기 설계 설명 |
 
 ## 갱신 규칙

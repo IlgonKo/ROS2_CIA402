@@ -16,6 +16,7 @@ API 요청의 `Success`와 `Fail`은 Diagnostic에 포함하지 않는다. Pytho
 
 - [diagnostic_model.md](diagnostic_model.md): 확정된 Diagnostic 객체 구성과 acknowledge/resolve/clear 규칙
 - [error_point_inventory.md](error_point_inventory.md): 현재 Python exception 발생·catch 지점과 migration inventory
+- [exception_point_classification.md](exception_point_classification.md): 전체 발생·catch 지점의 목표 분류와 migration 순서
 
 ## 추가 예정 문서
 
@@ -28,9 +29,9 @@ API 요청의 `Success`와 `Fail`은 Diagnostic에 포함하지 않는다. Pytho
 
 1. **완료:** Diagnostic 데이터 모델과 수명 주기를 확정한다.
 2. **완료:** API Success/Fail 응답 계약, failure code, 내부 Exception 계층과 변환 규칙을 확정한다.
-3. **대기:** [Exception inventory](error_point_inventory.md)의 각 지점을 `API Fail`, `Alarm`, `Fault`,
+3. **완료:** [Exception inventory](error_point_inventory.md)의 각 지점을 `API Fail`, `Alarm`, `Fault`,
    `Internal only`로 분류한다. 한 지점은 API Fail과 Diagnostic을 동시에 만들 수 있다.
-4. **대기:** 분류 결과를 바탕으로 TD-005의 exception 계층, API failure mapper, Diagnostic 관리,
+4. **진행 예정:** 분류 결과를 바탕으로 TD-005의 exception 계층, API failure mapper, Diagnostic 관리,
    logging 및 오류 주입 테스트 구현 계획을 확정한다.
 
 확정 전 설계안은 현재 동작처럼 기록하지 않는다.

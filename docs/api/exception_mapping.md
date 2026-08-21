@@ -23,6 +23,7 @@ API Fail response
 
 ```text
 MotionServerException
+├─ ConfigurationException
 ├─ RequestException
 │  ├─ InvalidRequestException
 │  ├─ UnknownCommandException
@@ -43,7 +44,8 @@ MotionServerException
 │  └─ CommunicationTimeoutException
 ├─ DeviceException
 │  ├─ DeviceAccessException
-│  └─ DeviceRejectedException
+│  ├─ DeviceRejectedException
+│  └─ SdoObjectNotFoundException
 └─ OperationException
    └─ OperationTimeoutException
 ```
@@ -81,6 +83,7 @@ EXCEPTION_FAILURE_MAPPINGS = {
 
 | Exception | FailureCode |
 | --- | --- |
+| `ConfigurationException` | `SERVER_NOT_READY` |
 | `RequestException` | `INVALID_REQUEST` |
 | `InvalidRequestException` | `INVALID_REQUEST` |
 | `UnknownCommandException` | `UNKNOWN_COMMAND` |
@@ -102,6 +105,7 @@ EXCEPTION_FAILURE_MAPPINGS = {
 | `DeviceException` | `DEVICE_ACCESS_FAILED` |
 | `DeviceAccessException` | `DEVICE_ACCESS_FAILED` |
 | `DeviceRejectedException` | `DEVICE_REJECTED` |
+| `SdoObjectNotFoundException` | `RESOURCE_NOT_FOUND` |
 | `OperationException` | `OPERATION_FAILED` |
 | `OperationTimeoutException` | `TIMEOUT` |
 | 미등록 Exception | `INTERNAL_FAILURE` |
