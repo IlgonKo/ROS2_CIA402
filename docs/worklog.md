@@ -13,7 +13,26 @@
 - command handler의 일반 rejection helper를 제거하고 입력·상태·지원 여부·timeout 의미를 구체
   Exception으로 유지하도록 변경했다.
 - malformed JSON/UTF-8과 요청 shape, live typed failure, Axis partial failure 및 PP handshake timeout
-  회귀 테스트 7개를 추가했으며 전체 unittest 156개와 source compile 검사가 통과했다.
+  회귀 테스트 7개를 추가했다.
+- 후속 리뷰에서 현재 API가 ASCII JSON field와 숫자만 사용한다는 계약에 따라 UTF-8 다중 byte 분할은
+  수정 대상에서 제외했다. Axis 설정 handler는 입력 parsing/validation과 runtime/OD 적용 범위를
+  분리하여 실행 오류가 `INVALID_ARGUMENT`로 재분류되지 않도록 보완했다.
+- Axis 설정 오류 경계 회귀 테스트 4개를 추가했으며 전체 unittest 160개와 source compile 검사가
+  통과했다.
+- PDO 정수 변환의 비숫자/범위 초과, Trajectory의 입력·대상·상태·limit 실패를 TD-005 typed Exception으로
+  분류하고 broad catch 정적 검사를 bare/tuple/attribute/import alias 형태까지 확장했다.
+- 후속 재리뷰에서 PDO 자료형 범위 초과를 `INVALID_ARGUMENT`으로 통일하고, 거부된 Trajectory/stop이
+  기존 활성 상태를 덮지 않도록 수정했다. Axis motion limit/profile은 장치 write 성공 후에만 server
+  state와 runtime cache를 갱신한다.
+- 상태 보존 회귀 테스트 4개를 추가한 최종 전체 unittest 174개와 source compile 검사가 통과했다.
+- 추가 전체 리뷰에서 `manualCW`의 무응답 Success, parameter save의 일반 `ValueError`, 거부된 Homing의
+  활성 상태 손실과 status legacy 중간 helper를 제거했다.
+- 관련 회귀 테스트 4개를 추가한 최종 전체 unittest 178개와 source compile 검사가 통과했다.
+- 반복 전체 리뷰에서 non-position mode의 Position command Success, stop/disable의 선행 상태 종료,
+  Jog 복구 정보 손실, generic SDO 정수 범위 누락을 보완했다.
+- 미등록 `stop_system`, 중복 Trajectory status와 status/authority의 내부 legacy `ok` 생성·제거 흐름을
+  삭제하고 broad catch 대입 alias까지 정적 검사 범위를 확장했다.
+- 관련 회귀 테스트 7개를 추가한 최종 전체 unittest 185개와 source compile 검사가 통과했다.
 
 ## 2026-08-21
 

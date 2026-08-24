@@ -28,64 +28,37 @@ from motion_server.handlers.status.server_status import server_status_message
 
 
 def handle_server_status(message_type, message, runtime, state, client):
-    return send_status_operation(
-        message,
-        client,
-        lambda: status_data(server_status_message(runtime, state)),
-    )
+    return status_data(server_status_message(runtime, state))
 
 
 def handle_bus_status(message_type, message, runtime, state, client):
-    return send_status_operation(
-        message,
-        client,
-        lambda: status_data(bus_status_message(runtime, state)),
-    )
+    return status_data(bus_status_message(runtime, state))
 
 
 def handle_axes_status(message_type, message, runtime, state, client):
-    return send_status_operation(
-        message,
-        client,
-        lambda: status_data(axes_status_message(runtime, state, client["id"])),
-        include_ok=False,
-    )
+    return status_data(axes_status_message(runtime, state, client["id"]))
 
 
 def handle_io_status(message_type, message, runtime, state, client):
-    return send_status_operation(
-        message,
-        client,
-        lambda: status_data(
-            io_status_message(
-                runtime,
-                state,
-                include_raw=bool(message.get("raw", False)),
-            ),
+    return status_data(
+        io_status_message(
+            runtime,
+            state,
+            include_raw=bool(message.get("raw", False)),
         ),
     )
 
 
 def handle_axis_status(message_type, message, runtime, state, client):
     if "axes" in message or "axis" not in message:
-        return send_status_operation(
-            message,
-            client,
-            invalid_axis_status_request,
-            include_ok=False,
-        )
-    return send_status_operation(
-        message,
-        client,
-        lambda: status_data(
-            axis_status_message(
-                runtime,
-                state,
-                selected_single_axis(message, runtime, message_type),
-                client["id"],
-            ),
+        return invalid_axis_status_request()
+    return status_data(
+        axis_status_message(
+            runtime,
+            state,
+            selected_single_axis(message, runtime, message_type),
+            client["id"],
         ),
-        include_ok=False,
     )
 
 
@@ -93,10 +66,6 @@ def invalid_axis_status_request():
     raise InvalidRequestException(
         "Axis status requires axis and does not accept axes",
     )
-
-
-def send_status_operation(message, client, operation, *, include_ok=True):
-    return operation()
 
 
 def handle_axis_parameter_read(message_type, message, runtime, state, client):

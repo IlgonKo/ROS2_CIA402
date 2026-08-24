@@ -7,7 +7,6 @@ def bus_status_message(runtime, state):
     actual_wkc = int(getattr(runtime, "wkc", 0))
     return {
         "type": "system/bus/status",
-        "ok": True,
         "drive_initialized": bool(state.get("drive_initialized", True)),
         "initialization_error": state.get("initialization_error", ""),
         "device_count": len(runtime.ethercat_devices),

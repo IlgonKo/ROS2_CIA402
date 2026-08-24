@@ -1,3 +1,6 @@
+from motion_server.failure import InvalidArgumentException
+
+
 INT32_MIN = -(2 ** 31)
 INT32_MAX = 2 ** 31 - 1
 UINT32_MAX = 2 ** 32 - 1
@@ -10,21 +13,33 @@ def parse_int(value, base=0):
 
 
 def require_int32(value, field_name):
-    result = int(round(float(value)))
+    try:
+        result = int(round(float(value)))
+    except (TypeError, ValueError, OverflowError) as exc:
+        raise InvalidArgumentException(
+            field_name, "must be a finite numeric value",
+        ) from exc
     if result < INT32_MIN or result > INT32_MAX:
-        raise ValueError(
-            f"{field_name}={result} is outside int32 PDO range "
-            f"[{INT32_MIN}, {INT32_MAX}]"
+        raise InvalidArgumentException(
+            field_name,
+            f"is outside int32 range [{INT32_MIN}, {INT32_MAX}]",
+            public_value=result,
         )
     return result
 
 
 def require_uint32(value, field_name):
-    result = int(round(float(value)))
+    try:
+        result = int(round(float(value)))
+    except (TypeError, ValueError, OverflowError) as exc:
+        raise InvalidArgumentException(
+            field_name, "must be a finite numeric value",
+        ) from exc
     if result < 0 or result > UINT32_MAX:
-        raise ValueError(
-            f"{field_name}={result} is outside uint32 PDO range "
-            f"[0, {UINT32_MAX}]"
+        raise InvalidArgumentException(
+            field_name,
+            f"is outside uint32 range [0, {UINT32_MAX}]",
+            public_value=result,
         )
     return result
 

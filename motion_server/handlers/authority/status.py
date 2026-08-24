@@ -3,11 +3,9 @@ def authority_status_payload(client, state, message_type="system/authority/statu
     owned_by_this_client = owner is not None and owner == client["id"]
     return {
         "type": message_type,
-        "ok": True,
         "owner": owner,
         "owned_by_this_client": owned_by_this_client,
         "available": owner is None,
-        "reason": None,
     }
 
 

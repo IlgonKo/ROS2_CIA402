@@ -98,7 +98,6 @@ def send_client_message(client, message):
 def status_data(message):
     data = dict(message)
     data.pop("type", None)
-    data.pop("ok", None)
     return data
 
 

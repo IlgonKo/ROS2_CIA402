@@ -22,7 +22,12 @@ from motion_server.api import (
     require_uint32,
     selected_axes,
 )
-from motion_server.failure import InvalidArgumentException, InvalidStateException
+from motion_server.failure import (
+    InvalidArgumentException,
+    InvalidStateException,
+    ItemFailure,
+    PartialFailure,
+)
 
 
 def unreferenced_axes(runtime, axes):
@@ -56,11 +61,6 @@ def command_position_axes(runtime, state, axes, positions, command_name, client=
         print(f"Ignored {command_name}: {message_text}", flush=True)
         raise InvalidStateException(command_name, "axis_disabled")
 
-    target_positions = list(state["target_positions"])
-    for axis_index in axes:
-        target_positions[axis_index] = float(positions[axis_index])
-    state["target_positions"] = target_positions
-
     pp_axes = [
         axis_index
         for axis_index in axes
@@ -83,6 +83,18 @@ def command_position_axes(runtime, state, axes, positions, command_name, client=
             f"modes={[state['motion_modes'][axis] for axis in non_position_axes]}",
             flush=True,
         )
+        if len(non_position_axes) == len(axes):
+            raise InvalidStateException(command_name, "non_position_mode")
+
+    position_axes = [
+        axis_index
+        for axis_index in axes
+        if state["motion_modes"][axis_index] in {"pp", "csp"}
+    ]
+    target_positions = list(state["target_positions"])
+    for axis_index in position_axes:
+        target_positions[axis_index] = float(positions[axis_index])
+    state["target_positions"] = target_positions
     try:
         if pp_axes:
             command_profile_positions(runtime, state["target_positions"], pp_axes)
@@ -90,7 +102,7 @@ def command_position_axes(runtime, state, axes, positions, command_name, client=
             command_csp_positions(runtime, state["target_positions"], csp_axes)
     except Exception as exc:
         actual = actual_positions(runtime)
-        for axis_index in axes:
+        for axis_index in position_axes:
             state["target_positions"][axis_index] = actual[axis_index]
             hold_axis_at_actual_position(runtime, state, axis_index)
         runtime.set_target_positions(state["target_positions"])
@@ -104,6 +116,22 @@ def command_position_axes(runtime, state, axes, positions, command_name, client=
             flush=True,
         )
         raise
+
+    if non_position_axes:
+        return PartialFailure(
+            succeeded=position_axes,
+            failed=[
+                ItemFailure(
+                    target=axis_index,
+                    exception=InvalidStateException(
+                        command_name,
+                        state["motion_modes"][axis_index],
+                    ),
+                )
+                for axis_index in non_position_axes
+            ],
+        )
+    return None
 
 
 def axis_velocities_from_message(message, runtime, state, command):
@@ -208,7 +236,7 @@ def move_absolute(message, runtime, state, client):
         )
         raise InvalidStateException(command, "axis_not_referenced")
 
-    command_position_axes(runtime, state, axes, positions, command, client)
+    return command_position_axes(runtime, state, axes, positions, command, client)
 
 
 def move_relative(message, runtime, state, client):
@@ -225,7 +253,7 @@ def move_relative(message, runtime, state, client):
             positions[axis_index],
             f"axis {axis_index} target_position",
         )
-    command_position_axes(runtime, state, axes, positions, command, client)
+    return command_position_axes(runtime, state, axes, positions, command, client)
 
 
 def move_velocity(message, runtime, state, client):

@@ -202,6 +202,19 @@ class EthercatParameterHandlerTest(unittest.TestCase):
 
         self.assertEqual(response["failure"]["code"], "TIMEOUT")
 
+    def test_integer_write_range_is_validated_before_backend_access(self):
+        with self.assertRaises(InvalidArgumentException):
+            _write_axis_parameter(
+                {
+                    "type": "system/axis/param_write",
+                    "axis": 0,
+                    "index": 0x1234,
+                    "data_type": "uint8",
+                    "value": 256,
+                },
+                runtime(),
+            )
+
     def test_unexpected_backend_error_is_not_reclassified_by_handler(self):
         active_runtime = runtime(axis_sdo=FakeSdo(ValueError("defect")))
 

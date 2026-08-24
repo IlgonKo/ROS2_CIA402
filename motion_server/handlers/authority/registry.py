@@ -86,7 +86,4 @@ def handle_authority(message_type, client, state):
 def _authority_data(payload):
     data = dict(payload)
     data.pop("type", None)
-    data.pop("ok", None)
-    if data.get("reason") is None:
-        data.pop("reason", None)
     return data

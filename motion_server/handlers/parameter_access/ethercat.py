@@ -1,5 +1,5 @@
 from motion_server.config import DEVICE_PROFILE
-from motion_server.api.decoder import public_command_name
+from motion_server.api.decoder import public_command_name, selected_single_axis
 from motion_server.api.validator import parse_int
 from motion_server.failure import (
     InvalidArgumentException,
@@ -31,6 +31,16 @@ SDO_WRITERS = {
     "uint32": "write_uint32",
     "udint": "write_uint32",
     "float32": "write_float32",
+}
+
+SDO_INTEGER_RANGES = {
+    "uint8": (0, 2 ** 8 - 1),
+    "int8": (-(2 ** 7), 2 ** 7 - 1),
+    "uint16": (0, 2 ** 16 - 1),
+    "int16": (-(2 ** 15), 2 ** 15 - 1),
+    "uint32": (0, 2 ** 32 - 1),
+    "udint": (0, 2 ** 32 - 1),
+    "int32": (-(2 ** 31), 2 ** 31 - 1),
 }
 
 
@@ -74,22 +84,6 @@ def parse_sdo_int(message, field, *, default=None):
             "must be an integer",
             public_value=message.get(field),
         ) from exception
-
-
-def selected_single_axis(message, runtime, command):
-    if "axes" in message:
-        axes = [parse_int(value) for value in message.get("axes", [])]
-    elif "axis" in message:
-        axes = [parse_int(message.get("axis"))]
-    else:
-        axes = list(range(len(runtime.slaves)))
-
-    if len(axes) != 1:
-        raise ValueError(f"{command} requires exactly one axis")
-    axis_index = axes[0]
-    if axis_index < 0 or axis_index >= len(runtime.slaves):
-        raise ValueError(f"{command} invalid axes: {[axis_index]}")
-    return axis_index
 
 
 def read_parameter(message, runtime, client):
@@ -252,6 +246,13 @@ def write_sdo_value(sdo, selector, index, subindex, data_type, raw_value):
             f"is invalid for {data_type}",
             public_value=raw_value,
         ) from exception
+    value_range = SDO_INTEGER_RANGES.get(data_type)
+    if value_range is not None and not value_range[0] <= value <= value_range[1]:
+        raise InvalidArgumentException(
+            "value",
+            f"is outside {data_type} range [{value_range[0]}, {value_range[1]}]",
+            public_value=value,
+        )
     getattr(sdo, writer_name)(selector, index, subindex, value)
     return value
 

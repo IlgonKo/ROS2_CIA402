@@ -7,7 +7,6 @@ from motion_server.diagnostic.serialization import diagnostic_status_snapshot
 def io_status_message(runtime, state, include_raw=False):
     return {
         "type": "system/io/status",
-        "ok": True,
         "drive_initialized": bool(state.get("drive_initialized", True)),
         "initialization_error": state.get("initialization_error", ""),
         "io_count": len(io_devices(runtime)),

@@ -25,5 +25,4 @@ def input_read_data(message, runtime):
         include_raw=bool(message.get("raw", False)),
     )
     response.pop("type", None)
-    response.pop("ok", None)
     return response

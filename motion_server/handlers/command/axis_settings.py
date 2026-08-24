@@ -38,6 +38,7 @@ def set_motion_limits(message, runtime, state, client):
     command = public_command_name(message)
     try:
         axes = selected_axes(message, runtime, command)
+        requested_limits = []
         for axis_index in axes:
             current_limits = list(state["motion_limits"][axis_index])
             positive_velocity_limit = axis_motion_api_to_drive(
@@ -109,19 +110,36 @@ def set_motion_limits(message, runtime, state, client):
                 ),
                 "deceleration",
             )
-            update_axis_motion_limits(
-                runtime,
-                state,
-                axis_index,
-                positive_velocity_limit,
-                negative_velocity_limit,
-                max_acceleration,
-                max_deceleration,
+            requested_limits.append(
+                (
+                    axis_index,
+                    positive_velocity_limit,
+                    negative_velocity_limit,
+                    max_acceleration,
+                    max_deceleration,
+                )
             )
     except (TypeError, ValueError, OverflowError) as exc:
         raise InvalidArgumentException(
             "motion_limits", "contains invalid values",
         ) from exc
+
+    for (
+        axis_index,
+        positive_velocity_limit,
+        negative_velocity_limit,
+        max_acceleration,
+        max_deceleration,
+    ) in requested_limits:
+        update_axis_motion_limits(
+            runtime,
+            state,
+            axis_index,
+            positive_velocity_limit,
+            negative_velocity_limit,
+            max_acceleration,
+            max_deceleration,
+        )
 
 
 def update_axis_motion_limits(
@@ -133,7 +151,7 @@ def update_axis_motion_limits(
     acceleration,
     deceleration,
 ):
-    state["motion_limits"][axis_index] = [
+    requested_limits = [
         positive_velocity_limit,
         negative_velocity_limit,
         acceleration,
@@ -142,8 +160,9 @@ def update_axis_motion_limits(
     api_axis_limits = motion_limits_drive_to_api(
         state,
         axis_index,
-        state["motion_limits"][axis_index],
+        requested_limits,
     )
+    write_axis_motion_limits(runtime, axis_index, requested_limits)
     runtime.set_axis_motion_limits(
         axis_index,
         max(abs(api_axis_limits[0]), abs(api_axis_limits[1])),
@@ -152,9 +171,9 @@ def update_axis_motion_limits(
         0.0,
     )
     runtime.slaves[axis_index].motion_server_motion_limits = list(
-        state["motion_limits"][axis_index]
+        requested_limits
     )
-    write_axis_motion_limits(runtime, axis_index, state["motion_limits"][axis_index])
+    state["motion_limits"][axis_index] = requested_limits
 
 
 def write_axis_motion_limits(runtime, axis_index, axis_limits):
@@ -172,6 +191,7 @@ def set_profile(message, runtime, state, client):
     command = public_command_name(message)
     try:
         axes = selected_axes(message, runtime, command)
+        requested_profiles = []
         for axis_index in axes:
             current_settings = list(state["profile_settings"][axis_index])
             is_pv_axis = state["motion_modes"][axis_index] == "pv"
@@ -235,33 +255,38 @@ def set_profile(message, runtime, state, client):
                         message.get("jerk"),
                     )
                 )
-            update_axis_profile_settings(
-                runtime,
-                state,
-                axis_index,
-                axis_motion_api_to_drive(state, axis_index, profile_velocity),
-                axis_motion_api_to_drive(
-                    state,
-                    axis_index,
-                    profile_acceleration,
-                    "acceleration",
-                ),
-                axis_motion_api_to_drive(
-                    state,
-                    axis_index,
-                    profile_deceleration,
-                    "deceleration",
-                ),
+            requested_profiles.append(
                 (
-                    axis_motion_api_to_drive(state, axis_index, profile_jerk, "jerk")
-                    if profile_jerk is not None
-                    else None
-                ),
+                    axis_index,
+                    axis_motion_api_to_drive(state, axis_index, profile_velocity),
+                    axis_motion_api_to_drive(
+                        state,
+                        axis_index,
+                        profile_acceleration,
+                        "acceleration",
+                    ),
+                    axis_motion_api_to_drive(
+                        state,
+                        axis_index,
+                        profile_deceleration,
+                        "deceleration",
+                    ),
+                    (
+                        axis_motion_api_to_drive(
+                            state, axis_index, profile_jerk, "jerk",
+                        )
+                        if profile_jerk is not None
+                        else None
+                    ),
+                )
             )
     except (TypeError, ValueError, OverflowError) as exc:
         raise InvalidArgumentException(
             "profile", "contains invalid values",
         ) from exc
+
+    for profile in requested_profiles:
+        update_axis_profile_settings(runtime, state, *profile)
 
     status_log(
         "Received axis/profile: "
@@ -280,14 +305,15 @@ def update_axis_profile_settings(
 ):
     current_jerk = state["profile_settings"][axis_index][3]
     is_pv_axis = state["motion_modes"][axis_index] == "pv"
-    state["profile_settings"][axis_index] = [
+    requested_settings = [
         profile_velocity,
         profile_acceleration,
         profile_deceleration,
         current_jerk if profile_jerk is None else profile_jerk,
     ]
+    checked_profile_velocity = None
     if not is_pv_axis and runtime.slaves[axis_index].rxpdo.has_field("profile_velocity"):
-        runtime.slaves[axis_index].rxpdo.profile_velocity = require_uint32(
+        checked_profile_velocity = require_uint32(
             profile_velocity,
             f"axis {axis_index} profile_velocity",
         )
@@ -314,12 +340,16 @@ def update_axis_profile_settings(
         )
     if profile_jerk is not None:
         DEVICE_PROFILE.write_profile_jerk(runtime, axis_index, profile_jerk)
+    if checked_profile_velocity is not None:
+        runtime.slaves[axis_index].rxpdo.profile_velocity = checked_profile_velocity
+    state["profile_settings"][axis_index] = requested_settings
 
 
 def set_software_position_limits(message, runtime, state, client):
     command = public_command_name(message)
     try:
         axes = selected_axes(message, runtime, command)
+        requested_limits = []
         for axis_index in axes:
             current_limits = list(state["software_position_limits"][axis_index])
             negative_limit_api = float(
@@ -364,35 +394,52 @@ def set_software_position_limits(message, runtime, state, client):
                     f"positive limit. axis={axis_index} "
                     f"negative={negative_limit} positive={positive_limit}"
                 )
-            DEVICE_PROFILE.write_software_position_limits(
-                runtime,
-                axis_index,
-                negative_limit,
-                positive_limit,
-            )
-            try:
-                readback_limits = DEVICE_PROFILE.read_software_position_limits(
-                    runtime,
+            requested_limits.append(
+                (
                     axis_index,
+                    negative_limit_api,
+                    positive_limit_api,
+                    negative_limit,
+                    positive_limit,
                 )
-            except Exception as exc:
-                readback_limits = [f"read failed: {exc}", f"read failed: {exc}"]
-            state["software_position_limits"][axis_index] = [
-                negative_limit,
-                positive_limit,
-            ]
-            status_log(
-                "Axis software position limits write: "
-                f"axis={axis_index} "
-                f"api=({negative_limit_api}, {positive_limit_api}) "
-                f"drive=({negative_limit}, {positive_limit}) "
-                f"readback={readback_limits} "
-                f"metadata={axis_metadata(state, axis_index)}",
             )
     except (TypeError, ValueError, OverflowError) as exc:
         raise InvalidArgumentException(
             "software_position_limits", "contains invalid values",
         ) from exc
+
+    for (
+        axis_index,
+        negative_limit_api,
+        positive_limit_api,
+        negative_limit,
+        positive_limit,
+    ) in requested_limits:
+        DEVICE_PROFILE.write_software_position_limits(
+            runtime,
+            axis_index,
+            negative_limit,
+            positive_limit,
+        )
+        try:
+            readback_limits = DEVICE_PROFILE.read_software_position_limits(
+                runtime,
+                axis_index,
+            )
+        except Exception as exc:
+            readback_limits = [f"read failed: {exc}", f"read failed: {exc}"]
+        state["software_position_limits"][axis_index] = [
+            negative_limit,
+            positive_limit,
+        ]
+        status_log(
+            "Axis software position limits write: "
+            f"axis={axis_index} "
+            f"api=({negative_limit_api}, {positive_limit_api}) "
+            f"drive=({negative_limit}, {positive_limit}) "
+            f"readback={readback_limits} "
+            f"metadata={axis_metadata(state, axis_index)}",
+        )
 
     status_log(
         "Received axis/software_position_limits: "

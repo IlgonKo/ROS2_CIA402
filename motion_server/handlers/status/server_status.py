@@ -4,7 +4,6 @@ from motion_server.diagnostic.serialization import diagnostic_status_snapshot
 def server_status_message(runtime, state):
     return {
         "type": "system/server/status",
-        "ok": True,
         "server_mode": state.get("server_mode", "basic"),
         "drive_initialized": bool(state.get("drive_initialized", True)),
         "initialization_error": state.get("initialization_error", ""),

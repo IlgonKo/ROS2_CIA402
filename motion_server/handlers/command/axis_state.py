@@ -29,6 +29,8 @@ from motion_server.config import (
 from motion_server.failure import (
     DeviceAccessException,
     InvalidArgumentException,
+    ItemFailure,
+    MotionServerException,
     OperationTimeoutException,
     PartialFailure,
     UnsupportedOperationException,
@@ -41,46 +43,11 @@ OPERATION_ENABLED_STATUS = 0x0027
 
 
 def request_axis_halt(runtime, axis_index):
-    slave = runtime.slaves[axis_index]
-    slave.rxpdo.controlword = int(slave.rxpdo.controlword) | HALT_BIT
-
-
-def stop_system(message, runtime, state):
-    mode = str(message.get("mode", "controlled")).strip().lower()
-    if mode != "controlled":
-        print(f"Ignored unsupported system/stop mode: {mode}", flush=True)
-        return
-
-    if state.get("homing", {}).get("active"):
-        finish_homing(runtime, state, "stopped", "Homing stopped by system/stop.")
-
-    state["trajectory"] = inactive_trajectory_state("system_stop")
-    positions = actual_positions(runtime)
-    state["target_positions"] = positions
-    runtime.set_target_positions(positions)
-    runtime.sync_trajectory_to_actual_positions()
-    enabled_axes = set(operation_enabled_axes(runtime, range(axis_count(runtime))))
-    for axis_index, motion_mode in enumerate(state["motion_modes"]):
-        if axis_index not in enabled_axes:
-            continue
-        if motion_mode == "pp":
-            request_axis_halt(runtime, axis_index)
-        elif motion_mode == "pv":
-            command_profile_velocities(
-                runtime,
-                state,
-                [axis_index],
-                [0.0],
-                "system/axes/stop",
-                None,
-            )
-        elif motion_mode == "csp":
-            request_axis_halt(runtime, axis_index)
-
-    status_log(
-        "Received system/stop: "
-        f"mode={mode} hold_positions={positions}",
-    )
+    try:
+        controlword = int(runtime.slaves[axis_index].rxpdo.controlword)
+    except (OSError, AttributeError, TypeError, ValueError) as exc:
+        raise DeviceAccessException("axis_controlword_read") from exc
+    set_axis_controlword(runtime, axis_index, controlword | HALT_BIT)
 
 
 def stop_axes(message, runtime, state, client):
@@ -89,39 +56,49 @@ def stop_axes(message, runtime, state, client):
     if reject_if_any_axis_disabled(runtime, axes, client, command):
         return
 
-    if state.get("homing", {}).get("active"):
-        finish_homing(runtime, state, "stopped", "Homing stopped by axis/stop.")
-
-    state["trajectory"] = inactive_trajectory_state("axis_stop")
     positions = list(state["target_positions"])
     actual = actual_positions(runtime)
-    for axis_index in axes:
-        positions[axis_index] = actual[axis_index]
-        hold_axis_at_actual_position(runtime, state, axis_index)
-
-    state["target_positions"] = positions
-    runtime.set_target_positions(positions)
-    runtime.sync_trajectory_to_actual_positions()
     enabled_axes = set(operation_enabled_axes(runtime, axes))
+    stopped_axes = []
+    failed = []
     for axis_index in axes:
         if axis_index not in enabled_axes:
             continue
         motion_mode = state["motion_modes"][axis_index]
-        if motion_mode == "pp":
-            request_axis_halt(runtime, axis_index)
-        elif motion_mode == "pv":
-            command_profile_velocities(
-                runtime,
-                state,
-                [axis_index],
-                [0.0],
-                command,
-                client,
-            )
-        elif motion_mode == "csp":
-            request_axis_halt(runtime, axis_index)
-        elif motion_mode == "jog":
-            runtime.slaves[axis_index].rxpdo.controlword = 0x000F
+        try:
+            if motion_mode == "pv":
+                command_profile_velocities(
+                    runtime,
+                    state,
+                    [axis_index],
+                    [0.0],
+                    command,
+                    client,
+                )
+            else:
+                request_axis_halt(runtime, axis_index)
+        except MotionServerException as exc:
+            failed.append(ItemFailure(axis_index, exc))
+            continue
+        positions[axis_index] = actual[axis_index]
+        stopped_axes.append(axis_index)
+
+    if stopped_axes:
+        state["target_positions"] = positions
+        runtime.set_target_positions(positions)
+        runtime.sync_trajectory_to_actual_positions()
+        if state.get("homing", {}).get("active"):
+            finish_homing(runtime, state, "stopped", "Homing stopped by axis/stop.")
+        state["trajectory"] = inactive_trajectory_state("axis_stop")
+    if failed:
+        if not stopped_axes:
+            raise failed[0].exception
+        return PartialFailure(stopped_axes, failed)
+    status_log(
+        "Received axis/stop: "
+        f"axes={axes} hold_positions={positions}",
+    )
+    return status_data(axes_status_message(runtime, state, client["id"]))
 
 
 def reset_faults(runtime, state, axis_indices=None):
@@ -264,20 +241,29 @@ def enable(message, runtime, state, client):
 def disable(message, runtime, state, client):
     command = public_command_name(message)
     axes = selected_axes(message, runtime, command)
-
-    trajectory = state.get("trajectory", {})
-    if trajectory.get("active") and set(axes) & set(trajectory.get("axes", [])):
-        state["trajectory"] = inactive_trajectory_state("axis_disable")
-
-    homing = state.get("homing", {})
-    if homing.get("active") and set(axes) & set(homing.get("axes", [])):
-        finish_homing(runtime, state, "stopped", "Homing stopped by axis/disable.")
+    actual = actual_positions(runtime)
 
     def disable_axis(axis_index):
-        hold_axis_at_actual_position(runtime, state, axis_index)
         set_axis_controlword(runtime, axis_index, 0x0007)
 
     result = collect_target_results(axes, disable_axis)
+    succeeded_axes = (
+        list(result.succeeded)
+        if isinstance(result, PartialFailure)
+        else list(axes)
+    )
+    if succeeded_axes:
+        positions = list(state["target_positions"])
+        for axis_index in succeeded_axes:
+            positions[axis_index] = actual[axis_index]
+        state["target_positions"] = positions
+        trajectory = state.get("trajectory", {})
+        if trajectory.get("active") and set(succeeded_axes) & set(trajectory.get("axes", [])):
+            state["trajectory"] = inactive_trajectory_state("axis_disable")
+
+        homing = state.get("homing", {})
+        if homing.get("active") and set(succeeded_axes) & set(homing.get("axes", [])):
+            finish_homing(runtime, state, "stopped", "Homing stopped by axis/disable.")
     runtime.set_target_positions(state["target_positions"])
     exchange(runtime, cycles=3)
     status_log(
@@ -309,38 +295,30 @@ def is_operation_enabled_controlword(controlword):
 
 
 def set_controlword(message, runtime, state):
+    command = public_command_name(message)
     try:
         controlword = int(str(message.get("controlword")), 0)
-    except (TypeError, ValueError):
-        print(f"Ignored invalid controlword: {message.get('controlword')}", flush=True)
-        return
+    except (TypeError, ValueError) as exc:
+        raise InvalidArgumentException(
+            "controlword", "must be an integer",
+        ) from exc
+    if controlword < 0 or controlword > 0xFFFF:
+        raise InvalidArgumentException(
+            "controlword",
+            "is outside uint16 range [0, 65535]",
+            public_value=controlword,
+        )
 
-    axis_value = message.get("axis", None)
-    if axis_value is None:
-        axis_indices = list(range(axis_count(runtime)))
-        for slave in runtime.slaves:
-            slave.rxpdo.controlword = controlword
-        target_text = "all axes"
-    else:
-        try:
-            axis_index = int(axis_value)
-        except (TypeError, ValueError):
-            print(f"Ignored controlword for invalid axis: {axis_value}", flush=True)
-            return
-
-        if axis_index < 0 or axis_index >= axis_count(runtime):
-            print(f"Ignored controlword for invalid axis: {axis_index}", flush=True)
-            return
-
-        axis_indices = [axis_index]
-        runtime.slaves[axis_index].rxpdo.controlword = controlword
-        target_text = f"axis {axis_index}"
+    axis_indices = selected_axes(message, runtime, command)
+    if len(axis_indices) != 1:
+        raise InvalidArgumentException("axis", "requires exactly one axis")
+    axis_index = axis_indices[0]
+    set_axis_controlword(runtime, axis_index, controlword)
 
     if not is_operation_enabled_controlword(controlword):
-        for axis_index in axis_indices:
-            hold_axis_at_actual_position(runtime, state, axis_index)
+        hold_axis_at_actual_position(runtime, state, axis_index)
         runtime.set_target_positions(state["target_positions"])
 
     status_log(
-        f"Manual controlword applied to {target_text}: 0x{controlword:04X}",
+        f"Manual controlword applied to axis {axis_index}: 0x{controlword:04X}",
     )

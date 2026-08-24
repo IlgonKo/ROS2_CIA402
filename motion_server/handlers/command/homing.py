@@ -20,8 +20,7 @@ from motion_server.control.axis_operations import (
 )
 from motion_server.api import parse_axis_indices
 from motion_server.api.encoder import status_data
-from motion_server.failure import InvalidArgumentException, InvalidStateException
-from motion_server.app.state import inactive_homing_state
+from motion_server.failure import InvalidStateException
 
 
 def homing_axis_status(runtime, axis_index):
@@ -96,21 +95,13 @@ def finish_homing(runtime, state, result, message):
 
 def start_homing(message, runtime, state, client):
     command = str(message.get("cmd", "system/axis/home")).strip()
-    try:
-        axis_indices = parse_axis_indices(message, runtime, command)
-    except (TypeError, ValueError) as exc:
-        state["homing"] = inactive_homing_state("rejected")
-        state["homing"]["message"] = str(exc)
-        print(f"Ignored {command}: {exc}", flush=True)
-        raise InvalidArgumentException("axis", "is invalid") from exc
+    axis_indices = parse_axis_indices(message, runtime, command)
     disabled_axes = disabled_operation_axes(runtime, axis_indices)
     if disabled_axes:
         message_text = (
             "Axis operation is disabled. "
             f"disabled_axes={disabled_axes}"
         )
-        state["homing"] = inactive_homing_state("rejected")
-        state["homing"]["message"] = message_text
         print(f"Ignored {command}: {message_text}", flush=True)
         raise InvalidStateException(command, "axis_disabled")
 

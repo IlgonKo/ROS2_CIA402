@@ -606,6 +606,9 @@ S11C 완료 증거:
 
 ### 2026-08-24 완료 후 전체 리뷰 보완
 
+- Motion Server 요청은 현재 ASCII JSON field와 숫자 값을 계약으로 사용하므로 TCP 수신 경계의
+  UTF-8 다중 byte 분할은 TD-005 보완 대상에서 제외했다. 비 ASCII 사용자 문자열을 공개 API에
+  추가할 때 transport decoding 정책을 다시 검토한다.
 - malformed JSON/UTF-8, JSON object가 아닌 payload와 command type 누락을 `INVALID_REQUEST`로
   처리하고 연결을 유지하도록 transport/router 경계를 보완했다.
 - command handler의 broad catch와 일반 `OperationException` 재분류를 제거하여 기존
@@ -613,4 +616,32 @@ S11C 완료 증거:
 - Axis enable/disable의 `PartialFailure`가 router까지 전달되도록 unreachable rejection을 제거했다.
 - PP handshake와 Axis restart disable timeout을 `OperationTimeoutException`으로 분류했다.
 - broad catch 정적 검사가 승인 함수뿐 아니라 함수별 catch 개수도 검증하도록 강화했다.
-- 신규 회귀 테스트 7개를 포함한 전체 unittest 156개와 source compile 검사가 통과했다.
+- Axis motion limit, profile과 software position limit handler의 입력 parsing/validation 범위와
+  runtime/OD 적용 범위를 분리했다. 실행 단계의 `TypeError`, `ValueError`, `OverflowError`는 더 이상
+  `InvalidArgumentException`으로 재분류하지 않는다.
+- PDO int32/uint32 변환은 비숫자 입력과 자료형 표현 범위 초과를 모두
+  `InvalidArgumentException`으로 분류한다. `LimitViolationException`은 설정된 위치·속도·가속도 등
+  운전 제한 위반에만 사용한다.
+- Trajectory 거부는 입력 형식·빈 points를 `InvalidArgumentException`, 존재하지 않는 Axis를
+  `ResourceNotFoundException`, fault/disabled 상태를 `InvalidStateException`, 설정 limit 초과를
+  `LimitViolationException`으로 구분한다.
+- broad catch 정적 검사는 단독 `Exception` 외에 bare catch, tuple, attribute와 `builtins` import alias도
+  탐지하고 함수별 승인 개수를 동일하게 적용한다.
+- 거부된 Trajectory 및 stop 요청은 기존 활성 Trajectory를 변경하지 않는다. 실제 stop command가
+  성공한 뒤에만 target position과 Trajectory 상태를 `stopped`로 갱신한다.
+- Axis motion limit과 profile은 OD/SDO 적용이 성공한 뒤 runtime cache와 공개 state를 갱신하여 장치
+  write 실패가 요청값을 적용된 설정처럼 노출하지 않게 한다.
+- Advanced `manualCW`는 controlword/Axis 검증 실패를 각각 `InvalidArgumentException`과
+  `ResourceNotFoundException`으로 반환하며 잘못된 명령을 빈 Success로 처리하지 않는다.
+- Axis parameter save는 공통 single-Axis selector를 사용하고, 거부된 Homing 요청은 기존 활성 Homing
+  상태를 변경하지 않는다.
+- 사용되지 않는 status 중간 helper와 `include_ok` 흔적을 제거하고 정적 금지 항목에 추가했다.
+- Position command는 PP/CSP가 아닌 Axis를 `InvalidStateException` 또는 대상별 `PartialFailure`로
+  처리하고, 실행하지 않은 Axis의 target state를 변경하지 않는다.
+- Axis stop/disable과 Jog start/stop은 실제 적용 성공 여부에 맞춰 활성 동작 상태와 이전 mode 복구
+  정보를 갱신한다. 미등록 `stop_system`과 command 모듈의 중복 Trajectory status helper를 제거했다.
+- EtherCAT typed SDO integer write는 backend packing 전에 자료형 범위를 검증하여 범위 오류를
+  `InvalidArgumentException`으로 반환한다.
+- status/authority producer의 legacy `ok: True` 생성과 후속 `pop()`을 제거하고 정적 금지 항목으로
+  회귀를 방지한다. broad catch 검사는 단순 대입 alias도 추적한다.
+- 신규 회귀 테스트 36개를 포함한 전체 unittest 185개와 source compile 검사가 통과했다.

@@ -6,7 +6,6 @@ from motion_server.control.trajectory_logging import (
     log_trajectory_debug,
     log_trajectory_snapshot,
 )
-from motion_server.handlers.status import axes_status_message
 from motion_server.control.axis_operations import (
     actual_positions,
     axis_count,
@@ -18,7 +17,6 @@ from motion_server.control.axis_operations import (
 )
 from motion_server.control.setpoint_output import command_csp_positions
 from motion_server.api import public_command_name
-from motion_server.api.encoder import status_data
 from motion_server.api.decoder import selected_axes
 from motion_server.app.state import inactive_trajectory_state
 from motion_server.control.trajectory_verifier import (
@@ -27,20 +25,22 @@ from motion_server.control.trajectory_verifier import (
     normalize_trajectory_points,
     validate_trajectory_limits,
 )
-from motion_server.failure import OperationException, UnsupportedOperationException
+from motion_server.failure import (
+    InvalidArgumentException,
+    InvalidStateException,
+    LimitViolationException,
+    ResourceNotFoundException,
+    UnsupportedOperationException,
+)
 
 
-def reject_trajectory(state, message, inactive_trajectory_state):
-    state["trajectory"] = inactive_trajectory_state("rejected")
-    state["trajectory"]["message"] = message
+def reject_trajectory(message, exception):
     print(f"Ignored trajectory/move: {message}", flush=True)
-    raise OperationException("system/axes/trajectory")
+    raise exception
 
-def fault_trajectory(state, message, inactive_trajectory_state):
-    state["trajectory"] = inactive_trajectory_state("fault")
-    state["trajectory"]["message"] = message
+def fault_trajectory(message, exception):
     print(f"Faulted trajectory/move: {message}", flush=True)
-    raise OperationException("system/axes/trajectory")
+    raise exception
 
 def same_trajectory_target(active_trajectory, axes, points, tolerance=1e-6):
     if not active_trajectory.get("active"):
@@ -64,8 +64,22 @@ def same_trajectory_target(active_trajectory, axes, points, tolerance=1e-6):
 
 
 def move_api(message, runtime, state, client):
+    command = public_command_name(message)
+    axes = selected_axes(message, runtime, command)
+    converted_message = dict(message)
+    converted_message["axes"] = axes
+    try:
+        converted_message = trajectory_message_api_to_drive(
+            converted_message,
+            state,
+        )
+    except (AttributeError, TypeError, ValueError, OverflowError) as exc:
+        raise InvalidArgumentException(
+            "points", "contains invalid trajectory values",
+        ) from exc
+
     move(
-        trajectory_message_api_to_drive(message, state),
+        converted_message,
         runtime,
         state,
         axis_count=axis_count,
@@ -73,7 +87,6 @@ def move_api(message, runtime, state, client):
         disabled_operation_axes=disabled_operation_axes,
         hold_faulted_axes=hold_faulted_axes,
         ensure_csp_mode=ensure_csp_mode,
-        inactive_trajectory_state=inactive_trajectory_state,
     )
     return {"trajectory": dict(state["trajectory"])}
 
@@ -88,46 +101,56 @@ def move(
     disabled_operation_axes,
     hold_faulted_axes,
     ensure_csp_mode,
-    inactive_trajectory_state,
 ):
-    raw_axes = message.get("axes", [])
-    axes = [int(axis) for axis in raw_axes] if raw_axes else list(range(axis_count(runtime)))
     try:
+        raw_axes = message.get("axes", [])
+        axes = (
+            [int(axis) for axis in raw_axes]
+            if raw_axes
+            else list(range(axis_count(runtime)))
+        )
         points = normalize_trajectory_points(message.get("points", []), axes)
-    except (TypeError, ValueError) as exc:
-        reject_trajectory(state, str(exc), inactive_trajectory_state)
-        return
+    except (AttributeError, TypeError, ValueError, OverflowError) as exc:
+        reject_trajectory(
+            str(exc),
+            InvalidArgumentException("trajectory", "contains invalid values"),
+        )
 
     if any(axis < 0 or axis >= axis_count(runtime) for axis in axes):
         reject_trajectory(
-            state,
             f"Invalid trajectory axes: {axes}",
-            inactive_trajectory_state,
+            ResourceNotFoundException(
+                "axis",
+                next(
+                    axis
+                    for axis in axes
+                    if axis < 0 or axis >= axis_count(runtime)
+                ),
+            ),
         )
-        return
     if not points:
         reject_trajectory(
-            state,
             "system/axes/trajectory requires at least one point",
-            inactive_trajectory_state,
+            InvalidArgumentException("points", "requires at least one point"),
         )
-        return
 
     faults = faulted_axes(runtime)
     if faults:
         hold_faulted_axes(runtime, state)
         runtime.sync_trajectory_to_actual_positions()
-        reject_trajectory(state, f"faulted_axes={faults}", inactive_trajectory_state)
-        return
+        reject_trajectory(
+            f"faulted_axes={faults}",
+            InvalidStateException("system/axes/trajectory", "axis_fault"),
+        )
 
     disabled_axes = disabled_operation_axes(runtime, axes)
     if disabled_axes:
         reject_trajectory(
-            state,
             f"operation disabled axes={disabled_axes}",
-            inactive_trajectory_state,
+            InvalidStateException(
+                "system/axes/trajectory", "axis_operation_disabled",
+            ),
         )
-        return
 
     ensure_csp_mode(runtime, state, axes)
     log_trajectory_debug(
@@ -175,8 +198,10 @@ def move(
 
     validation_error = validate_trajectory_limits(runtime, axes, points)
     if validation_error:
-        fault_trajectory(state, validation_error, inactive_trajectory_state)
-        return
+        fault_trajectory(
+            validation_error,
+            LimitViolationException("trajectory", validation_error),
+        )
 
     log_trajectory_snapshot("start_request", runtime, state, axes, points)
 
@@ -226,40 +251,24 @@ def stop(message, runtime, state, client):
     command = public_command_name(message)
     mode = str(message.get("mode", "controlled")).strip().lower()
     if mode != "controlled":
-        state["trajectory"] = inactive_trajectory_state("stop_rejected")
-        state["trajectory"]["message"] = f"Unsupported stop mode: {mode}"
         print(f"Ignored unsupported trajectory/stop mode: {mode}", flush=True)
         raise UnsupportedOperationException(command, f"stop_mode:{mode}")
 
-    state["trajectory"] = inactive_trajectory_state("stopped")
-    try:
-        axes = selected_axes(message, runtime, command)
-    except Exception as exc:
-        state["trajectory"] = inactive_trajectory_state("stop_rejected")
-        state["trajectory"]["message"] = str(exc)
-        print(f"Ignored {command}: {exc}", flush=True)
-        raise
-    if reject_if_any_axis_disabled(runtime, axes, client, command):
-        state["trajectory"] = inactive_trajectory_state("stop_rejected")
-        state["trajectory"]["message"] = "Axis operation is disabled."
-        return
+    axes = selected_axes(message, runtime, command)
+    reject_if_any_axis_disabled(runtime, axes, client, command)
 
     ensure_csp_mode(runtime, state, axes)
     positions = actual_positions(runtime)
-    state["target_positions"] = positions
     runtime.set_target_positions(positions)
     runtime.sync_trajectory_to_actual_positions()
     command_csp_positions(runtime, positions, axes)
+    state["target_positions"] = positions
+    state["trajectory"] = inactive_trajectory_state("stopped")
     print(
         "Received trajectory/stop: "
         f"mode={mode} hold_positions={positions}",
         flush=True,
     )
-
-
-def status(message, runtime, state, client):
-    return status_data(axes_status_message(runtime, state, client["id"]))
-
 
 def update_active(runtime, state):
     trajectory = state.get("trajectory", {})

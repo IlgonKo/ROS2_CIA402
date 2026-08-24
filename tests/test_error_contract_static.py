@@ -57,7 +57,6 @@ APPROVED_BROAD_CATCHES = {
     "motion_server/device_manager/axis_diagnostics.py::diagnostics_summary",
     "motion_server/handlers/command/axis_settings.py::set_software_position_limits",
     "motion_server/handlers/command/motion.py::command_position_axes",
-    "motion_server/handlers/command/trajectory.py::stop",
     "motion_server/server.py::run_main_once",
     "ros/bridge.py::connection_loop",
     "ros/control_panel.py::follow_joint_action_ready",
@@ -83,6 +82,42 @@ def owner_name(node, parents):
     return "<module>"
 
 
+def broad_exception_names(tree):
+    names = {"Exception", "BaseException"}
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.ImportFrom) or node.module != "builtins":
+            continue
+        for imported_name in node.names:
+            if imported_name.name in {"Exception", "BaseException"}:
+                names.add(imported_name.asname or imported_name.name)
+    changed = True
+    while changed:
+        changed = False
+        for node in ast.walk(tree):
+            if not isinstance(node, ast.Assign) or not isinstance(node.value, ast.Name):
+                continue
+            if node.value.id not in names:
+                continue
+            for target in node.targets:
+                if isinstance(target, ast.Name) and target.id not in names:
+                    names.add(target.id)
+                    changed = True
+    return names
+
+
+def is_broad_exception_type(node, names=None):
+    names = names or {"Exception", "BaseException"}
+    if node is None:
+        return True
+    if isinstance(node, ast.Name):
+        return node.id in names
+    if isinstance(node, ast.Attribute):
+        return node.attr in {"Exception", "BaseException"}
+    if isinstance(node, ast.Tuple):
+        return any(is_broad_exception_type(item, names) for item in node.elts)
+    return False
+
+
 def broad_catch_locations():
     locations = Counter()
     for path in source_files():
@@ -93,18 +128,46 @@ def broad_catch_locations():
             for child in ast.iter_child_nodes(parent)
         }
         relative = path.relative_to(REPOSITORY_ROOT).as_posix()
+        names = broad_exception_names(tree)
         for node in ast.walk(tree):
             if not isinstance(node, ast.ExceptHandler):
                 continue
-            if not isinstance(node.type, ast.Name):
-                continue
-            if node.type.id not in {"Exception", "BaseException"}:
+            if not is_broad_exception_type(node.type, names):
                 continue
             locations[f"{relative}::{owner_name(node, parents)}"] += 1
     return locations
 
 
 class ErrorContractStaticTest(unittest.TestCase):
+    def test_broad_catch_detector_includes_bare_tuple_and_attribute_forms(self):
+        source = """
+from builtins import Exception as RootException
+AssignedException = RootException
+try: pass
+except: pass
+try: pass
+except (ValueError, Exception): pass
+try: pass
+except builtins.BaseException: pass
+try: pass
+except RootException: pass
+try: pass
+except AssignedException: pass
+try: pass
+except ValueError: pass
+"""
+        tree = ast.parse(source)
+        handlers = [
+            node
+            for node in ast.walk(tree)
+            if isinstance(node, ast.ExceptHandler)
+        ]
+        names = broad_exception_names(tree)
+        self.assertEqual(
+            [is_broad_exception_type(handler.type, names) for handler in handlers],
+            [True, True, True, True, True, False],
+        )
+
     def test_broad_catches_match_approved_function_allowlist(self):
         actual = broad_catch_locations()
         expected = Counter({location: 1 for location in APPROVED_BROAD_CATCHES})
@@ -128,6 +191,8 @@ class ErrorContractStaticTest(unittest.TestCase):
             "_operation_result",
             "reject_command_message",
             "raise_operation_rejected",
+            "send_status_operation",
+            '"ok": True',
             "TECH_DEBT[TD-005]",
         )
         source = "\n".join(

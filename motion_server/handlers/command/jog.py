@@ -36,9 +36,10 @@ def start_jog(message, runtime, state, client):
     try:
         require_pdo_fields_for_mode(runtime, "jog", axis_index)
         if state["motion_modes"][axis_index] != "jog":
-            state["jog_previous_modes"][axis_index] = state["motion_modes"][axis_index]
+            previous_mode = state["motion_modes"][axis_index]
             hold_axis_at_actual_position(runtime, state, axis_index)
             configure_motion_mode(runtime, "jog", axis_index)
+            state["jog_previous_modes"][axis_index] = previous_mode
             state["motion_modes"][axis_index] = "jog"
             update_motion_mode_summary(state)
     except (OSError, AttributeError, TypeError, ValueError) as exc:
@@ -87,8 +88,7 @@ def stop_jog(message, runtime, state, client):
         update_motion_mode_summary(state)
     except (OSError, AttributeError, TypeError, ValueError) as exc:
         raise DeviceAccessException("jog_mode_restore") from exc
-    finally:
-        state["jog_previous_modes"][axis_index] = None
+    state["jog_previous_modes"][axis_index] = None
 
     status_log(
         "Received axis/jog_stop: "
