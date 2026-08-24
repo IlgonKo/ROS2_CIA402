@@ -336,6 +336,24 @@ Device Profile + ESI
 - 영향: TD-005-S08C2는 구현 없이 조사와 범위 확정으로 완료한다. 선택형 TxPDO 기반 station 진단과
   module 상세정보는 Optional Item `RF-012`에서 별도로 설계·검증한다.
 
+## DEC-021 공통 Configuration 문법과 단일 Bus Model 사용
+
+- 상태: `accepted`
+- 결정일: 2026-08-24
+- 결정:
+  - 프로젝트 공통 설정과 장치별 설정은 동일한 file parser 문법을 사용한다.
+  - 프로젝트 공통 설정은 실행 경로별로 다시 해석하지 않고 공통 loader가 읽는다.
+  - Bus는 공통 parser가 `BusConfig`와 `BusDevice`로 한 번 해석하며 Motion Server와
+    packaging은 같은 model을 사용한다.
+  - 공통 loader는 Bus에 포함된 profile의 장치 설정 파일만 추가로 읽고, 장치 코드는
+    독자적인 file parser를 갖지 않는다.
+- 이유: continuation, indexed entry와 axis/I/O 혼합 Bus를 실행 경로마다 다르게
+  해석하거나 새 장치 추가 시 여러 parser를 함께 수정하는 문제를 제거해야 한다.
+- 검토한 대안: 장치와 실행 경로별 parser를 유지하고 fixture만 공유하는 방식은 parser
+  구현이 다시 달라질 가능성을 제거하지 못하므로 채택하지 않는다.
+- 영향: 설정 우선순위는 장치 기본값, 프로젝트 공통 설정, 프로세스 환경 변수 순으로
+  적용한다. ROS의 공통 model 연동 및 ROS 전용 설정 분리는 RF-008에서 후속 처리한다.
+
 ## 새 결정 작성 양식
 
 ```text

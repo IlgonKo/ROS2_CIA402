@@ -1,7 +1,7 @@
 import os
 from dataclasses import dataclass
 
-from config_file import split_indexed_config_list
+from configuration import split_indexed_config_list
 from device.cpx_ap_i_ec.module_resolver import (
     layout_with_esi_pdo_sizes,
     validate_layout_against_esi,

@@ -2,16 +2,8 @@ import argparse
 import os
 from pathlib import Path
 
-from config_file import read_key_value_config, split_config_list
+from configuration import active_configuration, load_configuration, parse_bus_config
 from device import available_device_names, get_device_profile
-
-
-def load_env_defaults(env_path, override=False):
-    for key, value in read_key_value_config(env_path).items():
-        if override:
-            os.environ[key] = value
-        else:
-            os.environ.setdefault(key, value)
 
 
 def env_value(name, default=""):
@@ -34,74 +26,34 @@ def env_int(name, default):
 
 
 def bus_env_value():
-    return env_value("MOTION_SERVER_BUS", "cmmt")
-
-
-def device_config_root_env_value():
-    return env_value("MOTION_SERVER_DEVICE_CONFIG_ROOT", "device")
-
-
-def bus_profile_names(raw_bus):
-    profiles = []
-    for raw_entry in split_config_list(raw_bus, strip_index_labels=True):
-        entry = raw_entry.strip().lower()
-        if not entry:
-            continue
-        if ":" in entry:
-            parts = [part.strip() for part in entry.split(":")]
-            entry = parts[1].replace("-", "_") if len(parts) > 1 else ""
-        if entry and entry not in profiles:
-            profiles.append(entry)
-    return profiles
-
-
-def device_config_profile_name(profile_name):
-    profile_name = str(profile_name or "").strip().lower().replace("-", "_")
-    if profile_name in {"cmmt_as", "cmmt_st"}:
-        return "cmmt"
-    return profile_name
-
-
-def load_bus_device_env_defaults(project_root):
-    config_root = Path(device_config_root_env_value())
-    if not config_root.is_absolute():
-        config_root = project_root / config_root
-
-    for profile_name in bus_profile_names(bus_env_value()):
-        device_env_path = (
-            config_root / device_config_profile_name(profile_name) / ".env"
-        )
-        load_env_defaults(device_env_path)
+    return env_value("MOTION_SERVER_BUS", "cmmt_as")
 
 
 def load_project_env_defaults():
+    model = active_configuration()
+    if model is not None:
+        for key, value in model.values.items():
+            os.environ[key] = str(value)
+        return model
+
     project_root = Path(
         env_value(
             "MOTION_SERVER_PROJECT_ROOT",
             Path(__file__).resolve().parents[1],
         )
     ).resolve()
-    load_env_defaults(project_root / ".env")
-    load_bus_device_env_defaults(project_root)
-
-    backend = env_value(
-        "MOTION_SERVER_BACKEND",
-        "pysoem",
-    ).strip().lower()
-    if backend == "mock":
-        virtual_env_file = os.environ.get(
-            "VIRTUAL_SERVO_DRIVE_ENV_FILE",
-            "device/virtual_servo_drive/.env",
-        )
-        virtual_env_path = Path(virtual_env_file)
-        if not virtual_env_path.is_absolute():
-            virtual_env_path = project_root / virtual_env_path
-        load_env_defaults(virtual_env_path, override=True)
+    model = load_configuration(
+        project_root,
+        available_profiles=available_device_names(),
+    )
+    for key, value in model.values.items():
+        os.environ[key] = str(value)
+    return model
 
 
 # TECH_DEBT[TD-014]: Configuration loading currently mutates os.environ at
 # import time. Replace this with an explicit configuration object.
-load_project_env_defaults()
+CONFIGURATION_MODEL = load_project_env_defaults()
 
 
 MOTION_SERVER_MODES = ("basic", "advanced")
@@ -486,87 +438,22 @@ def parse_args(argv=None):
         ).lower(),
     )
     args = parser.parse_args(argv)
-    bus_config = parse_bus_config(args.bus)
-    args.device_profile_names = bus_config["device_profile_names"]
-    args.axis_slave_indices = bus_config["axis_slave_indices"]
-    args.io_devices = bus_config["io_devices"]
+    if args.bus == CONFIGURATION_MODEL.value("MOTION_SERVER_BUS", "cmmt_as"):
+        bus_config = CONFIGURATION_MODEL.bus
+    else:
+        bus_config = parse_bus_config(
+            args.bus,
+            available_profiles=available_device_names(),
+        )
+    args.device_profile_names = bus_config.device_profile_names
+    args.axis_slave_indices = bus_config.axis_slave_indices
+    args.io_devices = bus_config.io_devices
     args.axis_count = len(args.axis_slave_indices)
     if args.axis_count < 1:
         parser.error("--bus must contain at least one motion axis")
     if args.csp_profile == "quintic" and args.jerk <= 0.0:
         parser.error("--csp-profile quintic requires --jerk > 0")
     return args
-
-
-def parse_bus_config(raw_bus):
-    raw_bus = str(raw_bus or "").strip()
-    if not raw_bus:
-        raise ValueError("MOTION_SERVER_BUS must not be empty")
-
-    available = set(available_device_names())
-    device_profile_names = []
-    axis_slave_indices = []
-    io_devices = []
-
-    for raw_entry in split_config_list(raw_bus, strip_index_labels=True):
-        entry = raw_entry.strip().lower()
-        if not entry:
-            continue
-
-        role = "axis"
-        profile_name = entry
-        logical_id = None
-        if ":" in entry:
-            parts = [part.strip() for part in entry.split(":")]
-            role = parts[0]
-            profile_name = parts[1].replace("-", "_") if len(parts) > 1 else ""
-            logical_id = parts[2] if len(parts) > 2 else None
-        else:
-            profile_name = profile_name.replace("-", "_")
-
-        if role in {"axis", "drive"}:
-            is_motion_axis = True
-        elif role in {"io", "device", "slave"}:
-            is_motion_axis = False
-        else:
-            raise ValueError(
-                f"Unsupported MOTION_SERVER_BUS role {role!r}; "
-                "use axis:<profile> or io:<profile>:<id>"
-            )
-
-        if is_motion_axis and profile_name == "cmmt":
-            raise ValueError(
-                "MOTION_SERVER_BUS must specify the detailed CMMT profile. "
-                "Use cmmt_as or cmmt_st instead of cmmt."
-            )
-
-        if profile_name not in available:
-            raise ValueError(
-                f"Unsupported MOTION_SERVER_BUS profile {profile_name!r}. "
-                f"Supported profiles: {', '.join(available_device_names())}"
-            )
-
-        slave_index = len(device_profile_names)
-        device_profile_names.append(profile_name)
-        if is_motion_axis:
-            axis_slave_indices.append(slave_index)
-        else:
-            if not logical_id:
-                logical_id = f"io{len(io_devices)}"
-            io_devices.append({
-                "id": logical_id,
-                "profile": profile_name,
-                "slave_index": slave_index,
-            })
-
-    if not device_profile_names:
-        raise ValueError("MOTION_SERVER_BUS does not contain any devices")
-
-    return {
-        "device_profile_names": device_profile_names,
-        "axis_slave_indices": axis_slave_indices,
-        "io_devices": io_devices,
-    }
 
 
 def required_rxpdo_fields_for_mode(mode_name, csp_velocity_offset_enabled=False):

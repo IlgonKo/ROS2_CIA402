@@ -1,12 +1,9 @@
 import os
 from pathlib import Path
-import re
 import sys
 
-from config_file import read_key_value_config
-
-
-INDEXED_LIST_ITEM_RE = re.compile(r"^\s*\d+\s*:\s*(.+)$")
+from configuration import load_configuration, set_active_configuration
+from device import available_device_names
 
 
 def app_root():
@@ -15,73 +12,20 @@ def app_root():
     return Path(__file__).resolve().parents[1]
 
 
-def read_config_file(path):
-    return read_key_value_config(path)
-
-
-def read_config(root, filename="config.txt"):
-    root = Path(root)
-    return read_config_file(root / filename)
-
-
-def resolve_config_file(root, raw_path, default_path):
-    root = Path(root)
-    path = Path(raw_path or default_path)
-    if not path.is_absolute():
-        path = root / path
-    return path
-
-
 def load_axis_env(root):
     root = Path(root)
-    values = read_config(root)
-    backend = values.get("MOTION_SERVER_BACKEND", "pysoem").strip().lower()
-
-    if backend == "mock":
-        default_virtual_env = "device/virtual_servo_drive/config.txt"
-        virtual_env_file = values.get(
-            "VIRTUAL_SERVO_DRIVE_ENV_FILE",
-            default_virtual_env,
-        )
-        virtual_env_path = resolve_config_file(
-            root,
-            virtual_env_file,
-            default_virtual_env,
-        )
-        values.update(read_config_file(virtual_env_path))
-
-    device_config_root = values.get("MOTION_SERVER_DEVICE_CONFIG_ROOT", "device")
-    device_config_root_path = Path(device_config_root)
-    if not device_config_root_path.is_absolute():
-        device_config_root_path = root / device_config_root_path
-    bus = values.get("MOTION_SERVER_BUS", "cmmt_as")
-    loaded_profiles = set()
-    for raw_entry in bus.split(","):
-        entry = strip_index_label(raw_entry).strip().lower()
-        if not entry:
-            continue
-        profile = entry.split(":")[1].strip() if ":" in entry else entry
-        profile = profile.replace("-", "_")
-        if profile in {"cmmt_as", "cmmt_st"}:
-            profile = "cmmt"
-        if profile in loaded_profiles:
-            continue
-        loaded_profiles.add(profile)
-        device_config_path = device_config_root_path / profile / "config.txt"
-        values.update(read_config_file(device_config_path))
-
-    for key, value in values.items():
+    model = load_configuration(
+        root,
+        project_filename="config.txt",
+        device_filename="config.txt",
+        available_profiles=available_device_names(),
+    )
+    set_active_configuration(model)
+    for key, value in model.values.items():
         os.environ[key] = str(value)
 
     os.environ.setdefault("MOTION_SERVER_PROJECT_ROOT", str(root))
-    return values
-
-
-def strip_index_label(item):
-    match = INDEXED_LIST_ITEM_RE.match(str(item or ""))
-    if match:
-        return match.group(1).strip()
-    return str(item or "").strip()
+    return dict(model.values)
 
 
 def add_windows_npcap_dll_paths():

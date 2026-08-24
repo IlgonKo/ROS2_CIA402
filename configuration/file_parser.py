@@ -74,11 +74,11 @@ def split_indexed_config_list(value, default_start=1):
         match = INDEXED_LIST_ITEM_WITH_INDEX_RE.match(item)
         if match:
             index = int(match.group(1))
-            value = match.group(2).strip()
+            item_value = match.group(2).strip()
         else:
             index = next_index
-            value = item
-        items.append((index, value))
+            item_value = item
+        items.append((index, item_value))
         next_index = index + 1
     return items
 

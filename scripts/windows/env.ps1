@@ -1,57 +1,8 @@
-function Read-DotEnvFile {
-    param(
-        [Parameter(Mandatory = $true)]
-        [string]$Path
-    )
-
-    $values = [ordered]@{}
-    if (-not (Test-Path -LiteralPath $Path)) {
-        return $values
-    }
-
-    $pending = ""
-    foreach ($line in Get-Content -LiteralPath $Path) {
-        $trimmed = $line.Trim()
-        if ($pending.Length -eq 0 -and ($trimmed.Length -eq 0 -or $trimmed.StartsWith("#"))) {
-            continue
-        }
-
-        $continued = $trimmed.EndsWith("\")
-        if ($continued) {
-            $trimmed = $trimmed.Substring(0, $trimmed.Length - 1).Trim()
-        }
-
-        $pending = "$pending$trimmed"
-        if ($continued) {
-            continue
-        }
-
-        $trimmed = $pending
-        $pending = ""
-        if ($trimmed.Length -eq 0 -or $trimmed.StartsWith("#") -or -not $trimmed.Contains("=")) {
-            continue
-        }
-
-        $parts = $trimmed.Split("=", 2)
-        $key = $parts[0].Trim()
-        $value = $parts[1].Trim().Trim('"').Trim("'")
-        $values[$key] = $value
-    }
-
-    if ($pending.Length -gt 0 -and $pending.Contains("=")) {
-        $parts = $pending.Split("=", 2)
-        $key = $parts[0].Trim()
-        $value = $parts[1].Trim().Trim('"').Trim("'")
-        $values[$key] = $value
-    }
-
-    return $values
-}
-
 function Import-AxisServerEnv {
     param(
         [Parameter(Mandatory = $true)]
-        [string]$ProjectRoot
+        [string]$ProjectRoot,
+        [string]$Python = "python"
     )
 
     $baseEnvPath = Join-Path $ProjectRoot ".env"
@@ -59,69 +10,15 @@ function Import-AxisServerEnv {
         throw "Missing $baseEnvPath. Create it from .env.example first."
     }
 
+    $json = & $Python -m configuration --project-root $ProjectRoot --format json
+    if ($LASTEXITCODE -ne 0) {
+        throw "Failed to load Motion Server configuration."
+    }
+
+    $parsed = $json | ConvertFrom-Json
     $merged = [ordered]@{}
-    foreach ($entry in (Read-DotEnvFile -Path $baseEnvPath).GetEnumerator()) {
-        $merged[$entry.Key] = $entry.Value
-    }
-
-    $deviceConfigRoot = $merged["MOTION_SERVER_DEVICE_CONFIG_ROOT"]
-    if ([string]::IsNullOrWhiteSpace($deviceConfigRoot)) {
-        $deviceConfigRoot = "device"
-    }
-    if (-not [System.IO.Path]::IsPathRooted($deviceConfigRoot)) {
-        $deviceConfigRoot = Join-Path $ProjectRoot $deviceConfigRoot
-    }
-    $bus = $merged["MOTION_SERVER_BUS"]
-    if ([string]::IsNullOrWhiteSpace($bus)) {
-        $bus = "cmmt_as"
-    }
-    $loadedProfiles = @{}
-    foreach ($busEntry in @($bus.Split(","))) {
-        $entry = $busEntry.Trim().ToLowerInvariant()
-        if ([string]::IsNullOrWhiteSpace($entry)) {
-            continue
-        }
-        if ($entry -match '^\d+\s*:\s*(.+)$') {
-            $entry = $Matches[1].Trim()
-        }
-        $profile = $entry
-        if ($entry.Contains(":")) {
-            $profile = $entry.Split(":")[1].Trim()
-        }
-        $profile = $profile.Replace("-", "_")
-        if (($profile -eq "cmmt_as") -or ($profile -eq "cmmt_st")) {
-            $profile = "cmmt"
-        }
-        if ($loadedProfiles.ContainsKey($profile)) {
-            continue
-        }
-        $loadedProfiles[$profile] = $true
-        $deviceEnvFile = Join-Path (Join-Path $deviceConfigRoot $profile) ".env"
-        if (Test-Path -LiteralPath $deviceEnvFile) {
-            foreach ($entry in (Read-DotEnvFile -Path $deviceEnvFile).GetEnumerator()) {
-                $merged[$entry.Key] = $entry.Value
-            }
-        } else {
-            Write-Warning "Device env file not found: $deviceEnvFile"
-        }
-    }
-
-    $backend = $merged["MOTION_SERVER_BACKEND"]
-    if ($backend -eq "mock") {
-        $virtualEnvFile = $merged["VIRTUAL_SERVO_DRIVE_ENV_FILE"]
-        if ([string]::IsNullOrWhiteSpace($virtualEnvFile)) {
-            $virtualEnvFile = "device/virtual_servo_drive/.env"
-        }
-        if (-not [System.IO.Path]::IsPathRooted($virtualEnvFile)) {
-            $virtualEnvFile = Join-Path $ProjectRoot $virtualEnvFile
-        }
-        if (Test-Path -LiteralPath $virtualEnvFile) {
-            foreach ($entry in (Read-DotEnvFile -Path $virtualEnvFile).GetEnumerator()) {
-                $merged[$entry.Key] = $entry.Value
-            }
-        } else {
-            Write-Warning "Virtual servo drive env file not found: $virtualEnvFile"
-        }
+    foreach ($property in $parsed.PSObject.Properties) {
+        $merged[$property.Name] = [string]$property.Value
     }
 
     foreach ($entry in $merged.GetEnumerator()) {
@@ -129,6 +26,25 @@ function Import-AxisServerEnv {
     }
 
     return $merged
+}
+
+function Read-DotEnvFile {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$Path,
+        [string]$Python = "python"
+    )
+
+    $json = & $Python -m configuration --file $Path --format json
+    if ($LASTEXITCODE -ne 0) {
+        throw "Failed to read configuration file: $Path"
+    }
+    $parsed = $json | ConvertFrom-Json
+    $values = [ordered]@{}
+    foreach ($property in $parsed.PSObject.Properties) {
+        $values[$property.Name] = [string]$property.Value
+    }
+    return $values
 }
 
 function Get-AxisServerEnvValue {

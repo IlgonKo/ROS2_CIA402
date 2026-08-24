@@ -9,7 +9,7 @@ param(
 
 $ProjectRoot = Resolve-Path (Join-Path $PSScriptRoot "..\..")
 . (Join-Path $PSScriptRoot "env.ps1")
-$AxisEnv = Import-AxisServerEnv -ProjectRoot $ProjectRoot
+$AxisEnv = Import-AxisServerEnv -ProjectRoot $ProjectRoot -Python $Python
 
 if ([string]::IsNullOrWhiteSpace($Interface)) {
     $Interface = Get-AxisServerEnvValue -EnvValues $AxisEnv -Name "PYSOEM_INTERFACE" -Default "\Device\NPF_{906A65C9-C606-4B1F-8384-2625829A4D18}"

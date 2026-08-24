@@ -211,12 +211,13 @@ Tech Debt 상태 값은 `open`, `in_progress`, `complete`를 사용한다.
 
 ### TD-006 설정 로더와 Bus Parser 중복
 
-- 상태: `open`
+- 상태: `complete`
 - 우선순위: 보통
 - 요약: 모든 실행 경로가 공통 설정 loader와 동일한 bus model을 사용하게 한다.
 - 완료 조건:
-  - Motion Server, ROS, packaging과 panel이 공통 parser를 사용한다.
-  - continuation, indexed entry와 `axis:`/`io:` bus 형식의 해석 결과가 모든 경로에서 같다.
+  - Motion Server와 packaging이 공통 parser 및 bus model을 사용한다.
+  - ROS의 독자적인 프로젝트 설정 및 bus parser가 제거되고, 공통 model 연동은 후속 작업으로 분리된다.
+  - continuation, indexed entry와 `axis:`/`io:` bus 형식의 해석 결과가 적용 경로에서 같다.
   - 중복 `.env`/bus parser가 제거된다.
   - 정상·오류 설정 fixture 기반 자동 테스트가 통과한다.
 - 상세: [TD-006 기술 명세](tasks/td/TD-006-config-loader.md)

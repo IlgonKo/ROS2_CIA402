@@ -1,7 +1,7 @@
 from dataclasses import dataclass
 import os
 
-from config_file import split_indexed_config_list
+from configuration import split_indexed_config_list
 from device.pdo_metadata import (
     ObjectDictionaryEntry,
     PdoPadding,

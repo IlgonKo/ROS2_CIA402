@@ -14,6 +14,10 @@ ROS Bridge, ROS Control Panel과 Docker 구성을 최신 Motion Server 계약에
 - command namespace, authority, feedback와 axis/I/O status 변경을 반영한다.
 - Motion Server mm/deg와 ROS SI unit 사이의 변환 경계를 확정한다.
 - ROS Docker, Control Panel과 Bridge connection 설정을 공통 configuration model에 맞춘다.
+- 축 구성과 bus 정보는 Motion Server 공통 configuration model을 사용하고, ROS에만
+  필요한 이름·topic·action 설정은 별도 ROS 설정 파일로 분리한다.
+- TD-006에서 남긴 임시 기본 축 이름을 제거하고 실제 서버 구성과 ROS 축 구성을
+  일치시키는 시작 절차를 확정한다.
 - trajectory action/topic behavior와 error propagation을 최신 API에 맞춘다.
 
 ## 검증 계획

@@ -3,7 +3,7 @@
 import os
 from pathlib import Path
 
-from config_file import read_key_value_config
+from configuration import read_key_value_config
 
 
 PANEL_CONFIG_ROOT = Path(

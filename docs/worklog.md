@@ -4,6 +4,23 @@
 날짜는 기본적으로 Git commit 날짜를 기준으로 정리했고, 아직 commit되지 않은 작업은 현재 작업일 기준으로 별도 기록한다.
 미완료 기능과 기술 부채는 [Remaining Tasks](remaining_tasks.md)에서 별도로 관리한다.
 
+## 2026-08-24
+
+### 완료
+
+- `TD-006`에서 file parser, environment overlay와 typed Bus model을
+  `configuration` package로 분리했다.
+- Motion Server와 Windows packaging이 동일한 `ConfigurationModel` 및 `BusConfig`를
+  사용하고, Bus에 포함된 profile의 장치 설정만 공통 parser로 로드하도록 통일했다.
+- Linux Compose, Windows PowerShell과 CMMT sync probe의 독자 parser도 제거하고
+  공통 configuration CLI/model의 projection을 사용하도록 전환했다.
+- ROS의 프로젝트 `.env` 및 Bus 독자 parser를 제거하고 공통 model 연동과 ROS 전용
+  설정은 RF-008 후속 범위로 기록했다.
+- continuation, indexed axis/I/O Bus, 오류 설정, 우선순위와 Windows parity를 검증하는
+  설정 model 테스트 6개를 추가했다.
+- TD-006 전체 리뷰 후 unittest 155개, source compile, 공통 configuration CLI,
+  PowerShell projection과 Linux shell 문법 검사가 통과했다.
+
 ## 2026-08-21
 
 ### 완료

@@ -1,7 +1,7 @@
 from dataclasses import dataclass, replace
 import re
 
-from config_file import split_indexed_config_list
+from configuration import split_indexed_config_list
 from device.cpx_ap_i_ec.esi_module_catalog import (
     module_info_by_ident,
     module_info_by_name,

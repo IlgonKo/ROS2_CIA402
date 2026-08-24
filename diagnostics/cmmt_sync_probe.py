@@ -1,10 +1,18 @@
 #!/usr/bin/env python3
 import argparse
 import os
+from pathlib import Path
 import struct
+import sys
 import time
 
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
+
 import pysoem
+
+from configuration import parse_bus_config
 
 
 DEFAULT_INTERFACE = os.environ.get("PYSOEM_INTERFACE", "enp1s0")
@@ -12,17 +20,7 @@ DEFAULT_CYCLE_TIME = float(os.environ.get("PYSOEM_CYCLE_TIME", "0.001"))
 
 
 def axis_count_from_bus(bus):
-    count = 0
-    for raw_entry in str(bus or "").split(","):
-        entry = raw_entry.strip().lower()
-        if not entry:
-            continue
-        role = "axis"
-        if ":" in entry:
-            role = entry.split(":", 1)[0].strip()
-        if role in {"axis", "drive"}:
-            count += 1
-    return max(1, count)
+    return max(1, len(parse_bus_config(bus).axis_slave_indices))
 
 
 DEFAULT_AXIS_COUNT = axis_count_from_bus(os.environ.get("MOTION_SERVER_BUS", "cmmt_as"))

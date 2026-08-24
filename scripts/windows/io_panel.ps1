@@ -8,7 +8,7 @@ $ProjectRoot = Resolve-Path (Join-Path $PSScriptRoot "..\..")
 . (Join-Path $PSScriptRoot "env.ps1")
 $PanelConfigRoot = Join-Path $ProjectRoot "control_panel\io_control_panel"
 $PanelEnvPath = Join-Path $PanelConfigRoot ".env"
-$PanelEnv = Read-DotEnvFile -Path $PanelEnvPath
+$PanelEnv = Read-DotEnvFile -Path $PanelEnvPath -Python $Python
 
 if ([string]::IsNullOrWhiteSpace($HostName)) {
     $HostName = Get-AxisServerEnvValue -EnvValues $PanelEnv -Name "MOTION_SERVER_HOST" -Default "127.0.0.1"
