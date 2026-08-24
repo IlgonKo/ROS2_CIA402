@@ -13,13 +13,26 @@ from configuration.loader import (
     load_configuration,
     set_active_configuration,
 )
+from configuration.builder import CliOverrides, build_motion_server_config
+from configuration.models import (
+    BackendType,
+    BusDeviceConfig,
+    CspInterpolationMode,
+    MotionServerConfig,
+)
 
 __all__ = [
     "BusConfig",
     "BusDevice",
+    "BusDeviceConfig",
     "ConfigurationModel",
+    "CliOverrides",
     "DeviceRole",
+    "BackendType",
+    "CspInterpolationMode",
+    "MotionServerConfig",
     "active_configuration",
+    "build_motion_server_config",
     "load_configuration",
     "logical_config_lines",
     "parse_bus_config",

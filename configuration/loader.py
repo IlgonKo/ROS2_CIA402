@@ -24,6 +24,7 @@ _active_configuration = None
 
 @dataclass(frozen=True)
 class ConfigurationModel:
+    project_root: Path
     values: MappingProxyType
     bus: BusConfig
 
@@ -109,4 +110,4 @@ def load_configuration(
     values = device_defaults
     values.update(project_values)
     values.update(process_values)
-    return ConfigurationModel(MappingProxyType(values), bus)
+    return ConfigurationModel(project_root, MappingProxyType(values), bus)

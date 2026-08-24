@@ -362,6 +362,16 @@ platform DLL path 준비는 configuration loading과 별도의 명시적인 boot
 - 범위, Enum, cycle/DC 조합과 device instance validation을 추가한다.
 - 기존 runtime은 아직 기존 config/args 경로를 사용한다.
 
+완료 기록:
+
+- 상태: `complete`
+- 변경: `configuration/models.py`, `configuration/builder.py`,
+  `configuration/loader.py`, `configuration/__init__.py`
+- 검증: immutable model, CMMT/CPX Bus instance projection, CSP interpolation Enum,
+  cycle 범위, PySOEM interface와 pre-logging validation 테스트 5개를 추가했다.
+- 결과: 전체 unittest 160개와 source compile 검사가 통과했다.
+- 기존 runtime 연결은 변경하지 않았으며 다음 단계는 S02다.
+
 ### S02 Application composition root
 
 - 명시적인 `ConfigurationSource`와 `MotionServerApplication`을 도입한다.
