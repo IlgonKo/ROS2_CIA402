@@ -381,6 +381,39 @@ Device Profile + ESI
   typed dependency injection으로 전환한다. derived velocity는 필수 actual velocity와
   중복되어 제거하고, CMMT interpolation mode는 device config의 Enum으로 관리한다.
 
+## DEC-023 Virtual CMMT 초기 상태를 이름 있는 Non-PDO Configuration으로 구성
+
+- 상태: `accepted`
+- 결정일: 2026-08-24
+- 결정:
+  - `required_non_pdo_od`는 Motion Server가 요구하는 OD의 주소, 자료형, access와 역할
+    계약만 정의하며 초기값을 소유하지 않는다.
+  - `device/cmmt/.env`에 `linear_mm`, `rotary_deg` 이름의 완전한 Non-PDO configuration을
+    정의하고 Mock CMMT slave가 하나를 명시적으로 선택한다. 공통 default와 slave별 부분
+    override는 사용하지 않는다.
+  - Non-PDO configuration은 commissioning parameter 21개만 포함한다. CSP/sync OD는
+    startup operational configuration, reset/save/error OD는 Virtual Servo behavior가 관리한다.
+  - 같은 configuration의 축은 공통값으로 초기화하고 writable OD만 SDO/API로 축별 변경한다.
+    read-only unit/converting-unit OD 변경은 다른 configuration 선택과 runtime reset으로 적용한다.
+  - Mock은 Non-PDO configuration으로 Virtual OD를 초기화하고 실축은 이를 무시하며 write하지
+    않는다. runtime reset/process restart/device reset은 공통값으로 복원하고 bus reconnect는
+    현재값을 유지한다.
+  - device motion limit와 PP jerk는 OD readback을 사용한다. CSP jerk는 device OD와 분리하여
+    메인 `MOTION_SERVER_CSP_PROFILE` 다음의 `MOTION_SERVER_CSP_JERK`로 관리한다.
+- 이유: OD 존재 계약, 실제 commissioning 상태와 runtime command/status 초기값을 분리하고,
+  가상축이 실축과 동일한 access 및 readback 경계를 사용하면서도 반복 가능한 공통 초기
+  상태를 갖게 하기 위함이다.
+- 검토한 대안:
+  - `required_non_pdo_od.default`에 초기값을 계속 두는 방식은 계약과 장치 상태를 혼합하므로
+    채택하지 않는다.
+  - 축별 초기값 override는 설정 조합을 복잡하게 하므로 채택하지 않고 writable parameter는
+    명시적인 SDO/API write로 변경한다.
+  - 실축 startup에서 configuration 값을 write하는 방식은 commissioning 상태를 덮어쓰므로
+    채택하지 않는다.
+- 영향: TD-023에서 Non-PDO configuration parser/model/validation과 Virtual OD 초기화를
+  구현하고 startup motion-limit fallback 및 `startup_parameters`를 제거한다. 정확한 21개
+  OD와 `linear_mm`/`rotary_deg` 값은 TD-023 기술 명세를 따른다.
+
 ## 새 결정 작성 양식
 
 ```text

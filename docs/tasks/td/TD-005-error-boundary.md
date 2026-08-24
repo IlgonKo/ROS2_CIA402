@@ -63,7 +63,7 @@ client의 복구 판단과 장애 분석이 불안정하다.
 - 다음 실행 단계: 없음. 후속 오류 변경은 확정된 계약과 정적 검사를 따른다.
 - 현재 호환 상태: 서버 request/response는 신규 Success/Fail envelope만 송신한다. 주기 feedback과
   자발적 notification은 envelope 대상이 아니다.
-- 보존할 사용자 변경: `device/cmmt/required_od.py`의 OD 기본값 및 형식 변경은 `TD-023` 범위이며
+- 보존할 사용자 변경: `device/cmmt/required_non_pdo_od.py`의 OD 기본값 및 형식 변경은 `TD-023` 범위이며
   TD-005 변경에 포함하지 않는다.
 - 재개 방법: 아래에서 가장 앞선 `pending` 단계를 선택하고, 선행 작업과 인계 조건을 확인한 뒤
   상태를 `in_progress`로 변경한다. 완료 후 완료 증거와 다음 시작 위치를 함께 갱신한다.

@@ -2,7 +2,10 @@ from device.cmmt.error_catalog import load_cmmt_error_catalog
 from device.cmmt.esi_catalog import cmmt_catalog_by_profile_name
 from device.cmmt.pdo_codec import CiA402PdoCodec
 from device.cmmt.pdo_configuration import get_pdo_configuration, pdo_od_role
-from device.cmmt.required_od import required_od, required_od_roles as cmmt_required_od_roles
+from device.cmmt.required_non_pdo_od import (
+    required_non_pdo_od,
+    required_non_pdo_od_roles as cmmt_required_non_pdo_od_roles,
+)
 from device.cmmt.rxpdo import RxPDO
 from device.cmmt.txpdo import TxPDO
 from device.capabilities import DeviceCapability
@@ -30,48 +33,48 @@ class CMMTDeviceProfile:
     HOMING_ERROR_MASK = 1 << 13
 
     STATUSWORD_INDEX = pdo_od_role("statusword").index
-    ERROR_CODE_INDEX = required_od("error_code").index
-    ERROR_CODE_SUBINDEX = required_od("error_code").subindex
+    ERROR_CODE_INDEX = required_non_pdo_od("error_code").index
+    ERROR_CODE_SUBINDEX = required_non_pdo_od("error_code").subindex
     MODE_DISPLAY_INDEX = pdo_od_role("mode_of_operation_display").index
     MODE_OF_OPERATION_INDEX = pdo_od_role("mode_of_operation").index
-    CSP_INTERPOLATION_MODE_INDEX = required_od("csp_interpolation_mode").index
-    CSP_INTERPOLATION_MODE_SUBINDEX = required_od("csp_interpolation_mode").subindex
-    PP_JERK_INDEX = required_od("pp_jerk").index
-    PP_JERK_SUBINDEX = required_od("pp_jerk").subindex
-    USER_UNIT_INDEX = required_od("user_position_unit").index
-    USER_UNIT_POSITION_SUBINDEX = required_od("user_position_unit").subindex
-    CONVERTING_UNIT_INDEX = required_od("converting_unit_position").index
-    CONVERTING_UNIT_POSITION_SUBINDEX = required_od("converting_unit_position").subindex
-    CONVERTING_UNIT_VELOCITY_SUBINDEX = required_od("converting_unit_velocity").subindex
-    CONVERTING_UNIT_ACCELERATION_SUBINDEX = required_od(
+    CSP_INTERPOLATION_MODE_INDEX = required_non_pdo_od("csp_interpolation_mode").index
+    CSP_INTERPOLATION_MODE_SUBINDEX = required_non_pdo_od("csp_interpolation_mode").subindex
+    PP_JERK_INDEX = required_non_pdo_od("pp_jerk").index
+    PP_JERK_SUBINDEX = required_non_pdo_od("pp_jerk").subindex
+    USER_UNIT_INDEX = required_non_pdo_od("user_position_unit").index
+    USER_UNIT_POSITION_SUBINDEX = required_non_pdo_od("user_position_unit").subindex
+    CONVERTING_UNIT_INDEX = required_non_pdo_od("converting_unit_position").index
+    CONVERTING_UNIT_POSITION_SUBINDEX = required_non_pdo_od("converting_unit_position").subindex
+    CONVERTING_UNIT_VELOCITY_SUBINDEX = required_non_pdo_od("converting_unit_velocity").subindex
+    CONVERTING_UNIT_ACCELERATION_SUBINDEX = required_non_pdo_od(
         "converting_unit_acceleration"
     ).subindex
-    CONVERTING_UNIT_JERK_SUBINDEX = required_od("converting_unit_jerk").subindex
+    CONVERTING_UNIT_JERK_SUBINDEX = required_non_pdo_od("converting_unit_jerk").subindex
     DEFAULT_CONVERTING_UNIT_EXPONENTS = [6, 3, 3, 3]
-    SOFTWARE_POSITION_LIMIT_INDEX = required_od("software_position_limit_negative").index
-    MAX_PROFILE_VELOCITY_INDEX = required_od("max_profile_velocity").index
-    NEGATIVE_VELOCITY_LIMIT_INDEX = required_od("negative_velocity_limit").index
-    NEGATIVE_VELOCITY_LIMIT_SUBINDEX = required_od(
+    SOFTWARE_POSITION_LIMIT_INDEX = required_non_pdo_od("software_position_limit_negative").index
+    MAX_PROFILE_VELOCITY_INDEX = required_non_pdo_od("max_profile_velocity").index
+    NEGATIVE_VELOCITY_LIMIT_INDEX = required_non_pdo_od("negative_velocity_limit").index
+    NEGATIVE_VELOCITY_LIMIT_SUBINDEX = required_non_pdo_od(
         "negative_velocity_limit"
     ).subindex
-    PROFILE_VELOCITY_INDEX = required_od("profile_velocity").index
-    PROFILE_ACCELERATION_INDEX = required_od("profile_acceleration").index
-    PROFILE_DECELERATION_INDEX = required_od("profile_deceleration").index
-    MAX_ACCELERATION_INDEX = required_od("max_acceleration").index
-    MAX_DECELERATION_INDEX = required_od("max_deceleration").index
-    SYNC_PARAMETER_INDEX = required_od("sync_mode").index
-    DEVICE_RESET_INDEX = required_od("device_reset_command").index
-    DEVICE_RESET_COMMAND_SUBINDEX = required_od("device_reset_command").subindex
-    PARAMETER_SAVE_INDEX = required_od("parameter_save_command").index
-    PARAMETER_SAVE_COMMAND_SUBINDEX = required_od("parameter_save_command").subindex
-    PARAMETER_SAVE_STATUS_SUBINDEX = required_od("parameter_save_status").subindex
-    PARAMETER_SAVE_SELECTION_SUBINDEX = required_od(
+    PROFILE_VELOCITY_INDEX = required_non_pdo_od("profile_velocity").index
+    PROFILE_ACCELERATION_INDEX = required_non_pdo_od("profile_acceleration").index
+    PROFILE_DECELERATION_INDEX = required_non_pdo_od("profile_deceleration").index
+    MAX_ACCELERATION_INDEX = required_non_pdo_od("max_acceleration").index
+    MAX_DECELERATION_INDEX = required_non_pdo_od("max_deceleration").index
+    SYNC_PARAMETER_INDEX = required_non_pdo_od("sync_mode").index
+    DEVICE_RESET_INDEX = required_non_pdo_od("device_reset_command").index
+    DEVICE_RESET_COMMAND_SUBINDEX = required_non_pdo_od("device_reset_command").subindex
+    PARAMETER_SAVE_INDEX = required_non_pdo_od("parameter_save_command").index
+    PARAMETER_SAVE_COMMAND_SUBINDEX = required_non_pdo_od("parameter_save_command").subindex
+    PARAMETER_SAVE_STATUS_SUBINDEX = required_non_pdo_od("parameter_save_status").subindex
+    PARAMETER_SAVE_SELECTION_SUBINDEX = required_non_pdo_od(
         "parameter_save_selection"
     ).subindex
-    PARAMETER_SAVE_RETURN_CODE_SUBINDEX = required_od(
+    PARAMETER_SAVE_RETURN_CODE_SUBINDEX = required_non_pdo_od(
         "parameter_save_return_code"
     ).subindex
-    PARAMETER_SAVE_RETURN_VALUE_SUBINDEX = required_od(
+    PARAMETER_SAVE_RETURN_VALUE_SUBINDEX = required_non_pdo_od(
         "parameter_save_return_value"
     ).subindex
 
@@ -237,13 +240,13 @@ class CMMTDeviceProfile:
                 "PDO configuration",
             )
 
-        for role in self.required_od_roles():
+        for role in self.required_non_pdo_od_roles():
             self.validate_catalog_od_role(
                 role.role,
                 role.index,
                 role.subindex,
                 self.expected_data_type_bits(role.data_type),
-                "required OD",
+                "required non-PDO OD",
             )
 
     def validate_catalog_od_role(
@@ -283,8 +286,8 @@ class CMMTDeviceProfile:
             data_type,
         ).bit_length
 
-    def required_od_roles(self):
-        return cmmt_required_od_roles()
+    def required_non_pdo_od_roles(self):
+        return cmmt_required_non_pdo_od_roles()
 
     def object_dictionary_entries(self):
         if self.esi_catalog is None:

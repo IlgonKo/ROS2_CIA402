@@ -2,7 +2,7 @@ from dataclasses import dataclass
 
 
 @dataclass(frozen=True)
-class RequiredOdRole:
+class RequiredNonPdoOdRole:
     role: str
     index: int
     subindex: int
@@ -13,7 +13,7 @@ class RequiredOdRole:
 
 
 def od(role, index, subindex, name, data_type, access="", default=0):
-    return RequiredOdRole(
+    return RequiredNonPdoOdRole(
         role,
         index,
         subindex,
@@ -24,7 +24,7 @@ def od(role, index, subindex, name, data_type, access="", default=0):
     )
 
 
-CMMT_REQUIRED_OD = {
+CMMT_REQUIRED_NON_PDO_OD = {
     item.role: item
     for item in (
         od(
@@ -325,9 +325,9 @@ CMMT_REQUIRED_OD = {
 }
 
 
-def required_od(role):
-    return CMMT_REQUIRED_OD[role]
+def required_non_pdo_od(role):
+    return CMMT_REQUIRED_NON_PDO_OD[role]
 
 
-def required_od_roles():
-    return tuple(CMMT_REQUIRED_OD.values())
+def required_non_pdo_od_roles():
+    return tuple(CMMT_REQUIRED_NON_PDO_OD.values())

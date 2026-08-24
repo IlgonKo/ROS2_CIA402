@@ -3,7 +3,7 @@
 ## 배경 및 현재 구조
 
 - Virtual Servo는 실제 slave SDO readback이 없어 내부 OD storage를 초기화해야 한다.
-- 현재 OD 초기값은 `device/cmmt/required_od.py`의 `default`에 의존한다.
+- 현재 OD 초기값은 `device/cmmt/required_non_pdo_od.py`의 `default`에 의존한다.
 - `device/virtual_servo_drive/od_model.py`가 CMMT required OD를 직접 import한다.
 - virtual axis의 PDO configuration 선택 정책이 실축 profile 정책과 분리되어 있다.
 
@@ -15,7 +15,7 @@
 
 ## 관련 위치
 
-- `device/cmmt/required_od.py`
+- `device/cmmt/required_non_pdo_od.py`
 - `device/cmmt/pdo_configuration.py`
 - `device/virtual_servo_drive/.env`
 - `device/virtual_servo_drive/od_model.py`
@@ -55,7 +55,7 @@ Device Profile + ESI
 
 ## 완료 증거
 
-- `CMMTDeviceProfile`이 `object_dictionary_entries()`, `required_od_roles()`,
+- `CMMTDeviceProfile`이 `object_dictionary_entries()`, `required_non_pdo_od_roles()`,
   `pdo_configuration`을 제공하며 Virtual Servo는 CMMT 구현 모듈을 직접 참조하지 않는다.
 - `VirtualObjectDictionary`가 ESI의 전체 OD definition과 runtime value를 함께 관리하고
   required OD 및 RxPDO/TxPDO metadata를 profile 기준으로 병합한다.

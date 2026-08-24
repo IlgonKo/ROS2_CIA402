@@ -394,13 +394,17 @@ Tech Debt 상태 값은 `open`, `in_progress`, `complete`를 사용한다.
 - 우선순위: 보통
 - 요약: 가상축 생성 직후 서버 motion limit 설정이 profile의 OD 초기값을 덮어쓰는 실축과의 비대칭을 제거한다.
 - 완료 조건:
-  - Virtual Servo 생성 시 profile의 required OD 기본값이 startup 이후에도 보존된다.
+  - required non-PDO OD 존재 계약과 이름 있는 Non-PDO configuration이 분리된다.
+  - slave별 Non-PDO configuration으로 가상축의 linear/rotary, 단위와 motion limit를 독립적으로 초기화한다.
+  - Virtual Servo 생성 및 runtime reset 시 선택된 Non-PDO configuration이 적용된다.
+  - 같은 configuration의 축은 공통값으로 초기화되고 writable OD만 SDO를 통해 축별 변경할 수 있다.
   - `MOTION_SERVER_MAX_VELOCITY`, `MOTION_SERVER_ACCELERATION`, `MOTION_SERVER_DECELERATION`과 대응 command-line option 및 fallback이 제거된다.
+  - CSP jerk는 메인 설정의 `MOTION_SERVER_CSP_PROFILE` 다음 `MOTION_SERVER_CSP_JERK`와 `MotionConfig.csp_jerk`로 관리된다.
   - MotionController의 velocity, acceleration과 deceleration 제한은 device OD readback으로 구성된다.
   - 필수 motion limit OD readback 실패가 임의 기본값 대신 initialization error로 처리된다.
   - device OD parameter는 명시적인 설정 명령을 실행할 때만 변경된다.
   - mock과 실축 startup이 기존 device parameter를 동일하게 읽어 runtime 상태를 구성한다.
-  - required OD 초기값, startup 이후 값, readback 실패와 명시적 설정 변경을 검증하는 자동 테스트가 통과한다.
+  - Non-PDO configuration validation, startup/reset 이후 값, readback 실패와 명시적 설정 변경을 검증하는 자동 테스트가 통과한다.
 - 상세: [TD-023 기술 명세](tasks/td/TD-023-virtual-od-startup-defaults.md)
 
 ### TD-024 Axis Control Panel 초기 임시 연결 제거

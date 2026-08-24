@@ -29,7 +29,9 @@ class VirtualObjectDictionary:
         self.entries = {}
         device_profile.validate_catalog_support()
         self._load_catalog(device_profile.object_dictionary_entries())
-        self._overlay_required(device_profile.required_od_roles())
+        self._overlay_required_non_pdo_od(
+            device_profile.required_non_pdo_od_roles()
+        )
         self._overlay_pdo(device_profile.pdo_configuration.rxpdo_objects(), "rxpdo")
         self._overlay_pdo(device_profile.pdo_configuration.txpdo_objects(), "txpdo")
         self.objects = _RuntimeValueView(self)
@@ -49,7 +51,7 @@ class VirtualObjectDictionary:
             )
             self.entries[key] = VirtualOdEntry(definition, definition.default)
 
-    def _overlay_required(self, roles):
+    def _overlay_required_non_pdo_od(self, roles):
         for role in roles:
             self._overlay(
                 role.index, role.subindex, name=role.name,

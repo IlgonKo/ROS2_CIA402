@@ -13,6 +13,9 @@
 
 ### 완료
 
+- CMMT에서 PDO configuration 외부의 Motion Server 필수 OD 계약임을 명확히 하기 위해
+  `required_od.py`를 `required_non_pdo_od.py`로 변경하고 관련 type, 함수와 profile 계약을
+  `required_non_pdo_od_*` 명칭으로 통일했다.
 - `TD-014` 완료 후 전체 리뷰에서 발견된 DC 비활성 runtime 경계, 축별 CMMT CSP 설정,
   composition root projection, 초기 motion mode validation과 cold-import 검증을 보완했다.
   pre-history 중복과 잔여 코드도 정리했다. Windows launcher를 Application entrypoint로
@@ -364,7 +367,7 @@
 - CMMT profile identity를 실제 slave identity와 비교하는 로직 추가.
 - Motion Server가 CMMT PDO mapping을 항상 remap하고, remap 후 실제 PDO mapping을 다시 읽어 설정과 비교하는 정책으로 변경.
 - CMMT PDO configuration을 `motion_server_default`, `profile_position_basic`, `csp_basic` 등의 predefined configuration으로 분리.
-- `required_od.py`를 추가하여 PDO가 아닌 Motion Server 필수 OD를 별도 관리하는 방향으로 변경.
+- `required_non_pdo_od.py`를 추가하여 PDO가 아닌 Motion Server 필수 OD를 별도 관리하는 방향으로 변경.
 - 기존 `device/cia402/object_dictionary.py`, `device/common_object_dictionary/ethercat.py`, `device/cmmt/object_dictionary.py`, `device/cpx_ap_i_ec/object_dictionary.py` 제거 방향으로 정리.
 - Virtual Servo도 CMMT 설정과 ESI/PDO configuration을 따라가도록 구조 조정.
 
