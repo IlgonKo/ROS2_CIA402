@@ -14,7 +14,7 @@ from motion_server.control.axis_units import (
     motion_limits_drive_to_api,
     profile_settings_drive_to_api,
 )
-from motion_server.failure import Failure, OperationException, PartialFailure, map_exception
+from motion_server.failure import Failure, PartialFailure, map_exception
 from motion_server.failure.codes import FailureCode
 
 
@@ -108,10 +108,6 @@ def command_name(message):
 
 def public_command_name(message):
     return command_name(message)
-
-
-def raise_operation_rejected(client, command, message):
-    raise OperationException(command)
 
 
 def axis_list_value(values, axis_index, default=None):

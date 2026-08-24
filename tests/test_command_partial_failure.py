@@ -1,15 +1,20 @@
 import unittest
 from types import SimpleNamespace
+from unittest.mock import patch
 
 from motion_server.api.router import request_response
 from motion_server.failure import (
     AuthorityRequiredException,
     DeviceAccessException,
     InvalidStateException,
+    ItemFailure,
     LimitViolationException,
+    PartialFailure,
+    OperationTimeoutException,
 )
-from motion_server.handlers.command.axis_state import set_axes_controlword
+from motion_server.handlers.command.axis_state import enable, set_axes_controlword
 from motion_server.handlers.command.io_output_write import write_outputs
+from motion_server.control.setpoint_output import pp_setpoint_handshake
 
 
 class ControlwordPdo:
@@ -103,6 +108,30 @@ class AxisCommandFailureTest(unittest.TestCase):
         )
         self.assertNotIn("secret", str(response))
 
+    def test_live_enable_preserves_partial_failure_result(self):
+        result = PartialFailure(
+            succeeded=[0],
+            failed=[ItemFailure(1, DeviceAccessException("controlword_write"))],
+        )
+        runtime = SimpleNamespace(slaves=[object(), object()])
+
+        with patch(
+            "motion_server.handlers.command.axis_state.set_axes_controlword",
+            return_value=result,
+        ):
+            response = request_response(
+                {"type": "system/axes/enable"},
+                lambda: enable(
+                    {"type": "system/axes/enable", "axes": [0, 1]},
+                    runtime,
+                    {},
+                    {"id": "client-1"},
+                ),
+            )
+
+        self.assertEqual(response["failure"]["code"], "PARTIAL_FAILURE")
+        self.assertEqual(response["failure"]["details"]["succeeded"], [0])
+
     def test_whole_request_failures_keep_their_contract_codes(self):
         cases = (
             (AuthorityRequiredException(), "AUTHORITY_REQUIRED"),
@@ -116,6 +145,25 @@ class AxisCommandFailureTest(unittest.TestCase):
                     lambda exception=exception: (_ for _ in ()).throw(exception),
                 )
                 self.assertEqual(response["failure"]["code"], code)
+
+    def test_pp_handshake_timeout_uses_timeout_contract(self):
+        runtime = SimpleNamespace(
+            cycle_time=0.008,
+            slaves=[SimpleNamespace(
+                rxpdo=ControlwordPdo(),
+                txpdo=SimpleNamespace(statusword=0),
+            )],
+        )
+
+        with patch(
+            "motion_server.control.setpoint_output.wait_pp_setpoint_ack",
+            return_value=False,
+        ), patch(
+            "motion_server.control.setpoint_output.diagnostics_summary",
+            return_value={},
+        ):
+            with self.assertRaises(OperationTimeoutException):
+                pp_setpoint_handshake(runtime, [0])
 
 
 class IoCommandFailureTest(unittest.TestCase):

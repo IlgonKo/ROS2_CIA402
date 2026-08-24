@@ -22,11 +22,16 @@ from motion_server.control.axis_operations import (
 )
 from motion_server.api import (
     public_command_name,
-    raise_operation_rejected,
     require_uint32,
     selected_axes,
 )
-from motion_server.failure import OperationException
+from motion_server.failure import (
+    InvalidArgumentException,
+    ItemFailure,
+    MotionServerException,
+    PartialFailure,
+    ResourceNotFoundException,
+)
 
 
 def set_motion_limits(message, runtime, state, client):
@@ -113,9 +118,10 @@ def set_motion_limits(message, runtime, state, client):
                 max_acceleration,
                 max_deceleration,
             )
-    except Exception as exc:
-        raise_operation_rejected(client, command, str(exc))
-        return
+    except (TypeError, ValueError, OverflowError) as exc:
+        raise InvalidArgumentException(
+            "motion_limits", "contains invalid values",
+        ) from exc
 
 
 def update_axis_motion_limits(
@@ -252,9 +258,10 @@ def set_profile(message, runtime, state, client):
                     else None
                 ),
             )
-    except Exception as exc:
-        raise_operation_rejected(client, command, str(exc))
-        return
+    except (TypeError, ValueError, OverflowError) as exc:
+        raise InvalidArgumentException(
+            "profile", "contains invalid values",
+        ) from exc
 
     status_log(
         "Received axis/profile: "
@@ -382,9 +389,10 @@ def set_software_position_limits(message, runtime, state, client):
                 f"readback={readback_limits} "
                 f"metadata={axis_metadata(state, axis_index)}",
             )
-    except Exception as exc:
-        raise_operation_rejected(client, command, str(exc))
-        return
+    except (TypeError, ValueError, OverflowError) as exc:
+        raise InvalidArgumentException(
+            "software_position_limits", "contains invalid values",
+        ) from exc
 
     status_log(
         "Received axis/software_position_limits: "
@@ -392,20 +400,11 @@ def set_software_position_limits(message, runtime, state, client):
     )
 
 
-def reject_command(client, command, message):
-    if client is None:
-        return
-    raise OperationException(command)
-
-
 def set_mode(message, runtime, state, client=None):
     command = public_command_name(message)
     requested_mode = str(message.get("mode", "")).strip().lower()
     if requested_mode not in MOTION_MODES:
-        error_message = f"Ignored invalid motion mode: {requested_mode}"
-        print(error_message, flush=True)
-        reject_command(client, command, error_message)
-        return
+        raise InvalidArgumentException("mode", "is not supported")
 
     axis_value = message.get("axis", None)
     if axis_value is None:
@@ -414,15 +413,9 @@ def set_mode(message, runtime, state, client=None):
         try:
             axis_index = int(axis_value)
         except (TypeError, ValueError):
-            error_message = f"Ignored motion mode for invalid axis: {axis_value}"
-            print(error_message, flush=True)
-            reject_command(client, command, error_message)
-            return
+            raise InvalidArgumentException("axis", "must be an integer")
         if axis_index < 0 or axis_index >= axis_count(runtime):
-            error_message = f"Ignored motion mode for invalid axis: {axis_index}"
-            print(error_message, flush=True)
-            reject_command(client, command, error_message)
-            return
+            raise ResourceNotFoundException("axis", axis_index)
         axis_indices = [axis_index]
 
     if all(state["motion_modes"][axis_index] == requested_mode for axis_index in axis_indices):
@@ -436,16 +429,8 @@ def set_mode(message, runtime, state, client=None):
     ):
         return
 
-    try:
-        for axis_index in axis_indices:
-            require_pdo_fields_for_mode(runtime, requested_mode, axis_index)
-    except Exception as exc:
-        error_message = (
-            f"Ignored motion mode {requested_mode.upper()}: {exc}"
-        )
-        print(error_message, flush=True)
-        reject_command(client, command, error_message)
-        return
+    for axis_index in axis_indices:
+        require_pdo_fields_for_mode(runtime, requested_mode, axis_index)
 
     for axis_index in axis_indices:
         hold_axis_at_actual_position(runtime, state, axis_index)
@@ -457,7 +442,7 @@ def set_mode(message, runtime, state, client=None):
         previous_mode = state["motion_modes"][axis_index]
         try:
             configure_motion_mode(runtime, requested_mode, axis_index)
-        except Exception as exc:
+        except MotionServerException as exc:
             failed.append((axis_index, exc))
             previous_code = mode_code(previous_mode)
             runtime.slaves[axis_index].rxpdo.mode_of_operation = previous_code
@@ -471,18 +456,18 @@ def set_mode(message, runtime, state, client=None):
         state["motion_modes"][axis_index] = requested_mode
         changed_axes.append(axis_index)
 
+    update_motion_mode_summary(state)
     if failed:
-        message_text = "; ".join(
-            f"axis {axis_index}: {exc}"
-            for axis_index, exc in failed
-        )
-        reject_command(
-            client,
-            command,
-            f"Motion mode change failed: {message_text}",
+        if not changed_axes:
+            raise failed[0][1]
+        return PartialFailure(
+            succeeded=changed_axes,
+            failed=[
+                ItemFailure(target=axis_index, exception=exception)
+                for axis_index, exception in failed
+            ],
         )
 
-    update_motion_mode_summary(state)
     if changed_axes:
         status_log(
             f"Motion mode changed axes={changed_axes} "

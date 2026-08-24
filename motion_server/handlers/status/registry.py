@@ -1,9 +1,8 @@
 from motion_server.api.decoder import selected_single_axis
 from motion_server.api.encoder import (
-    raise_operation_rejected,
     status_data,
 )
-from motion_server.failure import InvalidRequestException
+from motion_server.failure import InvalidRequestException, UnsupportedOperationException
 from motion_server.api.specification import status_message_types
 from motion_server.app.state import inactive_trajectory_state
 from motion_server.handlers.status.axis_parameter_read import read_parameter
@@ -109,11 +108,7 @@ def handle_io_parameter_read(message_type, message, runtime, state, client):
 
 
 def reject_not_implemented(message_type, message, runtime, state, client):
-    raise_operation_rejected(
-        client,
-        message_type,
-        f"{message_type} is not implemented yet.",
-    )
+    raise UnsupportedOperationException(message_type, "not_implemented")
 
 
 def handle_io_input_read(message_type, message, runtime, state, client):

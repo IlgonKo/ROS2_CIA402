@@ -585,8 +585,8 @@ S11B2B 완료 증거:
 
 - Axis motion/state/settings, jog, homing, trajectory와 parameter-save 요청 경로가 operation data를
   반환하거나 typed Exception/`PartialFailure`를 상위 request boundary로 전달한다.
-- 기존 `reject_command_message` 전송 helper는 송신 의미가 없는 `raise_operation_rejected`로 바꾸고
-  요청 handler와 control 계층의 직접 `send_client_message` 호출을 제거했다.
+- 기존 rejection 전송 helper와 요청 handler/control 계층의 직접 `send_client_message` 호출을
+  제거했다. 2026-08-24 리뷰 보완에서 중간 `raise_operation_rejected` helper도 제거했다.
 - router는 `_RequestCaptureConnection`, legacy 응답 판별과 `_operation_result` 임시 저장 없이 handler
   반환값을 단일 `request_response` boundary에서 Success/Fail envelope로 변환한다.
 - `send_client_message`는 request boundary인 router에만 남아 있으며 전체 unittest 145개와 source
@@ -603,3 +603,14 @@ S11C 완료 증거:
   설계 문서를 기준으로 관리한다.
 - 정적 검사 4개를 포함한 전체 unittest 149개와 source compile 검사가 통과했다.
 - Remaining Tasks의 TD-005 상태를 `complete`로 변경했다.
+
+### 2026-08-24 완료 후 전체 리뷰 보완
+
+- malformed JSON/UTF-8, JSON object가 아닌 payload와 command type 누락을 `INVALID_REQUEST`로
+  처리하고 연결을 유지하도록 transport/router 경계를 보완했다.
+- command handler의 broad catch와 일반 `OperationException` 재분류를 제거하여 기존
+  `InvalidArgument`, `ResourceNotFound`, `InvalidState`, `UnsupportedOperation` 의미를 보존한다.
+- Axis enable/disable의 `PartialFailure`가 router까지 전달되도록 unreachable rejection을 제거했다.
+- PP handshake와 Axis restart disable timeout을 `OperationTimeoutException`으로 분류했다.
+- broad catch 정적 검사가 승인 함수뿐 아니라 함수별 catch 개수도 검증하도록 강화했다.
+- 신규 회귀 테스트 7개를 포함한 전체 unittest 156개와 source compile 검사가 통과했다.

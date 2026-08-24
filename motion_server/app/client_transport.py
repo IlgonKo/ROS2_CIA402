@@ -17,11 +17,30 @@ def service_client(client, runtime, state, dispatch_message):
     if not chunk:
         return False
 
-    client["buffer"] += chunk.decode("utf-8")
+    try:
+        decoded_chunk = chunk.decode("utf-8")
+    except UnicodeDecodeError:
+        dispatch_message(
+            {"type": "invalid_request", "_invalid_encoding": True},
+            runtime,
+            state,
+            client,
+        )
+        client["buffer"] = ""
+        return True
+
+    client["buffer"] += decoded_chunk
     while "\n" in client["buffer"]:
         line, client["buffer"] = client["buffer"].split("\n", 1)
         if line.strip():
-            dispatch_message(json.loads(line), runtime, state, client)
+            try:
+                message = json.loads(line)
+            except json.JSONDecodeError:
+                message = {
+                    "type": "invalid_request",
+                    "_malformed_json": True,
+                }
+            dispatch_message(message, runtime, state, client)
 
     return True
 

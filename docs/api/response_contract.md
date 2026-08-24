@@ -47,6 +47,9 @@ TD-005-S10부터 모든 등록 request는 이 계약으로 응답한다.
 - Success에는 `data`만, Fail에는 `failure`만 포함하며 두 필드를 동시에 포함하지 않는다.
 - 반환할 결과 데이터가 없는 Success도 `data`를 빈 object로 제공한다.
 - notification에는 `result`, `data`와 `failure`를 공통 response envelope 용도로 추가하지 않는다.
+- malformed JSON, UTF-8이 아닌 payload, JSON object가 아닌 payload와 `cmd`/`type` 누락은
+  `type: invalid_request`, `code: INVALID_REQUEST`로 응답하고 연결을 유지한다. 해석 가능한 요청에
+  `request_id`가 있으면 이 실패 응답에도 그대로 반환한다.
 
 ## Failure 필드
 

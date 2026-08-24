@@ -22,10 +22,11 @@
 
 `tests/test_error_contract_static.py`가 다음 계약을 검사한다.
 
-- broad catch가 승인된 파일·함수 allowlist와 정확히 일치한다.
+- broad catch가 승인된 파일·함수 및 함수별 catch 개수와 정확히 일치한다.
 - Exception mapping이 공개 `FailureCode`만 사용한다.
 - request capture, `_operation_result`, legacy rejection과 `TECH_DEBT[TD-005]`가 다시 추가되지 않는다.
 - request handler/control 계층에서 transport 송신을 직접 수행하지 않는다.
 
-allowlist는 줄 번호가 아니라 함수 단위로 관리한다. 새 broad catch가 필요하면 먼저 위 목적과 처리 계약을
-확정한 후 allowlist와 테스트를 함께 변경한다. 단순히 테스트 통과를 위해 항목을 추가하지 않는다.
+allowlist는 줄 번호가 아니라 함수와 함수별 개수로 관리한다. 새 broad catch가 필요하면 먼저 위 목적과
+처리 계약을 확정한 후 allowlist와 테스트를 함께 변경한다. 단순히 테스트 통과를 위해 항목을 추가하지
+않는다. Command handler의 입력 검증과 장치 실패 변환은 broad catch 승인 대상이 아니다.

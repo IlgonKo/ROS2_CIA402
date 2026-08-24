@@ -3,6 +3,7 @@ import unittest
 from types import SimpleNamespace
 from unittest.mock import patch
 
+from motion_server.app.client_transport import service_client
 from motion_server.api.router import route_message
 
 
@@ -12,6 +13,16 @@ class Connection:
 
     def sendall(self, payload):
         self.messages.append(json.loads(payload.decode("utf-8")))
+
+
+class ReceivingConnection(Connection):
+    def __init__(self, payload):
+        super().__init__()
+        self.payload = payload
+
+    def recv(self, size):
+        payload, self.payload = self.payload, b""
+        return payload
 
 
 def client(client_id="client-1"):
@@ -131,6 +142,97 @@ class LiveEnvelopeCutoverTest(unittest.TestCase):
 
         self.assertEqual(response["failure"]["code"], "INTERNAL_FAILURE")
         self.assertNotIn("private implementation detail", str(response))
+
+    def test_missing_command_type_is_invalid_request_and_echoes_request_id(self):
+        active_client = client()
+
+        response = route_message(
+            {"request_id": "missing-type"},
+            SimpleNamespace(),
+            {},
+            active_client,
+        )
+
+        self.assertEqual(response["type"], "invalid_request")
+        self.assertEqual(response["request_id"], "missing-type")
+        self.assertEqual(response["failure"]["code"], "INVALID_REQUEST")
+
+    def test_non_object_request_is_invalid_request(self):
+        active_client = client()
+
+        response = route_message([], SimpleNamespace(), {}, active_client)
+
+        self.assertEqual(response["type"], "invalid_request")
+        self.assertEqual(response["failure"]["code"], "INVALID_REQUEST")
+
+    def test_malformed_json_returns_fail_without_closing_client(self):
+        connection = ReceivingConnection(b'{"cmd": invalid}\n')
+        active_client = {
+            "id": "client-1",
+            "conn": connection,
+            "buffer": "",
+            "last_feedback_time": 0.0,
+        }
+
+        with patch(
+            "motion_server.app.client_transport.select.select",
+            return_value=([connection], [], []),
+        ):
+            keep_connection = service_client(
+                active_client,
+                SimpleNamespace(),
+                {},
+                route_message,
+            )
+
+        self.assertTrue(keep_connection)
+        self.assertEqual(connection.messages[0]["type"], "invalid_request")
+        self.assertEqual(
+            connection.messages[0]["failure"]["code"],
+            "INVALID_REQUEST",
+        )
+
+    def test_invalid_utf8_returns_fail_without_closing_client(self):
+        connection = ReceivingConnection(b"\xff\n")
+        active_client = {
+            "id": "client-1",
+            "conn": connection,
+            "buffer": "",
+            "last_feedback_time": 0.0,
+        }
+
+        with patch(
+            "motion_server.app.client_transport.select.select",
+            return_value=([connection], [], []),
+        ):
+            keep_connection = service_client(
+                active_client,
+                SimpleNamespace(),
+                {},
+                route_message,
+            )
+
+        self.assertTrue(keep_connection)
+        self.assertEqual(
+            connection.messages[0]["failure"]["code"],
+            "INVALID_REQUEST",
+        )
+
+    def test_axis_selector_failure_preserves_resource_not_found(self):
+        active_client = client()
+        state = {
+            "command_authority_owner": "client-1",
+            "drive_initialized": True,
+        }
+
+        response = route_message(
+            {"cmd": "system/axis/move_abs", "axis": 3, "position": 1},
+            SimpleNamespace(slaves=[]),
+            state,
+            active_client,
+        )
+
+        self.assertEqual(response["failure"]["code"], "RESOURCE_NOT_FOUND")
 
 
 if __name__ == "__main__":

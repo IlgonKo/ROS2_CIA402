@@ -4,6 +4,17 @@
 날짜는 기본적으로 Git commit 날짜를 기준으로 정리했고, 아직 commit되지 않은 작업은 현재 작업일 기준으로 별도 기록한다.
 미완료 기능과 기술 부채는 [Remaining Tasks](remaining_tasks.md)에서 별도로 관리한다.
 
+## 2026-08-24
+
+### 완료
+
+- TD-005 완료 후 전체 코드 리뷰에서 발견한 malformed 요청의 서버 루프 이탈, typed Exception 의미
+  손실, Axis `PartialFailure` 손실, timeout 오분류와 broad catch 검사 사각지대를 보완했다.
+- command handler의 일반 rejection helper를 제거하고 입력·상태·지원 여부·timeout 의미를 구체
+  Exception으로 유지하도록 변경했다.
+- malformed JSON/UTF-8과 요청 shape, live typed failure, Axis partial failure 및 PP handshake timeout
+  회귀 테스트 7개를 추가했으며 전체 unittest 156개와 source compile 검사가 통과했다.
+
 ## 2026-08-21
 
 ### 완료

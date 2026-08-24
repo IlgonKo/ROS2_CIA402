@@ -1,12 +1,8 @@
-from motion_server.api import raise_operation_rejected
+from motion_server.failure import UnsupportedOperationException
 
 
 def reject_ap_parameter_catalog(message_type, message, runtime, state, client):
-    raise_operation_rejected(
-        client,
+    raise UnsupportedOperationException(
         message_type,
-        (
-            "system/io/ap/param_catalog is not implemented. "
-            "AP parameter catalog requires APDD support."
-        ),
+        "AP parameter catalog requires APDD support",
     )

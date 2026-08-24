@@ -1,6 +1,6 @@
 from motion_server.config import CSP_MODE, DEVICE_PROFILE, require_pdo_fields_for_mode
 from motion_server.app.cycle import exchange
-from motion_server.api import raise_operation_rejected
+from motion_server.failure import InvalidStateException, UnsupportedOperationException
 
 
 def axis_count(runtime):
@@ -61,7 +61,7 @@ def reject_if_any_axis_disabled(runtime, axes, client, command):
     if not disabled_axes:
         return False
 
-    raise_operation_rejected(client, command, "Axis operation is disabled.")
+    raise InvalidStateException(command, "axis_disabled")
 
 
 def pv_allowed_axis(state, axis_index):
@@ -96,8 +96,7 @@ def reject_if_pv_not_allowed(state, axis_indices, client, command):
     if not blocked_axes:
         return False
 
-    message = pv_reject_message(state, blocked_axes)
-    raise_operation_rejected(client, command, message)
+    raise UnsupportedOperationException(command, "pv_position_unit")
 
 
 def mode_code(mode_name):

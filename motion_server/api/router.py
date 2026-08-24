@@ -1,5 +1,6 @@
 import json
 import logging
+from collections.abc import Mapping
 
 from motion_server.api.specification import (
     command_spec,
@@ -20,6 +21,7 @@ from motion_server.api.validator import validate_command
 from motion_server.failure import (
     AuthorityBusyException,
     AuthorityRequiredException,
+    InvalidRequestException,
     MotionServerException,
     PartialFailure,
     ServerNotReadyException,
@@ -67,12 +69,27 @@ from motion_server.handlers.status import handle_status  # noqa: E402
 
 
 def route_message(message, runtime, state, client):
+    request = _request_mapping(message)
     response = request_response(
-        message,
-        lambda: _route_message_to_handler(message, runtime, state, client),
+        request,
+        lambda: _route_message_to_handler(request, runtime, state, client),
     )
     send_client_message(client, response)
     return response
+
+
+def _request_mapping(message):
+    if not isinstance(message, Mapping):
+        return {"type": "invalid_request", "_invalid_shape": True}
+    if not command_name(message):
+        request = {
+            "type": "invalid_request",
+            "_missing_command_type": True,
+        }
+        if "request_id" in message:
+            request["request_id"] = message.get("request_id")
+        return request
+    return message
 
 
 def _route_message_to_handler(message, runtime, state, client):
@@ -85,6 +102,14 @@ def _route_message_to_handler(message, runtime, state, client):
         )
 
     raw_message_type = command_name(message)
+    if message.get("_malformed_json"):
+        raise InvalidRequestException("Request body is not valid JSON")
+    if message.get("_invalid_encoding"):
+        raise InvalidRequestException("Request body is not valid UTF-8")
+    if message.get("_invalid_shape"):
+        raise InvalidRequestException("Request body must be a JSON object")
+    if message.get("_missing_command_type"):
+        raise InvalidRequestException("Request requires cmd or type")
     message_type = public_command_name(message)
     spec = command_spec(message_type)
 

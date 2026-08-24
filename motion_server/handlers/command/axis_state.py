@@ -17,7 +17,6 @@ from motion_server.control.setpoint_output import (
 )
 from motion_server.api import (
     public_command_name,
-    raise_operation_rejected,
     selected_axes,
 )
 from motion_server.api.encoder import status_data
@@ -29,8 +28,10 @@ from motion_server.config import (
 )
 from motion_server.failure import (
     DeviceAccessException,
-    MotionServerException,
+    InvalidArgumentException,
+    OperationTimeoutException,
     PartialFailure,
+    UnsupportedOperationException,
     collect_target_results,
 )
 
@@ -84,11 +85,7 @@ def stop_system(message, runtime, state):
 
 def stop_axes(message, runtime, state, client):
     command = public_command_name(message)
-    try:
-        axes = selected_axes(message, runtime, command)
-    except Exception as exc:
-        raise_operation_rejected(client, command, str(exc))
-        return
+    axes = selected_axes(message, runtime, command)
     if reject_if_any_axis_disabled(runtime, axes, client, command):
         return
 
@@ -171,11 +168,7 @@ def reset_faults(runtime, state, axis_indices=None):
 
 def reset_axes(message, runtime, state, client):
     command = public_command_name(message)
-    try:
-        axes = selected_axes(message, runtime, command)
-    except Exception as exc:
-        raise_operation_rejected(client, command, str(exc))
-        return
+    axes = selected_axes(message, runtime, command)
     reset_faults(runtime, state, axes)
 
 
@@ -197,20 +190,13 @@ def keep_pdo_alive_for_seconds(runtime, seconds):
 def restart_axis(message, runtime, state, client):
     command = public_command_name(message)
     if DeviceCapability.AXIS_RESTART not in DEVICE_PROFILE.capabilities:
-        raise_operation_rejected(
-            client,
+        raise UnsupportedOperationException(
             command,
-            f"Device profile {DEVICE_PROFILE.name!r} does not support axis restart.",
+            f"Device profile {DEVICE_PROFILE.name!r} does not support axis restart",
         )
-        return
-    try:
-        axes = selected_axes(message, runtime, command)
-    except Exception as exc:
-        raise_operation_rejected(client, command, str(exc))
-        return
+    axes = selected_axes(message, runtime, command)
     if len(axes) != 1:
-        raise_operation_rejected(client, command, f"{command} requires exactly one axis.")
-        return
+        raise InvalidArgumentException("axis", "requires exactly one axis")
 
     axis_index = axes[0]
     try:
@@ -233,9 +219,9 @@ def restart_axis(message, runtime, state, client):
         disabled = wait_axis_not_operation_enabled(runtime, axis_index)
         disabled_statusword = int(runtime.slaves[axis_index].txpdo.statusword)
         if not disabled:
-            raise RuntimeError(
-                "Axis did not leave Operation Enabled before restart. "
-                f"statusword=0x{disabled_statusword:04X}"
+            raise OperationTimeoutException(
+                "axis_restart_disable",
+                timeout_seconds=(50 * float(runtime.cycle_time)),
             )
         disable_settle_time = max(0.0, float(AXIS_RESTART_DISABLE_SETTLE_TIME))
         keep_pdo_alive_for_seconds(runtime, disable_settle_time)
@@ -245,7 +231,9 @@ def restart_axis(message, runtime, state, client):
         result["disabled_controlword"] = f"0x{disabled_controlword:04X}"
         result["disabled_statusword"] = f"0x{disabled_statusword:04X}"
         result["disable_settle_time"] = disable_settle_time
-    except Exception as exc:
+    except OperationTimeoutException:
+        raise
+    except (OSError, AttributeError, TypeError, ValueError) as exc:
         raise DeviceAccessException("axis_restart") from exc
     status_log(
         "Axis restart requested: "
@@ -260,18 +248,9 @@ def restart_axis(message, runtime, state, client):
 
 def enable(message, runtime, state, client):
     command = public_command_name(message)
-    try:
-        axes = selected_axes(message, runtime, command)
-    except Exception as exc:
-        raise_operation_rejected(client, command, str(exc))
-        return
-    try:
-        result = set_axes_controlword(runtime, axes, 0x000F)
-    except MotionServerException as exc:
-        raise_operation_rejected(client, command, str(exc))
-        return
+    axes = selected_axes(message, runtime, command)
+    result = set_axes_controlword(runtime, axes, 0x000F)
     if isinstance(result, PartialFailure):
-        raise_operation_rejected(client, command, "Axis command partially failed.")
         return result
     exchange(runtime, cycles=3)
     status_log(
@@ -284,11 +263,7 @@ def enable(message, runtime, state, client):
 
 def disable(message, runtime, state, client):
     command = public_command_name(message)
-    try:
-        axes = selected_axes(message, runtime, command)
-    except Exception as exc:
-        raise_operation_rejected(client, command, str(exc))
-        return
+    axes = selected_axes(message, runtime, command)
 
     trajectory = state.get("trajectory", {})
     if trajectory.get("active") and set(axes) & set(trajectory.get("axes", [])):
@@ -302,13 +277,7 @@ def disable(message, runtime, state, client):
         hold_axis_at_actual_position(runtime, state, axis_index)
         set_axis_controlword(runtime, axis_index, 0x0007)
 
-    try:
-        result = collect_target_results(axes, disable_axis)
-    except MotionServerException as exc:
-        raise_operation_rejected(client, command, str(exc))
-        return
-    if isinstance(result, PartialFailure):
-        raise_operation_rejected(client, command, "Axis command partially failed.")
+    result = collect_target_results(axes, disable_axis)
     runtime.set_target_positions(state["target_positions"])
     exchange(runtime, cycles=3)
     status_log(

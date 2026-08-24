@@ -9,9 +9,9 @@ from motion_server.control.axis_operations import (
 )
 from motion_server.api import (
     public_command_name,
-    raise_operation_rejected,
     selected_single_axis,
 )
+from motion_server.failure import DeviceAccessException, InvalidArgumentException
 
 
 def start_jog(message, runtime, state, client):
@@ -28,9 +28,8 @@ def start_jog(message, runtime, state, client):
             raise ValueError(
                 f"{command} speed must be slow, fast, or two_phase"
             )
-    except Exception as exc:
-        raise_operation_rejected(client, command, str(exc))
-        return
+    except (TypeError, ValueError, OverflowError) as exc:
+        raise InvalidArgumentException("jog", "contains invalid values") from exc
     if reject_if_any_axis_disabled(runtime, [axis_index], client, command):
         return
 
@@ -42,9 +41,8 @@ def start_jog(message, runtime, state, client):
             configure_motion_mode(runtime, "jog", axis_index)
             state["motion_modes"][axis_index] = "jog"
             update_motion_mode_summary(state)
-    except Exception as exc:
-        raise_operation_rejected(client, command, str(exc))
-        return
+    except (OSError, AttributeError, TypeError, ValueError) as exc:
+        raise DeviceAccessException("jog_mode_start") from exc
 
     slave = runtime.slaves[axis_index]
     slave.rxpdo.mode_of_operation = JOG_MODE
@@ -71,9 +69,8 @@ def stop_jog(message, runtime, state, client):
     command = public_command_name(message)
     try:
         axis_index = selected_single_axis(message, runtime, command)
-    except Exception as exc:
-        raise_operation_rejected(client, command, str(exc))
-        return
+    except (TypeError, ValueError, OverflowError) as exc:
+        raise InvalidArgumentException("axis", "is invalid") from exc
 
     slave = runtime.slaves[axis_index]
     if disabled_operation_axes(runtime, [axis_index]):
@@ -88,13 +85,8 @@ def stop_jog(message, runtime, state, client):
         configure_motion_mode(runtime, previous_mode, axis_index)
         state["motion_modes"][axis_index] = previous_mode
         update_motion_mode_summary(state)
-    except Exception as exc:
-        raise_operation_rejected(
-            client,
-            command,
-            f"Jog stopped, but failed to restore {previous_mode.upper()}: {exc}",
-        )
-        return
+    except (OSError, AttributeError, TypeError, ValueError) as exc:
+        raise DeviceAccessException("jog_mode_restore") from exc
     finally:
         state["jog_previous_modes"][axis_index] = None
 

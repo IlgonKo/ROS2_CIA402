@@ -21,7 +21,7 @@ from motion_server.control.axis_operations import (
     update_motion_mode_summary,
 )
 from motion_server.api import require_int32
-from motion_server.failure import InvalidStateException
+from motion_server.failure import InvalidStateException, OperationTimeoutException
 
 
 def command_profile_positions(runtime, target_positions, axis_indices):
@@ -125,7 +125,12 @@ def pp_setpoint_handshake(runtime, axis_indices):
             f"diagnostics={diagnostics}"
         )
         print(message, flush=True)
-        raise RuntimeError(message)
+        raise OperationTimeoutException(
+            "pp_setpoint_handshake",
+            timeout_seconds=(
+                3 * PP_HANDSHAKE_MAX_CYCLES * float(runtime.cycle_time)
+            ),
+        )
 
 
 def wait_pp_setpoint_ack(runtime, axis_indices, expected, max_cycles):

@@ -1,5 +1,6 @@
 import ast
 import unittest
+from collections import Counter
 from pathlib import Path
 
 from motion_server.failure import EXCEPTION_FAILURE_MAPPINGS, FailureCode
@@ -54,25 +55,17 @@ APPROVED_BROAD_CATCHES = {
     "motion_server/app/startup.py::read_axis_user_position_units",
     "motion_server/app/startup.py::write_csp_interpolation_modes",
     "motion_server/device_manager/axis_diagnostics.py::diagnostics_summary",
-    "motion_server/handlers/command/axis_settings.py::set_mode",
-    "motion_server/handlers/command/axis_settings.py::set_motion_limits",
-    "motion_server/handlers/command/axis_settings.py::set_profile",
     "motion_server/handlers/command/axis_settings.py::set_software_position_limits",
-    "motion_server/handlers/command/axis_state.py::disable",
-    "motion_server/handlers/command/axis_state.py::enable",
-    "motion_server/handlers/command/axis_state.py::reset_axes",
-    "motion_server/handlers/command/axis_state.py::restart_axis",
-    "motion_server/handlers/command/axis_state.py::stop_axes",
-    "motion_server/handlers/command/jog.py::start_jog",
-    "motion_server/handlers/command/jog.py::stop_jog",
     "motion_server/handlers/command/motion.py::command_position_axes",
-    "motion_server/handlers/command/motion.py::move_absolute",
-    "motion_server/handlers/command/motion.py::move_relative",
-    "motion_server/handlers/command/motion.py::move_velocity",
     "motion_server/handlers/command/trajectory.py::stop",
     "motion_server/server.py::run_main_once",
     "ros/bridge.py::connection_loop",
     "ros/control_panel.py::follow_joint_action_ready",
+}
+
+APPROVED_BROAD_CATCH_COUNTS = {
+    "device/cmmt/profile.py::read_diagnostics": 3,
+    "ethercat/pysoem_master.py::connect": 2,
 }
 
 
@@ -91,7 +84,7 @@ def owner_name(node, parents):
 
 
 def broad_catch_locations():
-    locations = set()
+    locations = Counter()
     for path in source_files():
         tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
         parents = {
@@ -107,13 +100,19 @@ def broad_catch_locations():
                 continue
             if node.type.id not in {"Exception", "BaseException"}:
                 continue
-            locations.add(f"{relative}::{owner_name(node, parents)}")
+            locations[f"{relative}::{owner_name(node, parents)}"] += 1
     return locations
 
 
 class ErrorContractStaticTest(unittest.TestCase):
     def test_broad_catches_match_approved_function_allowlist(self):
-        self.assertEqual(broad_catch_locations(), APPROVED_BROAD_CATCHES)
+        actual = broad_catch_locations()
+        expected = Counter({location: 1 for location in APPROVED_BROAD_CATCHES})
+        expected.update({
+            location: count - 1
+            for location, count in APPROVED_BROAD_CATCH_COUNTS.items()
+        })
+        self.assertEqual(actual, expected)
 
     def test_all_registered_mappings_use_public_failure_codes(self):
         public_codes = set(FailureCode)
@@ -128,6 +127,7 @@ class ErrorContractStaticTest(unittest.TestCase):
             "_RequestCaptureConnection",
             "_operation_result",
             "reject_command_message",
+            "raise_operation_rejected",
             "TECH_DEBT[TD-005]",
         )
         source = "\n".join(
