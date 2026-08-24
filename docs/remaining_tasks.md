@@ -277,8 +277,16 @@ Tech Debt 상태 값은 `open`, `in_progress`, `complete`를 사용한다.
 - 요약: import side effect를 제거하고 immutable configuration을 runtime에 주입한다.
 - 완료 조건:
   - project module import가 파일이나 환경변수를 읽거나 변경하지 않는다.
-  - 명시적인 loader가 immutable configuration object를 생성한다.
-  - server, packaging과 테스트가 configuration dependency를 명시적으로 주입한다.
+  - 명시적인 loader가 server, EtherCAT/cycle/DC, motion, logging 및 device instance의
+    immutable typed configuration을 생성하고 검증한다.
+  - `MotionServerApplication`은 composition root로만 사용되고 하위 component는 필요한
+    typed projection만 명시적으로 주입받는다.
+  - 실제/가상 backend가 동일한 device instance config를 사용하며 전역 device profile,
+    active configuration과 장치 코드의 환경 변수 접근이 제거된다.
+  - 공통 pre-logging on/off와 length, command log 제외 계약이 검증된다.
+  - derived velocity와 설명용 configured index가 설정, state와 공개 API에서 제거된다.
+  - 서로 다른 configuration 두 개가 같은 process에서 격리되고 Windows/Linux entrypoint
+    smoke test 및 전체 회귀 테스트가 통과한다.
   - 서로 다른 설정을 같은 process에서 격리하는 자동 테스트가 통과한다.
 - 상세: [TD-014 기술 명세](tasks/td/TD-014-import-time-config.md)
 

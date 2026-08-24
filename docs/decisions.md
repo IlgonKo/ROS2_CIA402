@@ -354,6 +354,33 @@ Device Profile + ESI
 - 영향: 설정 우선순위는 장치 기본값, 프로젝트 공통 설정, 프로세스 환경 변수 순으로
   적용한다. ROS의 공통 model 연동 및 ROS 전용 설정 분리는 RF-008에서 후속 처리한다.
 
+## DEC-022 Typed Configuration과 명시적 Dependency 전달
+
+- 상태: `accepted`
+- 결정일: 2026-08-24
+- 결정:
+  - 공통 loader 결과를 immutable `MotionServerConfig`와 server, EtherCAT/cycle/DC,
+    motion, logging 및 Bus device instance별 typed config로 변환한다.
+  - `MotionServerApplication`은 전체 설정을 보유하는 composition root로 사용하되,
+    하위 component에는 Application이나 최상위 config 전체가 아니라 실제 필요한
+    typed projection과 runtime dependency만 전달한다.
+  - 가상/실제 장치는 동일한 device instance config를 사용하고 backend는 master
+    구현만 선택한다. simulation 전용 config는 현재 도입하지 않는다.
+  - 설정의 numeric Bus label은 최종 model에 보존하지 않고 실제 순서의
+    `slave_index`만 사용한다.
+  - logging은 공통 optional pre-history를 지원하며 command log는 대상에서 제외한다.
+- 이유: 전역 환경 변수와 Application 전체를 전달하는 service-locator 구조는 실제
+  dependency를 숨기고 import side effect, 테스트 결합과 서로 다른 runtime 구성의
+  간섭을 만든다.
+- 검토한 대안:
+  - 모든 component에 `MotionServerApplication` 또는 `MotionServerConfig` 전체를
+    전달하는 방식은 접근 범위와 결합도가 과도하므로 채택하지 않는다.
+  - 실제/가상 장치 config를 분리하는 방식은 동일 profile/OD 구조 원칙과 맞지 않아
+    채택하지 않는다.
+- 영향: TD-014에서 import-time loading, 전역 config/profile과 active model을 제거하고
+  typed dependency injection으로 전환한다. derived velocity는 필수 actual velocity와
+  중복되어 제거하고, CMMT interpolation mode는 device config의 Enum으로 관리한다.
+
 ## 새 결정 작성 양식
 
 ```text
