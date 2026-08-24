@@ -27,8 +27,8 @@ def inactive_homing_state(result="idle"):
 
 def initial_server_state(
     server_config,
-    ethercat_config,
     motion_config,
+    backend_is_mock,
     axis_count_value,
     axis_devices,
     positions,
@@ -101,7 +101,7 @@ def initial_server_state(
         ),
         "axis_position_counts_per_unit": axis_position_scales,
         "capabilities": {
-            "position_loop_gain": ethercat_config.backend.value == "mock",
+            "position_loop_gain": bool(backend_is_mock),
             "profile_settings": True,
             "motion_limits": True,
             "software_position_limits": True,
@@ -114,11 +114,4 @@ def initial_server_state(
         "homing": inactive_homing_state(),
         "jog_previous_modes": [None for _ in range(axis_count_value)],
         "command_authority_owner": None,
-        "spin_wait_time": ethercat_config.cycle.spin_wait_time,
-        "dc_phase_lock": ethercat_config.dc.phase_lock,
-        "dc_absolute_shift": ethercat_config.dc.absolute_shift,
-        "dc_phase_offset_ns": ethercat_config.dc.phase_offset_ns,
-        "dc_phase_kp": ethercat_config.dc.phase_kp,
-        "dc_phase_ki": ethercat_config.dc.phase_ki,
-        "dc_phase_max_correction": ethercat_config.dc.phase_max_correction,
     }

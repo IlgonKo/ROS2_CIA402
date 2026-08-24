@@ -43,14 +43,15 @@ class MotionServerApplicationTest(unittest.TestCase):
 
         received = {}
 
-        def runner(*, config, diagnostic_manager):
-            received["config"] = config
+        def runner(*, diagnostic_manager, **dependencies):
+            received.update(dependencies)
             received["diagnostic_manager"] = diagnostic_manager
             return "stopped"
 
         self.assertEqual(application.run(runner=runner), "stopped")
-        self.assertEqual(received["config"].server.port, 15003)
-        self.assertIsNot(received["config"], application)
+        self.assertEqual(received["server_config"].port, 15003)
+        self.assertNotIn("config", received)
+        self.assertNotIn("application", received)
 
 
 if __name__ == "__main__":

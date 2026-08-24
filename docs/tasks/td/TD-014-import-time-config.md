@@ -403,10 +403,10 @@ platform DLL path 준비는 configuration loading과 별도의 명시적인 boot
 - 변경: `configuration/builder.py`, `motion_server/application.py`,
   `motion_server/server.py`, `motion_server/app/startup.py`,
   `motion_server/app/state.py`, `motion_server/app/client_transport.py`
-- CLI `Namespace`는 `CliOverrides` 변환 경계 안으로 제한하고 server runtime에는
-  immutable `MotionServerConfig`만 전달한다.
+- CLI `Namespace`는 `CliOverrides` 변환 경계 안으로 제한한다. Application은 immutable
+  `MotionServerConfig`를 보유하고 server runtime에는 필요한 typed projection만 전달한다.
 - TCP loop에는 `ServerConfig`, runtime factory에는 `EtherCATConfig`, `MotionConfig`,
-  `LoggingConfig`, `BusDeviceConfig[]`, state factory에는 server/EtherCAT/motion
+  `LoggingConfig`, `BusDeviceConfig[]`, state factory에는 server/motion과 backend capability
   projection만 전달하여 하위 component의 최상위 config 의존을 제거했다.
 - feedback period, socket, cycle/DC, motion limit/CSP 설정은 typed projection에서
   소비한다. logging 전역 설정은 S05 전환 범위로 유지했다.
@@ -513,6 +513,25 @@ platform DLL path 준비는 configuration loading과 별도의 명시적인 boot
   검사, legacy global symbol 정적 검사와 명시적 CLI override 테스트 3개를 추가했다.
 - 결과: 전체 unittest 171개, source compile, Linux CLI/shell과 Windows source smoke,
   import isolation 및 diff 검사가 통과했다.
+
+### 완료 후 전체 리뷰 보완
+
+- DC가 활성화된 상태에서 phase lock 없이 absolute shift를 설정하는 조합을 configuration
+  validation에서 거부한다. DC 비활성 시 세부 설정은 보존하되 server loop와 runtime
+  diagnostic에서 적용하지 않는다.
+- CMMT interpolation mode와 CSP velocity offset을 축별 device instance 설정으로 전달하고
+  적용한다. 서로 다른 축 설정과 설정 개수 불일치에 대한 회귀 테스트를 추가했다.
+- `MotionServerApplication`이 최상위 config를 하위 runner에 넘기지 않고 server,
+  EtherCAT, motion, logging 및 device projection을 명시적으로 주입하도록 경계를 정리했다.
+  cycle/DC configuration도 mutable server state에서 제거했다.
+- 초기 motion mode를 `pp`, `pv`, `jog`, `csp`로 검증하고, 별도 process의 cold import에서
+  `.env`/`config.txt` 접근과 process environment 변경이 없는지 검사한다.
+- velocity anomaly의 pre-history 중복 첨부와 builder의 unreachable 잔여 코드를 제거했다.
+- Windows PowerShell launcher를 Application entrypoint인 `python -m motion_server`로
+  전환하고 configuration loader 실패 시 원본 오류를 함께 표시한다. launcher의 현재
+  작업 폴더와 관계없이 project root에서 configuration module을 실행한다.
+- 결과: 전체 unittest 182개, source compile, Linux CLI와 프로젝트 외부 작업 폴더의
+  Windows 실제 실행 smoke 및 diff 검사가 통과했다.
 
 각 단계 완료 시 변경 파일, 테스트 결과와 다음 단계를 이 문서에 기록한다.
 

@@ -10,9 +10,11 @@ def format_latest_cycle_value(cycle_stats, name):
     return f"{value * 1000.0:.3f}"
 
 
-def velocity_anomaly_dc_snapshot(runtime, state, cycle_stats):
+def velocity_anomaly_dc_snapshot(runtime, cycle_stats, dc_config):
+    if dc_config is None or not dc_config.enabled:
+        return "dc_enabled=False"
     cycle_time_ns = max(1, int(round(float(runtime.cycle_time) * 1_000_000_000.0)))
-    phase_offset_ns = int(state.get("dc_phase_offset_ns", 0))
+    phase_offset_ns = int(dc_config.phase_offset_ns)
     target_phase_ns = (cycle_time_ns - phase_offset_ns) % cycle_time_ns
     tx_dc_time_ns = getattr(runtime, "last_tx_dc_time_ns", None)
     direct_tx_dc_time_ns = getattr(runtime, "last_direct_tx_dc_time_ns", None)
@@ -207,7 +209,7 @@ def log_position_feedback_lag(runtime, state):
     state["position_feedback_lag_last_log_time"] = now
 
 
-def log_velocity_anomalies(runtime, state, cycle_stats):
+def log_velocity_anomalies(runtime, state, cycle_stats, dc_config=None):
     config = runtime.logger.config.velocity_anomaly
     if not config.enabled:
         return
@@ -278,8 +280,9 @@ def log_velocity_anomalies(runtime, state, cycle_stats):
             f"trajectory_time={state.get('trajectory', {}).get('time_from_start', 0.0):.3f} "
             f"dc_phase_avg_ms={latest_dc_phase_ms} "
             f"{format_position_feedback_lag(runtime, state, anomaly_axes)} "
-            f"{velocity_anomaly_dc_snapshot(runtime, state, cycle_stats)} "
+            f"{velocity_anomaly_dc_snapshot(runtime, cycle_stats, dc_config)} "
             f"{format_pre_history_for_axes(runtime, anomaly_axes)}",
+            include_history=False,
         )
         state["velocity_anomaly_last_log_time"] = now
 

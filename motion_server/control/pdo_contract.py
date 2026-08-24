@@ -18,12 +18,16 @@ def require_pdo_fields_for_mode(runtime, mode_name, axis_index=None):
     axis_indices = range(len(runtime.slaves)) if axis_index is None else [axis_index]
     fields = list(COMMON_RXPDO_FIELDS)
     fields.extend(MODE_RXPDO_FIELDS.get(mode_name, ()))
-    if mode_name == "csp" and runtime.csp_velocity_offset_enabled:
-        fields.append("velocity_offset")
     for current_axis in axis_indices:
+        axis_fields = list(fields)
+        if (
+            mode_name == "csp"
+            and runtime.axis_csp_velocity_offset_enabled(current_axis)
+        ):
+            axis_fields.append("velocity_offset")
         require_pdo_fields(
             runtime.slaves[current_axis].rxpdo,
-            tuple(dict.fromkeys(fields)),
+            tuple(dict.fromkeys(axis_fields)),
             f"Axis {current_axis} RxPDO {mode_name.upper()}",
         )
 

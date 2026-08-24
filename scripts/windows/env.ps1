@@ -10,9 +10,17 @@ function Import-AxisServerEnv {
         throw "Missing $baseEnvPath. Create it from .env.example first."
     }
 
-    $json = & $Python -m configuration --project-root $ProjectRoot --format json
-    if ($LASTEXITCODE -ne 0) {
-        throw "Failed to load Motion Server configuration."
+    Push-Location $ProjectRoot
+    try {
+        $json = & $Python -m configuration --project-root $ProjectRoot --format json 2>&1
+        $exitCode = $LASTEXITCODE
+    }
+    finally {
+        Pop-Location
+    }
+    if ($exitCode -ne 0) {
+        $detail = ($json | Out-String).Trim()
+        throw "Failed to load Motion Server configuration.`n$detail"
     }
 
     $parsed = $json | ConvertFrom-Json
@@ -35,9 +43,18 @@ function Read-DotEnvFile {
         [string]$Python = "python"
     )
 
-    $json = & $Python -m configuration --file $Path --format json
-    if ($LASTEXITCODE -ne 0) {
-        throw "Failed to read configuration file: $Path"
+    $moduleRoot = Resolve-Path (Join-Path $PSScriptRoot "..\..")
+    Push-Location $moduleRoot
+    try {
+        $json = & $Python -m configuration --file $Path --format json 2>&1
+        $exitCode = $LASTEXITCODE
+    }
+    finally {
+        Pop-Location
+    }
+    if ($exitCode -ne 0) {
+        $detail = ($json | Out-String).Trim()
+        throw "Failed to read configuration file: $Path`n$detail"
     }
     $parsed = $json | ConvertFrom-Json
     $values = [ordered]@{}

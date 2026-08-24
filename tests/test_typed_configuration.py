@@ -96,6 +96,46 @@ class TypedConfigurationTest(unittest.TestCase):
                     "MOTION_SERVER_CSP_INTERPOLATION_MODE=3\n",
                 )
 
+    def test_keeps_but_does_not_validate_dc_details_when_dc_is_disabled(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            config = self.load_typed(
+                temp_dir,
+                "PYSOEM_DC_ENABLED=0\n"
+                "PYSOEM_DC_PHASE_LOCK=1\n"
+                "PYSOEM_DC_ABSOLUTE_SHIFT=1\n",
+            )
+
+        self.assertFalse(config.ethercat.dc.enabled)
+        self.assertTrue(config.ethercat.dc.phase_lock)
+        self.assertTrue(config.ethercat.dc.absolute_shift)
+
+    def test_rejects_absolute_shift_without_phase_lock(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            with self.assertRaisesRegex(ValueError, "requires DC phase lock"):
+                self.load_typed(
+                    temp_dir,
+                    "PYSOEM_DC_ENABLED=1\n"
+                    "PYSOEM_DC_PHASE_LOCK=0\n"
+                    "PYSOEM_DC_ABSOLUTE_SHIFT=1\n",
+                )
+
+    def test_rejects_unknown_initial_motion_mode(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            with self.assertRaisesRegex(ValueError, "Initial motion mode"):
+                self.load_typed(
+                    temp_dir,
+                    "MOTION_SERVER_MOTION_MODE=typo\n",
+                )
+
+    def test_accepts_jog_as_initial_motion_mode(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            config = self.load_typed(
+                temp_dir,
+                "MOTION_SERVER_MOTION_MODE=jog\n",
+            )
+
+        self.assertEqual(config.motion.initial_motion_mode, "jog")
+
     def test_rejects_enabled_pre_logging_without_history(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             with self.assertRaisesRegex(ValueError, "pre-logging"):

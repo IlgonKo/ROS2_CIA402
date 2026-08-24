@@ -44,10 +44,17 @@ class MotionServerApplication:
         return cls(typed_config, list_adapters=list_adapters)
 
     def run(self, runner=None):
+        dependencies = {
+            "server_config": self._config.server,
+            "ethercat_config": self._config.ethercat,
+            "motion_config": self._config.motion,
+            "logging_config": self._config.logging,
+            "devices": self._config.devices,
+        }
         if runner is not None:
             return runner(
-                config=self._config,
                 diagnostic_manager=DiagnosticManager(),
+                **dependencies,
             )
 
         # S03 replaces the Namespace adapter with typed projections. Runtime
@@ -67,7 +74,7 @@ class MotionServerApplication:
         diagnostic_manager = DiagnosticManager()
         while True:
             try:
-                run_main_once(diagnostic_manager, config=self._config)
+                run_main_once(diagnostic_manager, **dependencies)
                 return
             except ServerResetRequested:
                 print(

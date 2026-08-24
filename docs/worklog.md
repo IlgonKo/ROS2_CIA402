@@ -6,8 +6,18 @@
 
 ## 2026-08-24
 
+### 등록
+
+- `TD-024`를 등록하여 Axis Control Panel 시작 시 축 수 확인용 임시 연결과 상시 연결이
+  중복되고 Windows 서버에 `WinError 10054`가 남는 문제를 추적한다.
+
 ### 완료
 
+- `TD-014` 완료 후 전체 리뷰에서 발견된 DC 비활성 runtime 경계, 축별 CMMT CSP 설정,
+  composition root projection, 초기 motion mode validation과 cold-import 검증을 보완했다.
+  pre-history 중복과 잔여 코드도 정리했다. Windows launcher를 Application entrypoint로
+  수정하고 loader 원본 오류를 보존했다. 프로젝트 외부 작업 폴더에서도 configuration을
+  찾도록 보완했으며 전체 unittest 182개와 실제 실행 smoke를 통과했다.
 - `TD-014-S07`에서 import-time `motion_server/config.py`, active configuration,
   environment backfill과 전역 CMMT profile을 제거했다. CLI/PDO 계약을 독립 module로
   분리하고 모든 축 동작이 runtime instance profile을 사용하도록 전환했으며,

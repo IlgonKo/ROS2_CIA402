@@ -28,7 +28,21 @@ class MotionController:
         if self.axis_count < 1:
             raise ValueError("axis_count must be at least one")
         self.cycle_time = float(cycle_time)
-        self.csp_velocity_offset_enabled = bool(csp_velocity_offset_enabled)
+        if isinstance(csp_velocity_offset_enabled, (tuple, list)):
+            if len(csp_velocity_offset_enabled) != self.axis_count:
+                raise ValueError(
+                    "csp_velocity_offset_enabled must contain one value per axis"
+                )
+            self.csp_velocity_offset_by_axis = tuple(
+                bool(value) for value in csp_velocity_offset_enabled
+            )
+        else:
+            self.csp_velocity_offset_by_axis = tuple(
+                bool(csp_velocity_offset_enabled) for _ in range(self.axis_count)
+            )
+        self.csp_velocity_offset_enabled = any(
+            self.csp_velocity_offset_by_axis
+        )
         self.csp_command_step_threshold = float(csp_command_step_threshold)
         self.csp_command_step_error_threshold = float(
             csp_command_step_error_threshold
@@ -176,7 +190,7 @@ class MotionController:
             ))
             sent_position = int(round(command_position))
             velocity_offset = 0
-            if self.csp_velocity_offset_enabled:
+            if self.csp_velocity_offset_by_axis[axis_index]:
                 velocity_offset = int(round(
                     float(generator.command_velocity) / max(scale, 1e-9)
                 ))

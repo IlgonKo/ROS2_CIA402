@@ -79,7 +79,7 @@ def requested_server_action(state):
         return "reset"
     return None
 
-def run_server_loop(server, runtime, state, server_config):
+def run_server_loop(server, runtime, state, server_config, ethercat_config):
     server.setblocking(False)
     clients = []
     last_status_log_time = 0.0
@@ -87,19 +87,21 @@ def run_server_loop(server, runtime, state, server_config):
     last_cycle_start_time = None
     last_cycle_stats_log_time = time.monotonic()
     next_cycle_time = time.monotonic()
-    spin_wait_time = float(state.get("spin_wait_time", 0.0))
-    dc_phase_lock_enabled = bool(state.get("dc_phase_lock", False))
+    spin_wait_time = ethercat_config.cycle.spin_wait_time
+    dc_phase_lock_enabled = bool(
+        ethercat_config.dc.enabled and ethercat_config.dc.phase_lock
+    )
     dc_absolute_shift = (
         dc_phase_lock_enabled
-        and bool(state.get("dc_absolute_shift", False))
+        and ethercat_config.dc.absolute_shift
     )
     dc_phase_lock = DcPhaseLock(
         dc_phase_lock_enabled,
         runtime.cycle_time,
-        state.get("dc_phase_offset_ns", 800000),
-        state.get("dc_phase_kp", 0.05),
-        state.get("dc_phase_ki", 0.0005),
-        state.get("dc_phase_max_correction", 0.001),
+        ethercat_config.dc.phase_offset_ns,
+        ethercat_config.dc.phase_kp,
+        ethercat_config.dc.phase_ki,
+        ethercat_config.dc.phase_max_correction,
     )
     dc_cycle_scheduler = DcCycleScheduler(dc_phase_lock)
     diagnostic_monitor = RuntimeDiagnosticMonitor(runtime.diagnostic_manager)
@@ -166,7 +168,12 @@ def run_server_loop(server, runtime, state, server_config):
         update_homing_state(runtime, state)
         log_csp_command_step_anomalies(runtime, state)
         log_position_feedback_lag(runtime, state)
-        log_velocity_anomalies(runtime, state, cycle_stats)
+        log_velocity_anomalies(
+            runtime,
+            state,
+            cycle_stats,
+            ethercat_config.dc,
+        )
 
         if not dc_absolute_shift:
             next_cycle_time += runtime.cycle_time + dc_phase_lock.correction()
@@ -313,13 +320,20 @@ def restart_current_process():
     os.execv(sys.executable, [sys.executable, *sys.argv])
 
 
-def run_main_once(diagnostic_manager=None, config=None):
-    if config is None:
-        raise TypeError("config must be a MotionServerConfig")
-    if config.axis_count < 1:
+def run_main_once(
+    diagnostic_manager=None,
+    *,
+    server_config,
+    ethercat_config,
+    motion_config,
+    logging_config,
+    devices,
+):
+    axis_count_value = sum(device.role.value == "axis" for device in devices)
+    if axis_count_value < 1:
         raise ValueError("MOTION_SERVER_BUS must contain at least one motion axis")
 
-    limits = config.motion.default_limits
+    limits = motion_config.default_limits
     motion_limits = [
         {
             "max_velocity": limits.max_velocity,
@@ -327,13 +341,13 @@ def run_main_once(diagnostic_manager=None, config=None):
             "deceleration": limits.deceleration,
             "jerk": limits.jerk,
         }
-        for _ in range(config.axis_count)
+        for _ in range(axis_count_value)
     ]
     runtime = create_axis_runtime(
-        config.ethercat,
-        config.motion,
-        config.logging,
-        config.devices,
+        ethercat_config,
+        motion_config,
+        logging_config,
+        devices,
         motion_limits,
     )
     if diagnostic_manager is not None:
@@ -341,20 +355,22 @@ def run_main_once(diagnostic_manager=None, config=None):
 
     cmmt_devices = [
         device.device
-        for device in config.devices
+        for device in devices
         if isinstance(device.device, CmmtDeviceConfig)
     ]
     if not cmmt_devices:
         raise ValueError("Motion Server configuration contains no CMMT axis")
-    csp_interpolation_mode = int(cmmt_devices[0].csp_interpolation_mode)
+    csp_interpolation_modes = tuple(
+        device.csp_interpolation_mode for device in cmmt_devices
+    )
 
     try:
         drive_initialized = False
         try:
             startup_sdo = initialize_drive(
                 runtime,
-                config.motion.initial_motion_mode,
-                csp_interpolation_mode,
+                motion_config.initial_motion_mode,
+                csp_interpolation_modes,
                 read_startup_axis_sdo,
             )
             drive_initialized = True
@@ -368,23 +384,23 @@ def run_main_once(diagnostic_manager=None, config=None):
             )
             runtime.close()
             runtime.last_diagnostics = default_diagnostics(
-                config.axis_count,
+                axis_count_value,
                 initialization_error,
             )
             software_position_limits = [
                 [0.0, 0.0]
-                for _ in range(config.axis_count)
+                for _ in range(axis_count_value)
             ]
             profile_settings = None
             read_motion_limits_state = None
             user_position_units = None
             converting_unit_exponents = None
-            positions = [0.0 for _ in range(config.axis_count)]
+            positions = [0.0 for _ in range(axis_count_value)]
             state = initial_server_state(
-                config.server,
-                config.ethercat,
-                config.motion,
-                config.axis_count,
+                server_config,
+                motion_config,
+                ethercat_config.backend.value == "mock",
+                axis_count_value,
                 runtime.device_manager.axes,
                 positions,
                 software_position_limits,
@@ -397,12 +413,12 @@ def run_main_once(diagnostic_manager=None, config=None):
             )
         else:
             runtime.last_diagnostics = default_diagnostics(
-                config.axis_count,
+                axis_count_value,
                 "Panel SDO read pending",
             )
             default_software_position_limits = [
                 [-1000000, 1000000]
-                for _ in range(config.axis_count)
+                for _ in range(axis_count_value)
             ]
             software_position_limits = startup_sdo.get(
                 "software_position_limits",
@@ -423,7 +439,7 @@ def run_main_once(diagnostic_manager=None, config=None):
             unit_state["axis_metadata"] = axis_metadata
             axis_position_scales = axis_position_counts_per_api_units(
                 unit_state,
-                config.axis_count,
+                axis_count_value,
             )
             for axis_index, scale in enumerate(axis_position_scales):
                 runtime.set_axis_position_counts_per_api_unit(
@@ -456,7 +472,7 @@ def run_main_once(diagnostic_manager=None, config=None):
                         "jerk",
                     ),
                 ]
-                for axis_index in range(config.axis_count)
+                for axis_index in range(axis_count_value)
             ]
             profile_settings = [
                 values if values is not None else default_profile_settings[axis_index]
@@ -489,7 +505,7 @@ def run_main_once(diagnostic_manager=None, config=None):
                         "deceleration",
                     ),
                 ]
-                for axis_index in range(config.axis_count)
+                for axis_index in range(axis_count_value)
             ]
             read_motion_limits_state = [
                 values if values is not None else default_motion_limits_state[axis_index]
@@ -519,29 +535,29 @@ def run_main_once(diagnostic_manager=None, config=None):
                     limits.jerk,
                 )
             positions = actual_positions(runtime)
-            dc_summary = f"dc_enabled={config.ethercat.dc.enabled}"
-            if config.ethercat.dc.enabled:
+            dc_summary = f"dc_enabled={ethercat_config.dc.enabled}"
+            if ethercat_config.dc.enabled:
                 dc_summary += (
-                    f" dc_phase_lock={config.ethercat.dc.phase_lock}"
-                    f" dc_absolute_shift={config.ethercat.dc.absolute_shift}"
+                    f" dc_phase_lock={ethercat_config.dc.phase_lock}"
+                    f" dc_absolute_shift={ethercat_config.dc.absolute_shift}"
                 )
             print(
                 "Drive initialized. "
-                f"backend={config.ethercat.backend.value} "
-                f"axes={config.axis_count} "
-                f"cycle_time={config.ethercat.cycle.period} "
-                f"spin_wait_time={config.ethercat.cycle.spin_wait_time} "
+                f"backend={ethercat_config.backend.value} "
+                f"axes={axis_count_value} "
+                f"cycle_time={ethercat_config.cycle.period} "
+                f"spin_wait_time={ethercat_config.cycle.spin_wait_time} "
                 f"axis_position_counts_per_api_unit={axis_position_scales} "
-                f"csp_profile={config.motion.csp_profile.value} "
+                f"csp_profile={motion_config.csp_profile.value} "
                 f"{dc_summary} "
-                f"csp_interpolation_mode={csp_interpolation_mode}",
+                f"csp_interpolation_modes={[int(value) for value in csp_interpolation_modes]}",
                 flush=True,
             )
             state = initial_server_state(
-                config.server,
-                config.ethercat,
-                config.motion,
-                config.axis_count,
+                server_config,
+                motion_config,
+                ethercat_config.backend.value == "mock",
+                axis_count_value,
                 runtime.device_manager.axes,
                 positions,
                 software_position_limits,
@@ -562,21 +578,23 @@ def run_main_once(diagnostic_manager=None, config=None):
 
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as server:
             server.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-            server.bind((config.server.host, config.server.port))
+            server.bind((server_config.host, server_config.port))
             server.listen(1)
             print(
-                f"Motion Server listening on {config.server.host}:{config.server.port} "
-                f"backend={config.ethercat.backend.value} axes={config.axis_count}",
+                f"Motion Server listening on {server_config.host}:{server_config.port} "
+                f"backend={ethercat_config.backend.value} axes={axis_count_value}",
                 flush=True,
             )
             if drive_initialized:
-                action = run_server_loop(server, runtime, state, config.server)
+                action = run_server_loop(
+                    server, runtime, state, server_config, ethercat_config
+                )
             else:
                 action = run_degraded_server_loop(
                     server,
                     runtime,
                     state,
-                    config.server,
+                    server_config,
                 )
 
             if action == "restart":

@@ -285,6 +285,16 @@ def validate_motion_server_config(config):
         raise ValueError("EtherCAT sync mode must be 0, 1, 2, or empty")
     if config.ethercat.backend is BackendType.PYSOEM and not config.ethercat.interface:
         raise ValueError("PySOEM backend requires an interface")
+    if (
+        config.ethercat.dc.enabled
+        and config.ethercat.dc.absolute_shift
+        and not config.ethercat.dc.phase_lock
+    ):
+        raise ValueError("DC absolute shift requires DC phase lock")
+    if config.motion.initial_motion_mode not in {"pp", "pv", "jog", "csp"}:
+        raise ValueError(
+            "Initial motion mode must be one of: pp, pv, jog, csp"
+        )
     limits = config.motion.default_limits
     if min(limits.max_velocity, limits.acceleration, limits.deceleration, limits.jerk) <= 0:
         raise ValueError("Motion limits must be > 0")
@@ -339,5 +349,3 @@ def enum_value(enum_type, raw):
 
 def choose(override, default):
     return default if override is None else override
-    CommandLogConfig,
-    CycleStatsLogConfig,

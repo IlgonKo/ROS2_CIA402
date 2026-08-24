@@ -83,7 +83,7 @@ def create_axis_runtime(ethercat, motion, logging, devices, motion_limits):
             axis_count_value,
             ethercat.cycle.period,
             motion_limits=motion_limits,
-            csp_velocity_offset_enabled=any(
+            csp_velocity_offset_enabled=tuple(
                 getattr(device.device, "csp_velocity_offset", False)
                 for device in devices
                 if device.role.value == "axis"
@@ -122,7 +122,7 @@ def create_axis_runtime(ethercat, motion, logging, devices, motion_limits):
         axis_count_value,
         ethercat.cycle.period,
         motion_limits=motion_limits,
-        csp_velocity_offset_enabled=any(
+        csp_velocity_offset_enabled=tuple(
             getattr(device.device, "csp_velocity_offset", False)
             for device in devices
             if device.role.value == "axis"
@@ -326,14 +326,14 @@ def read_axis_motion_limits(runtime):
     return limits
 
 
-def initialize_drive(runtime, motion_mode, csp_interpolation_mode, startup_sdo_reader=None):
+def initialize_drive(runtime, motion_mode, csp_interpolation_modes, startup_sdo_reader=None):
     startup_sdo = None
     runtime.connect(target_state="preop")
     require_txpdo_fields(runtime)
     clear_axis_restart_commands(runtime)
     if startup_sdo_reader is not None:
         startup_sdo = startup_sdo_reader(runtime)
-    write_csp_interpolation_modes(runtime, csp_interpolation_mode)
+    write_csp_interpolation_modes(runtime, csp_interpolation_modes)
     if motion_mode == "pv":
         user_position_units = (
             startup_sdo.get("user_position_units")
@@ -416,12 +416,14 @@ def configure_motion_mode_without_exchange(runtime, mode_name):
         profile.configure_mode_code(runtime, axis_index, code)
 
 
-def write_csp_interpolation_modes(runtime, csp_interpolation_mode):
-    value = int(csp_interpolation_mode)
-    if value <= 0:
-        return
+def write_csp_interpolation_modes(runtime, csp_interpolation_modes):
+    values = tuple(int(value) for value in csp_interpolation_modes)
+    if len(values) != axis_count(runtime):
+        raise ValueError("CSP interpolation mode must be configured per axis")
 
-    for axis_index in range(axis_count(runtime)):
+    for axis_index, value in enumerate(values):
+        if value <= 0:
+            continue
         profile = axis_device_profile(runtime, axis_index)
         try:
             readback = profile.write_csp_interpolation_mode(

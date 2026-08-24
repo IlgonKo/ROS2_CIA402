@@ -272,7 +272,7 @@ Tech Debt 상태 값은 `open`, `in_progress`, `complete`를 사용한다.
 
 ### TD-014 Import 시점 전역 설정 로딩
 
-- 상태: `open`
+- 상태: `complete`
 - 우선순위: 보통
 - 요약: import side effect를 제거하고 immutable configuration을 runtime에 주입한다.
 - 완료 조건:
@@ -402,3 +402,16 @@ Tech Debt 상태 값은 `open`, `in_progress`, `complete`를 사용한다.
   - mock과 실축 startup이 기존 device parameter를 동일하게 읽어 runtime 상태를 구성한다.
   - required OD 초기값, startup 이후 값, readback 실패와 명시적 설정 변경을 검증하는 자동 테스트가 통과한다.
 - 상세: [TD-023 기술 명세](tasks/td/TD-023-virtual-od-startup-defaults.md)
+
+### TD-024 Axis Control Panel 초기 임시 연결 제거
+
+- 상태: `open`
+- 우선순위: 낮음
+- 요약: Axis Control Panel이 축 수 확인을 위해 만드는 일회성 연결을 제거하고 상시 연결의 첫 status로 초기화한다.
+- 완료 조건:
+  - Control Panel 시작 시 `system/axes/status`를 위한 별도 임시 TCP 연결을 만들지 않는다.
+  - 상시 연결에서 받은 첫 status로 축 수, 축 이름과 UI 상태를 초기화한다.
+  - 시작 과정에서 동일 status 요청과 client 연결이 중복되지 않는다.
+  - 정상적인 Control Panel 시작·종료가 서버에서 connection reset 오류로 기록되지 않는다.
+  - 연결 실패, 지연 응답과 재접속 이후에도 UI가 올바른 축 수로 복구되는 자동 테스트가 통과한다.
+- 상세: [TD-024 기술 명세](tasks/td/TD-024-axis-panel-bootstrap-connection.md)

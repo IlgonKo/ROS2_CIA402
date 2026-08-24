@@ -63,6 +63,9 @@ class AxisRuntime:
     def csp_velocity_offset_enabled(self):
         return self.motion_controller.csp_velocity_offset_enabled
 
+    def axis_csp_velocity_offset_enabled(self, axis_index):
+        return self.motion_controller.csp_velocity_offset_by_axis[int(axis_index)]
+
     @property
     def last_csp_command_steps(self):
         return self.motion_controller.last_csp_command_steps
