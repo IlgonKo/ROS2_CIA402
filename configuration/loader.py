@@ -17,9 +17,7 @@ CONFIG_ENV_PREFIXES = (
     "PYSOEM_",
     "ROS_",
     "ROS2_",
-    "VIRTUAL_",
 )
-_active_configuration = None
 
 
 @dataclass(frozen=True)
@@ -30,15 +28,6 @@ class ConfigurationModel:
 
     def value(self, name, default=""):
         return self.values.get(name, default)
-
-
-def active_configuration():
-    return _active_configuration
-
-
-def set_active_configuration(model):
-    global _active_configuration
-    _active_configuration = model
 
 
 def device_config_profile_name(profile_name):
@@ -87,18 +76,6 @@ def load_configuration(
         config_profile = device_config_profile_name(profile_name)
         device_path = config_root / config_profile / device_filename
         for key, value in read_key_value_config(device_path).items():
-            device_defaults.setdefault(key, value)
-
-    if effective_common.get("MOTION_SERVER_BACKEND", "pysoem").strip().lower() == "mock":
-        virtual_path = resolve_path(
-            project_root,
-            effective_common.get(
-                "VIRTUAL_SERVO_DRIVE_ENV_FILE",
-                f"device/virtual_servo_drive/{device_filename}",
-            ),
-            f"device/virtual_servo_drive/{device_filename}",
-        )
-        for key, value in read_key_value_config(virtual_path).items():
             device_defaults.setdefault(key, value)
 
     known_keys = set(project_values) | set(device_defaults)

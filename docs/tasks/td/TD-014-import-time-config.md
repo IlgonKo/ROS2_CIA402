@@ -495,6 +495,25 @@ platform DLL path 준비는 configuration loading과 별도의 명시적인 boot
 - import-time loader, environment mutation, active configuration과 전역 profile을 제거한다.
 - 동일 process의 복수 config 격리, Windows/Linux smoke test와 전체 회귀를 수행한다.
 
+완료 기록:
+
+- 상태: `complete`
+- import 시 loader 실행, `os.environ` overlay와 전역 profile/PDO 계약을 혼합하던
+  `motion_server/config.py`를 제거했다.
+- CLI는 명시한 값만 `CliOverrides`로 만드는 `configuration/cli.py`, PDO field 검증은
+  `motion_server/control/pdo_contract.py`로 분리했다.
+- `active_configuration/set_active_configuration`과 Windows configuration 환경 변수
+  backfill을 제거했다. 일반 `.env`와 Windows `config.txt`는 각각
+  `ConfigurationSource`만 다르고 동일 Application 경계에서 한 번 생성된다.
+- 모든 Axis 제어·startup·parameter access는 전역 CMMT profile이 아니라 runtime
+  slave의 instance device profile을 사용한다.
+- Linux/Docker 시작 명령을 직접 `server.py` 실행에서 `python -m motion_server`로
+  통일했다.
+- module reload가 configuration file을 읽거나 process environment를 변경하지 않는
+  검사, legacy global symbol 정적 검사와 명시적 CLI override 테스트 3개를 추가했다.
+- 결과: 전체 unittest 171개, source compile, Linux CLI/shell과 Windows source smoke,
+  import isolation 및 diff 검사가 통과했다.
+
 각 단계 완료 시 변경 파일, 테스트 결과와 다음 단계를 이 문서에 기록한다.
 
 ## 제외 범위
@@ -520,5 +539,12 @@ platform DLL path 준비는 configuration loading과 별도의 명시적인 boot
 
 ## 완료 증거
 
-완료 시 최종 model, dependency graph, 제거한 전역 설정 목록, import 격리와 전체 회귀
-테스트 결과를 기록한다.
+- 최종 model: immutable `MotionServerConfig`와 server, EtherCAT/cycle/DC, motion,
+  logging 및 Bus device instance projection
+- dependency: Application → typed projection → Runtime/DeviceProfile이며 하위 component는
+  Application과 최상위 config를 받지 않는다.
+- 제거: import-time `motion_server/config.py`, active configuration, environment backfill,
+  전역 CMMT profile, state `tx_history`, derived velocity, configured index와 mock 전용
+  axis type/unit 설정
+- 검증: unittest 171개, import reload/file-access/environment 불변, 복수 config 격리,
+  Windows `config.txt`, Linux `python -m motion_server --help`, shell/source compile 통과

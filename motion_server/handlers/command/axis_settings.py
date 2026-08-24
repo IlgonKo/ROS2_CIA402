@@ -6,10 +6,10 @@ from motion_server.control.axis_units import (
     axis_position_drive_to_api,
     motion_limits_drive_to_api,
 )
-from motion_server.config import (
-    DEVICE_PROFILE,
-    MOTION_MODES,
-    require_pdo_fields_for_mode,
+from motion_server.control.pdo_contract import require_pdo_fields_for_mode
+from motion_server.device_manager.profile_access import (
+    axis_device_profile,
+    axis_motion_modes,
 )
 from motion_server.control.axis_operations import (
     axis_count,
@@ -151,7 +151,7 @@ def update_axis_motion_limits(
 
 
 def write_axis_motion_limits(runtime, axis_index, axis_limits):
-    DEVICE_PROFILE.write_motion_limits(
+    axis_device_profile(runtime, axis_index).write_motion_limits(
         runtime,
         axis_index,
         axis_limits[0],
@@ -286,18 +286,19 @@ def update_axis_profile_settings(
     if is_pv_axis:
         runtime.sdo.write_uint32(
             axis_index,
-            DEVICE_PROFILE.PROFILE_ACCELERATION_INDEX,
+            axis_device_profile(runtime, axis_index).PROFILE_ACCELERATION_INDEX,
             0,
             max(0, int(profile_acceleration)),
         )
         runtime.sdo.write_uint32(
             axis_index,
-            DEVICE_PROFILE.PROFILE_DECELERATION_INDEX,
+            axis_device_profile(runtime, axis_index).PROFILE_DECELERATION_INDEX,
             0,
             max(0, int(profile_deceleration)),
         )
     else:
-        DEVICE_PROFILE.write_profile_settings(
+        profile = axis_device_profile(runtime, axis_index)
+        profile.write_profile_settings(
             runtime,
             axis_index,
             profile_velocity,
@@ -305,7 +306,7 @@ def update_axis_profile_settings(
             profile_deceleration,
         )
     if profile_jerk is not None:
-        DEVICE_PROFILE.write_profile_jerk(runtime, axis_index, profile_jerk)
+        profile.write_profile_jerk(runtime, axis_index, profile_jerk)
 
 
 def set_software_position_limits(message, runtime, state, client):
@@ -356,14 +357,15 @@ def set_software_position_limits(message, runtime, state, client):
                     f"positive limit. axis={axis_index} "
                     f"negative={negative_limit} positive={positive_limit}"
                 )
-            DEVICE_PROFILE.write_software_position_limits(
+            profile = axis_device_profile(runtime, axis_index)
+            profile.write_software_position_limits(
                 runtime,
                 axis_index,
                 negative_limit,
                 positive_limit,
             )
             try:
-                readback_limits = DEVICE_PROFILE.read_software_position_limits(
+                readback_limits = profile.read_software_position_limits(
                     runtime,
                     axis_index,
                 )
@@ -400,7 +402,7 @@ def reject_command(client, command, message):
 def set_mode(message, runtime, state, client=None):
     command = public_command_name(message)
     requested_mode = str(message.get("mode", "")).strip().lower()
-    if requested_mode not in MOTION_MODES:
+    if requested_mode not in axis_motion_modes(runtime):
         error_message = f"Ignored invalid motion mode: {requested_mode}"
         print(error_message, flush=True)
         reject_command(client, command, error_message)
@@ -458,7 +460,7 @@ def set_mode(message, runtime, state, client=None):
             configure_motion_mode(runtime, requested_mode, axis_index)
         except Exception as exc:
             failed.append((axis_index, exc))
-            previous_code = mode_code(previous_mode)
+            previous_code = mode_code(runtime, previous_mode, axis_index)
             runtime.slaves[axis_index].rxpdo.mode_of_operation = previous_code
             runtime.logger.status(
                 "Motion mode change failed "

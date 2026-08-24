@@ -1,14 +1,5 @@
-from motion_server.config import (
-    CSP_MODE,
-    DEVICE_PROFILE,
-    PP_BASE_CONTROLWORD,
-    PP_HANDSHAKE_MAX_CYCLES,
-    PP_NEW_SETPOINT_CONTROLWORD,
-    PP_SETPOINT_ACK_MASK,
-    PROFILE_POSITION_MODE,
-    PROFILE_VELOCITY_MODE,
-    require_pdo_fields_for_mode,
-)
+from motion_server.control.pdo_contract import require_pdo_fields_for_mode
+from motion_server.device_manager.profile_access import axis_device_profile
 from motion_server.app.cycle import exchange
 from motion_server.device_manager.axis_diagnostics import diagnostics_summary
 from motion_server.control.axis_operations import (
@@ -29,7 +20,8 @@ def command_profile_positions(runtime, target_positions, axis_indices):
         require_pdo_fields_for_mode(runtime, "pp", axis_index)
         target_position = target_positions[axis_index]
         slave = runtime.slaves[axis_index]
-        slave.rxpdo.mode_of_operation = PROFILE_POSITION_MODE
+        profile = axis_device_profile(runtime, axis_index)
+        slave.rxpdo.mode_of_operation = profile.PROFILE_POSITION_MODE
         slave.rxpdo.target_position = require_int32(
             target_position,
             f"axis {axis_index} target_position",
@@ -76,7 +68,8 @@ def command_profile_velocities(
             hold_axis_at_actual_position(runtime, state, axis_index)
             configure_motion_mode(runtime, "pv", axis_index)
             state["motion_modes"][axis_index] = "pv"
-        slave.rxpdo.mode_of_operation = PROFILE_VELOCITY_MODE
+        profile = axis_device_profile(runtime, axis_index)
+        slave.rxpdo.mode_of_operation = profile.PROFILE_VELOCITY_MODE
         slave.rxpdo.target_velocity = target_velocity
         slave.rxpdo.controlword = 0x000F
         runtime.sync_velocity_command(axis_index, velocity)
@@ -87,34 +80,46 @@ def command_profile_velocities(
 
 def pp_setpoint_handshake(runtime, axis_indices):
     for axis_index in axis_indices:
-        runtime.slaves[axis_index].rxpdo.controlword = PP_BASE_CONTROLWORD
+        profile = axis_device_profile(runtime, axis_index)
+        runtime.slaves[axis_index].rxpdo.controlword = profile.PP_BASE_CONTROLWORD
     ack_cleared_before = wait_pp_setpoint_ack(
         runtime,
         axis_indices,
         expected=False,
-        max_cycles=PP_HANDSHAKE_MAX_CYCLES,
+        max_cycles=max(
+            axis_device_profile(runtime, index).PP_HANDSHAKE_MAX_CYCLES
+            for index in axis_indices
+        ),
     )
 
     for axis_index in axis_indices:
-        runtime.slaves[axis_index].rxpdo.controlword = PP_NEW_SETPOINT_CONTROLWORD
+        profile = axis_device_profile(runtime, axis_index)
+        runtime.slaves[axis_index].rxpdo.controlword = profile.PP_NEW_SETPOINT_CONTROLWORD
     ack_set = wait_pp_setpoint_ack(
         runtime,
         axis_indices,
         expected=True,
-        max_cycles=PP_HANDSHAKE_MAX_CYCLES,
+        max_cycles=max(
+            axis_device_profile(runtime, index).PP_HANDSHAKE_MAX_CYCLES
+            for index in axis_indices
+        ),
     )
 
     for axis_index in axis_indices:
-        runtime.slaves[axis_index].rxpdo.controlword = PP_BASE_CONTROLWORD
+        profile = axis_device_profile(runtime, axis_index)
+        runtime.slaves[axis_index].rxpdo.controlword = profile.PP_BASE_CONTROLWORD
     ack_cleared_after = wait_pp_setpoint_ack(
         runtime,
         axis_indices,
         expected=False,
-        max_cycles=PP_HANDSHAKE_MAX_CYCLES,
+        max_cycles=max(
+            axis_device_profile(runtime, index).PP_HANDSHAKE_MAX_CYCLES
+            for index in axis_indices
+        ),
     )
 
     if not (ack_cleared_before and ack_set and ack_cleared_after):
-        diagnostics = diagnostics_summary(runtime, axis_indices, DEVICE_PROFILE)
+        diagnostics = diagnostics_summary(runtime, axis_indices)
         message = (
             "PP set-point handshake did not complete cleanly. "
             f"axes={axis_indices} "
@@ -132,7 +137,10 @@ def wait_pp_setpoint_ack(runtime, axis_indices, expected, max_cycles):
     for _ in range(max_cycles):
         exchange(runtime)
         if all(
-            bool(runtime.slaves[axis_index].txpdo.statusword & PP_SETPOINT_ACK_MASK)
+            bool(
+                runtime.slaves[axis_index].txpdo.statusword
+                & axis_device_profile(runtime, axis_index).PP_SETPOINT_ACK_MASK
+            )
             == expected
             for axis_index in axis_indices
         ):
@@ -150,7 +158,8 @@ def command_csp_positions(runtime, target_positions, axis_indices):
         )
     for axis_index in axis_indices:
         slave = runtime.slaves[axis_index]
-        slave.rxpdo.mode_of_operation = CSP_MODE
+        profile = axis_device_profile(runtime, axis_index)
+        slave.rxpdo.mode_of_operation = profile.CSP_MODE
         slave.rxpdo.controlword = 0x000F
 
     runtime.set_target_positions(checked_positions)

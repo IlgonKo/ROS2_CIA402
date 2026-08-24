@@ -30,14 +30,15 @@ def read_all_diagnostics(runtime, device_profile):
     ]
 
 
-def diagnostics_summary(runtime, axis_indices, device_profile):
+def diagnostics_summary(runtime, axis_indices, device_profile=None):
     summaries = []
     for axis_index in axis_indices:
         try:
+            profile = device_profile or runtime.slaves[axis_index].device_profile
             diagnostics = read_axis_diagnostics(
                 runtime,
                 axis_index,
-                device_profile,
+                profile,
             )
         except Exception as exc:
             summaries.append(f"axis {axis_index}: diagnostics read failed: {exc}")

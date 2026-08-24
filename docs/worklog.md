@@ -8,6 +8,11 @@
 
 ### 완료
 
+- `TD-014-S07`에서 import-time `motion_server/config.py`, active configuration,
+  environment backfill과 전역 CMMT profile을 제거했다. CLI/PDO 계약을 독립 module로
+  분리하고 모든 축 동작이 runtime instance profile을 사용하도록 전환했으며,
+  Windows/Linux entrypoint와 import isolation 검사를 포함한 전체 unittest 171개가
+  통과하여 TD-014를 완료했다.
 - `TD-014-S06`에서 derived velocity 계산·설정·API·UI를 제거하고 필수 TxPDO actual
   velocity만 사용하도록 정리했다. `configured_index`와 mock axis type/user-unit 전용
   설정도 제거하여 가상/실제축이 같은 device profile OD/unit을 사용하며, 재도입 방지

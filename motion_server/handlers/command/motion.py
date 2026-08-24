@@ -1,4 +1,4 @@
-from motion_server.config import HOMING_REFERENCED_MASK
+from motion_server.device_manager.profile_access import axis_device_profile
 from motion_server.control.axis_units import (
     axis_motion_api_to_drive,
     axis_position_api_to_drive,
@@ -30,7 +30,8 @@ def unreferenced_axes(runtime, axes):
     return [
         axis_index
         for axis_index in axes
-        if not int(runtime.slaves[axis_index].txpdo.statusword) & HOMING_REFERENCED_MASK
+        if not int(runtime.slaves[axis_index].txpdo.statusword)
+        & axis_device_profile(runtime, axis_index).HOMING_REFERENCED_MASK
     ]
 
 

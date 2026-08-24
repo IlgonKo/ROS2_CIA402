@@ -2,11 +2,11 @@ import time
 
 from device.capabilities import DeviceCapability
 
-from motion_server.config import (
-    DEVICE_PROFILE,
+from motion_server.control.pdo_contract import (
     require_pdo_fields_for_mode,
     require_txpdo_fields,
 )
+from motion_server.device_manager.profile_access import axis_device_profile
 from motion_server.app.cycle import exchange
 from motion_server.control.axis_operations import (
     axis_count,
@@ -220,7 +220,8 @@ def read_axis_user_position_units(runtime):
     units = []
     for axis_index in range(axis_count(runtime)):
         try:
-            value = int(DEVICE_PROFILE.read_user_unit_position(runtime, axis_index))
+            profile = axis_device_profile(runtime, axis_index)
+            value = int(profile.read_user_unit_position(runtime, axis_index))
         except Exception as exc:
             print(
                 "Axis user position unit read failed: "
@@ -243,7 +244,8 @@ def read_axis_converting_unit_exponents(runtime):
     exponents = []
     for axis_index in range(axis_count(runtime)):
         try:
-            values = DEVICE_PROFILE.read_converting_unit_exponents(runtime, axis_index)
+            profile = axis_device_profile(runtime, axis_index)
+            values = profile.read_converting_unit_exponents(runtime, axis_index)
         except Exception as exc:
             print(
                 "Axis converting unit read failed: "
@@ -277,7 +279,8 @@ def read_axis_software_position_limits(runtime):
     limits = []
     for axis_index in range(axis_count(runtime)):
         try:
-            values = DEVICE_PROFILE.read_software_position_limits(runtime, axis_index)
+            profile = axis_device_profile(runtime, axis_index)
+            values = profile.read_software_position_limits(runtime, axis_index)
         except Exception as exc:
             print(
                 "Axis software position limit read failed: "
@@ -293,7 +296,8 @@ def read_axis_profile_settings(runtime):
     settings = []
     for axis_index in range(axis_count(runtime)):
         try:
-            values = DEVICE_PROFILE.read_profile_settings(runtime, axis_index)
+            profile = axis_device_profile(runtime, axis_index)
+            values = profile.read_profile_settings(runtime, axis_index)
         except Exception as exc:
             print(
                 "Axis profile setting read failed: "
@@ -309,7 +313,8 @@ def read_axis_motion_limits(runtime):
     limits = []
     for axis_index in range(axis_count(runtime)):
         try:
-            values = DEVICE_PROFILE.read_motion_limits(runtime, axis_index)
+            profile = axis_device_profile(runtime, axis_index)
+            values = profile.read_motion_limits(runtime, axis_index)
         except Exception as exc:
             print(
                 "Axis motion limit read failed: "
@@ -383,12 +388,12 @@ def initialize_drive(runtime, motion_mode, csp_interpolation_mode, startup_sdo_r
 
 
 def clear_axis_restart_commands(runtime):
-    if DeviceCapability.AXIS_RESTART not in DEVICE_PROFILE.capabilities:
-        return
-
     for axis_index in range(axis_count(runtime)):
+        profile = axis_device_profile(runtime, axis_index)
+        if DeviceCapability.AXIS_RESTART not in profile.capabilities:
+            continue
         try:
-            result = DEVICE_PROFILE.clear_axis_restart_request(runtime, axis_index)
+            result = profile.clear_axis_restart_request(runtime, axis_index)
             print(
                 "Axis restart command cleared: "
                 f"axis={axis_index} result={result}",
@@ -404,10 +409,11 @@ def clear_axis_restart_commands(runtime):
 
 def configure_motion_mode_without_exchange(runtime, mode_name):
     require_pdo_fields_for_mode(runtime, mode_name)
-    code = DEVICE_PROFILE.mode_code(mode_name)
-    runtime.set_mode_of_operation_all(code)
     for axis_index in range(axis_count(runtime)):
-        DEVICE_PROFILE.configure_mode_code(runtime, axis_index, code)
+        profile = axis_device_profile(runtime, axis_index)
+        code = profile.mode_code(mode_name)
+        runtime.slaves[axis_index].rxpdo.mode_of_operation = code
+        profile.configure_mode_code(runtime, axis_index, code)
 
 
 def write_csp_interpolation_modes(runtime, csp_interpolation_mode):
@@ -416,8 +422,9 @@ def write_csp_interpolation_modes(runtime, csp_interpolation_mode):
         return
 
     for axis_index in range(axis_count(runtime)):
+        profile = axis_device_profile(runtime, axis_index)
         try:
-            readback = DEVICE_PROFILE.write_csp_interpolation_mode(
+            readback = profile.write_csp_interpolation_mode(
                 runtime,
                 axis_index,
                 value,

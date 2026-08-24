@@ -1,6 +1,6 @@
 import time
 
-from motion_server.config import CSP_MODE, ROS_BRIDGE_COMMAND_LOGS
+from motion_server.device_manager.profile_access import axis_device_profile
 from motion_server.control.axis_units import trajectory_message_api_to_drive
 from motion_server.control.trajectory_logging import (
     log_trajectory_debug,
@@ -188,7 +188,9 @@ def move(
         ],
     )
     for axis_index in axes:
-        runtime.slaves[axis_index].rxpdo.mode_of_operation = CSP_MODE
+        runtime.slaves[axis_index].rxpdo.mode_of_operation = (
+            axis_device_profile(runtime, axis_index).CSP_MODE
+        )
         runtime.slaves[axis_index].rxpdo.controlword = 0x000F
 
     log_trajectory_debug(
@@ -213,13 +215,6 @@ def move(
     }
     state["trajectory_sequence"] = state.get("trajectory_sequence", 0) + 1
     log_trajectory_snapshot("start_active", runtime, state, axes, points)
-    if ROS_BRIDGE_COMMAND_LOGS:
-        print(
-            "Received trajectory/move: "
-            f"axes={axes} points={len(points)} "
-            f"duration={points[-1]['time_from_start']:.3f}",
-            flush=True,
-        )
 
 
 def stop(message, runtime, state, client):

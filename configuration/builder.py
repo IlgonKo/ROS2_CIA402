@@ -64,40 +64,6 @@ class CliOverrides:
     csp_command_step_threshold: float | None = None
     csp_command_step_error_threshold: float | None = None
 
-    @classmethod
-    def from_namespace(cls, args):
-        return cls(
-            host=args.host,
-            port=args.port,
-            backend=BackendType(args.backend),
-            interface=args.interface,
-            bus=args.bus,
-            server_mode=ServerMode(args.server_mode),
-            cycle_time=args.cycle_time,
-            spin_wait_time=args.spin_wait_time,
-            sync_mode=(None if str(args.sync_mode).strip() == "" else int(args.sync_mode, 0)),
-            dc_enabled=args.dc_enabled,
-            dc_sync0_shift_time_ns=args.dc_sync0_shift_time,
-            dc_phase_lock=args.dc_phase_lock,
-            dc_absolute_shift=args.dc_absolute_shift,
-            dc_phase_offset_ns=args.dc_phase_offset,
-            dc_phase_kp=args.dc_phase_kp,
-            dc_phase_ki=args.dc_phase_ki,
-            dc_phase_max_correction=args.dc_phase_max_correction,
-            max_velocity=args.max_velocity,
-            acceleration=args.acceleration,
-            deceleration=args.deceleration,
-            jerk=args.jerk,
-            pp_jerk=args.pp_jerk,
-            motion_mode=args.motion_mode,
-            csp_profile=CspProfile(args.csp_profile),
-            csp_interpolation_mode=CspInterpolationMode(args.csp_interpolation_mode),
-            csp_velocity_offset=args.csp_velocity_offset,
-            csp_command_step_threshold=args.csp_command_step_threshold,
-            csp_command_step_error_threshold=args.csp_command_step_error_threshold,
-        )
-
-
 def build_motion_server_config(
     source: ConfigurationModel,
     cli: CliOverrides | None = None,

@@ -81,6 +81,9 @@ def initial_server_state(
         "drive_initialized": bool(initialized),
         "initialization_error": initialization_error,
         "server_mode": server_config.mode.value,
+        "axis_restart_disable_settle_time": (
+            server_config.axis_restart_disable_settle_time
+        ),
         "target_positions": positions,
         "motion_limits": motion_limits,
         "profile_settings": profile_settings,

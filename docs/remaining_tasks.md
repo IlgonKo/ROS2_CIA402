@@ -3,7 +3,7 @@
 이 문서는 앞으로 구현할 기능과 현재 코드에 남아 있는 기술 부채를 관리한다.
 완료된 작업 이력은 [Work Log](worklog.md)에 기록한다.
 
-마지막 전체 점검: 2026-08-20
+마지막 전체 점검: 2026-08-24
 
 점검 범위는 Python source, shell/PowerShell script, Docker Compose, 설정 예제와 Markdown 문서다.
 외부 제공 ESI/IODD, PDF/packet capture, build/install/dist 산출물은 구조 분석 대상에서 제외했다.
@@ -224,7 +224,7 @@ Tech Debt 상태 값은 `open`, `in_progress`, `complete`를 사용한다.
 
 ### TD-007 Control Panel 중복 및 대형 모듈
 
-- 상태: `open`
+- 상태: `complete`
 - 우선순위: 보통
 - 요약: Control Panel의 중복 변환 로직과 대형 GUI 모듈을 책임별로 분리한다.
 - 완료 조건:

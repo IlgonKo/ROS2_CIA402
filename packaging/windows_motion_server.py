@@ -2,7 +2,7 @@ from windows_runtime import prepare_runtime
 import sys
 
 
-root = prepare_runtime(load_config=False)
+root = prepare_runtime()
 
 from configuration import ConfigurationSource
 from motion_server.application import MotionServerApplication

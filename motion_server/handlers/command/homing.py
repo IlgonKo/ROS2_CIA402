@@ -1,13 +1,6 @@
 import time
 
-from motion_server.config import (
-    HOMING_ERROR_MASK,
-    HOMING_MIN_MONITOR_TIME,
-    HOMING_MODE,
-    HOMING_REFERENCED_MASK,
-    HOMING_START_BIT,
-    MOTION_MODES,
-)
+from motion_server.device_manager.profile_access import axis_device_profile
 from motion_server.app.cycle import exchange
 from motion_server.api.encoder import public_homing_state
 from motion_server.control.axis_operations import (
@@ -24,6 +17,7 @@ from motion_server.app.state import inactive_homing_state
 
 
 def homing_axis_status(runtime, axis_index):
+    profile = axis_device_profile(runtime, axis_index)
     statusword = int(runtime.slaves[axis_index].txpdo.statusword)
     return {
         "axis": axis_index,
@@ -31,10 +25,10 @@ def homing_axis_status(runtime, axis_index):
         "statusword_hex": f"0x{statusword:04X}",
         "operation_enabled": (statusword & 0x006F) == 0x0027,
         "target_reached": bool(statusword & (1 << 10)),
-        "referenced": bool(statusword & HOMING_REFERENCED_MASK),
-        "homing_error": bool(statusword & HOMING_ERROR_MASK),
+        "referenced": bool(statusword & profile.HOMING_REFERENCED_MASK),
+        "homing_error": bool(statusword & profile.HOMING_ERROR_MASK),
         "fault": bool(statusword & 0x0008),
-        "error": bool(statusword & HOMING_ERROR_MASK),
+        "error": bool(statusword & profile.HOMING_ERROR_MASK),
         "warning": bool(statusword & (1 << 7)),
         "actual_position": float(runtime.slaves[axis_index].txpdo.actual_position),
         "mode_display": int(runtime.slaves[axis_index].txpdo.mode_of_operation_display),
@@ -59,9 +53,9 @@ def set_homing_start_bit(runtime, axis_indices, enabled):
         slave = runtime.slaves[axis_index]
         controlword = int(slave.rxpdo.controlword)
         if enabled:
-            controlword |= HOMING_START_BIT
+            controlword |= axis_device_profile(runtime, axis_index).HOMING_START_BIT
         else:
-            controlword &= ~HOMING_START_BIT
+            controlword &= ~axis_device_profile(runtime, axis_index).HOMING_START_BIT
         slave.rxpdo.controlword = controlword
 
 
@@ -77,7 +71,7 @@ def finish_homing(runtime, state, result, message):
     original_modes = homing.get("original_motion_modes", {})
     for axis_index in axes:
         original_mode = original_modes.get(axis_index)
-        if original_mode in MOTION_MODES:
+        if original_mode in axis_device_profile(runtime, axis_index).MOTION_MODES:
             configure_motion_mode(runtime, original_mode, axis_index)
             state["motion_modes"][axis_index] = original_mode
 
@@ -118,7 +112,7 @@ def start_homing(message, runtime, state, client):
         for axis_index in axis_indices
     }
     for axis_index in axis_indices:
-        configure_mode_code(runtime, HOMING_MODE, axis_index)
+        configure_mode_code(runtime, "homing", axis_index)
         state["motion_modes"][axis_index] = "homing"
     update_motion_mode_summary(state)
 
@@ -127,7 +121,8 @@ def start_homing(message, runtime, state, client):
 
     initial_referenced = {
         axis_index: bool(
-            runtime.slaves[axis_index].txpdo.statusword & HOMING_REFERENCED_MASK
+            runtime.slaves[axis_index].txpdo.statusword
+            & axis_device_profile(runtime, axis_index).HOMING_REFERENCED_MASK
         )
         for axis_index in axis_indices
     }
@@ -186,7 +181,7 @@ def update_homing_state(runtime, state):
         return
 
     elapsed = time.monotonic() - float(homing.get("start_time") or time.monotonic())
-    monitor_ready = elapsed >= HOMING_MIN_MONITOR_TIME
+    monitor_ready = elapsed >= 0.05
     completion_ready = (
         bool(statuses)
         and monitor_ready

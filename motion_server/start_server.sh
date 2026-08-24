@@ -56,7 +56,7 @@ echo "CommandLogs=${COMMAND_LOGS}"
 echo "StatusLogs=${STATUS_LOGS}"
 
 SERVER_CMD=(
-  python3 -B /workspace/motion_server/server.py
+  python3 -B -m motion_server
   "${INTERFACE}" \
   --backend "${BACKEND}" \
   --server-mode "${SERVER_MODE}" \

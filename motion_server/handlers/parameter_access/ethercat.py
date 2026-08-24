@@ -1,4 +1,4 @@
-from motion_server.config import DEVICE_PROFILE
+from motion_server.device_manager.profile_access import axis_device_profile
 from motion_server.api.decoder import public_command_name
 from motion_server.api.validator import parse_int
 from motion_server.failure import (
@@ -289,5 +289,8 @@ def is_cpx_isdu_access_object(index):
 def save_parameters(message, runtime, client):
     response_type = public_command_name(message)
     axis_index = selected_single_axis(message, runtime, response_type)
-    result = DEVICE_PROFILE.save_parameters(runtime, axis_index)
+    result = axis_device_profile(runtime, axis_index).save_parameters(
+        runtime,
+        axis_index,
+    )
     return {"axis": axis_index, "result": result}

@@ -2,30 +2,10 @@ import os
 from pathlib import Path
 import sys
 
-from configuration import load_configuration, set_active_configuration
-from device import available_device_names
-
-
 def app_root():
     if getattr(sys, "frozen", False):
         return Path(sys.executable).resolve().parent
     return Path(__file__).resolve().parents[1]
-
-
-def load_axis_env(root):
-    root = Path(root)
-    model = load_configuration(
-        root,
-        project_filename="config.txt",
-        device_filename="config.txt",
-        available_profiles=available_device_names(),
-    )
-    set_active_configuration(model)
-    for key, value in model.values.items():
-        os.environ[key] = str(value)
-
-    os.environ.setdefault("MOTION_SERVER_PROJECT_ROOT", str(root))
-    return dict(model.values)
 
 
 def add_windows_npcap_dll_paths():
@@ -42,12 +22,10 @@ def add_windows_npcap_dll_paths():
             os.add_dll_directory(str(path))
 
 
-def prepare_runtime(load_config=True):
+def prepare_runtime():
     root = app_root()
     if str(root) not in sys.path:
         sys.path.insert(0, str(root))
-    if load_config:
-        load_axis_env(root)
     add_windows_npcap_dll_paths()
     return root
 

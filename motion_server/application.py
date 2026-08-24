@@ -1,9 +1,8 @@
 from configuration import (
-    CliOverrides,
     ConfigurationSource,
     build_motion_server_config,
     load_configuration,
-    set_active_configuration,
+    parse_cli_overrides,
 )
 from device import available_device_names
 from motion_server.diagnostic import DiagnosticManager
@@ -34,17 +33,11 @@ class MotionServerApplication:
 
         argv = list(argv or ())
         if argv:
-            # Transitional CLI adapter through S03. The raw model is registered
-            # before importing the legacy parser so files are not read twice.
-            set_active_configuration(raw_config)
-            from motion_server.config import parse_args
-
-            parsed_args = parse_args(argv)
+            cli_overrides, list_adapters = parse_cli_overrides(argv)
             typed_config = build_motion_server_config(
                 raw_config,
-                CliOverrides.from_namespace(parsed_args),
+                cli_overrides,
             )
-            list_adapters = parsed_args.list_adapters
         else:
             typed_config = build_motion_server_config(raw_config)
             list_adapters = False

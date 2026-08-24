@@ -6,12 +6,12 @@ import unittest
 from unittest.mock import patch
 
 from configuration import (
+    ConfigurationSource,
     DeviceRole,
-    active_configuration,
     load_configuration,
     parse_bus_config,
-    set_active_configuration,
 )
+from motion_server.application import MotionServerApplication
 
 
 WINDOWS_RUNTIME_PATH = (
@@ -61,9 +61,6 @@ class BusConfigTest(unittest.TestCase):
 
 
 class ConfigurationLoaderTest(unittest.TestCase):
-    def tearDown(self):
-        set_active_configuration(None)
-
     def make_project(self, root, filename):
         root = Path(root)
         (root / filename).write_text(
@@ -72,6 +69,7 @@ class ConfigurationLoaderTest(unittest.TestCase):
             "  1: io:cpx-ap-i-ec:io0,\\\n"
             "  2: axis:cmmt-st\n"
             "MOTION_SERVER_DEVICE_CONFIG_ROOT=device\n"
+            "MOTION_SERVER_IO_io0_MODULES=1:di:8\n"
             "COMMON_VALUE=project\n",
             encoding="utf-8",
         )
@@ -131,11 +129,20 @@ class ConfigurationLoaderTest(unittest.TestCase):
                 available_profiles=AVAILABLE_PROFILES,
             )
             with patch.dict(os.environ, {}, clear=True):
-                actual_values = WINDOWS_RUNTIME.load_axis_env(temp_dir)
-                self.assertIsNotNone(active_configuration())
+                WINDOWS_RUNTIME.prepare_runtime()
+                self.assertEqual(dict(os.environ), {})
+                application = MotionServerApplication.from_source(
+                    ConfigurationSource(
+                        project_root=Path(temp_dir),
+                        project_filename="config.txt",
+                        device_filename="config.txt",
+                    ),
+                    argv=["test-interface"],
+                    environ={},
+                )
 
-        self.assertEqual(actual_values, dict(expected.values))
         self.assertEqual(expected.bus.axis_slave_indices, (0, 2))
+        self.assertEqual(application.config.axis_count, 2)
 
 
 if __name__ == "__main__":

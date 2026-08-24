@@ -1,4 +1,5 @@
-from motion_server.config import JOG_MODE, require_pdo_fields_for_mode
+from motion_server.control.pdo_contract import require_pdo_fields_for_mode
+from motion_server.device_manager.profile_access import axis_device_profile
 from motion_server.app.cycle import exchange
 from motion_server.control.axis_operations import (
     configure_motion_mode,
@@ -47,7 +48,7 @@ def start_jog(message, runtime, state, client):
         return
 
     slave = runtime.slaves[axis_index]
-    slave.rxpdo.mode_of_operation = JOG_MODE
+    slave.rxpdo.mode_of_operation = axis_device_profile(runtime, axis_index).JOG_MODE
     controlword = 0x000F
     if direction in {"positive", "+"}:
         controlword |= 1 << 4

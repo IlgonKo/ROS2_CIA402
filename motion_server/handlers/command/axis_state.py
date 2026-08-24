@@ -22,10 +22,7 @@ from motion_server.api import (
 )
 from motion_server.api.encoder import status_data
 from motion_server.app.state import inactive_trajectory_state
-from motion_server.config import (
-    AXIS_RESTART_DISABLE_SETTLE_TIME,
-    DEVICE_PROFILE,
-)
+from motion_server.device_manager.profile_access import axis_device_profile
 from motion_server.failure import (
     DeviceAccessException,
     MotionServerException,
@@ -195,13 +192,6 @@ def keep_pdo_alive_for_seconds(runtime, seconds):
 
 def restart_axis(message, runtime, state, client):
     command = public_command_name(message)
-    if DeviceCapability.AXIS_RESTART not in DEVICE_PROFILE.capabilities:
-        raise_operation_rejected(
-            client,
-            command,
-            f"Device profile {DEVICE_PROFILE.name!r} does not support axis restart.",
-        )
-        return
     try:
         axes = selected_axes(message, runtime, command)
     except Exception as exc:
@@ -212,6 +202,14 @@ def restart_axis(message, runtime, state, client):
         return
 
     axis_index = axes[0]
+    profile = axis_device_profile(runtime, axis_index)
+    if DeviceCapability.AXIS_RESTART not in profile.capabilities:
+        raise_operation_rejected(
+            client,
+            command,
+            f"Device profile {profile.name!r} does not support axis restart.",
+        )
+        return
     try:
         homing = state.get("homing", {})
         if homing.get("active") and axis_index in homing.get("axes", []):
@@ -236,11 +234,14 @@ def restart_axis(message, runtime, state, client):
                 "Axis did not leave Operation Enabled before restart. "
                 f"statusword=0x{disabled_statusword:04X}"
             )
-        disable_settle_time = max(0.0, float(AXIS_RESTART_DISABLE_SETTLE_TIME))
+        disable_settle_time = max(
+            0.0,
+            float(state.get("axis_restart_disable_settle_time", 1.0)),
+        )
         keep_pdo_alive_for_seconds(runtime, disable_settle_time)
         disabled_controlword = int(runtime.slaves[axis_index].rxpdo.controlword)
         disabled_statusword = int(runtime.slaves[axis_index].txpdo.statusword)
-        result = DEVICE_PROFILE.request_axis_restart(runtime, axis_index)
+        result = profile.request_axis_restart(runtime, axis_index)
         result["disabled_controlword"] = f"0x{disabled_controlword:04X}"
         result["disabled_statusword"] = f"0x{disabled_statusword:04X}"
         result["disable_settle_time"] = disable_settle_time

@@ -1,4 +1,5 @@
-from motion_server.config import CSP_MODE, DEVICE_PROFILE, require_pdo_fields_for_mode
+from motion_server.control.pdo_contract import require_pdo_fields_for_mode
+from motion_server.device_manager.profile_access import axis_device_profile
 from motion_server.app.cycle import exchange
 from motion_server.api import raise_operation_rejected
 
@@ -100,27 +101,26 @@ def reject_if_pv_not_allowed(state, axis_indices, client, command):
     raise_operation_rejected(client, command, message)
 
 
-def mode_code(mode_name):
-    return DEVICE_PROFILE.mode_code(mode_name)
+def mode_code(runtime, mode_name, axis_index=0):
+    return axis_device_profile(runtime, axis_index).mode_code(mode_name)
 
 
 def configure_motion_mode(runtime, mode_name, axis_index=None):
     require_pdo_fields_for_mode(runtime, mode_name, axis_index)
-    code = mode_code(mode_name)
-    configure_mode_code(runtime, code, axis_index)
+    configure_mode_code(runtime, mode_name, axis_index)
 
 
-def configure_mode_code(runtime, code, axis_index=None):
+def configure_mode_code(runtime, mode_name, axis_index=None):
     axis_indices = (
         range(axis_count(runtime))
         if axis_index is None
         else [axis_index]
     )
-    if axis_index is None:
-        runtime.set_mode_of_operation_all(code)
-
     for current_axis in axis_indices:
-        DEVICE_PROFILE.configure_mode_code(runtime, current_axis, code)
+        profile = axis_device_profile(runtime, current_axis)
+        code = profile.mode_code(mode_name)
+        runtime.slaves[current_axis].rxpdo.mode_of_operation = code
+        profile.configure_mode_code(runtime, current_axis, code)
     exchange(runtime, cycles=5)
 
 
@@ -134,7 +134,8 @@ def ensure_csp_mode(runtime, state, axis_indices):
     for axis_index in axis_indices:
         if state["motion_modes"][axis_index] != "csp":
             hold_axis_at_actual_position(runtime, state, axis_index)
-            runtime.slaves[axis_index].rxpdo.mode_of_operation = CSP_MODE
+            profile = axis_device_profile(runtime, axis_index)
+            runtime.slaves[axis_index].rxpdo.mode_of_operation = profile.CSP_MODE
             runtime.slaves[axis_index].rxpdo.controlword = 0x000F
             state["motion_modes"][axis_index] = "csp"
             changed = True

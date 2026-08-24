@@ -1,18 +1,9 @@
 import json
-import os
-from pathlib import Path
 import select
 import socket
-import sys
 import time
 
-PROJECT_ROOT = Path(
-    os.environ.get("MOTION_SERVER_PROJECT_ROOT", Path(__file__).resolve().parents[1])
-).resolve()
-if str(PROJECT_ROOT) not in sys.path:
-    sys.path.insert(0, str(PROJECT_ROOT))
-
-from configuration import CmmtDeviceConfig
+from configuration.models import CmmtDeviceConfig
 from motion_server.handlers.command.homing import update_homing_state
 from motion_server.app.cycle import CycleStats, exchange, wait_until_cycle_time
 from motion_server.control.axis_units import (
@@ -28,7 +19,6 @@ from motion_server.app.cycle_diagnostics import (
     record_pre_log_snapshot,
 )
 from motion_server.device_manager.axis_diagnostics import default_diagnostics
-from motion_server.diagnostic import DiagnosticManager
 from motion_server.diagnostic.startup import (
     detect_initialization_fault,
     resolve_initialization_fault,
@@ -598,28 +588,3 @@ def run_main_once(diagnostic_manager=None, config=None):
 
     finally:
         runtime.close()
-
-
-def main(config, diagnostic_manager=None):
-    diagnostic_manager = diagnostic_manager or DiagnosticManager()
-    while True:
-        try:
-            run_main_once(diagnostic_manager, config=config)
-            return
-        except ServerResetRequested:
-            print(
-                "Motion Server runtime reinitialization requested; "
-                "reinitializing runtime and bus.",
-                flush=True,
-            )
-            continue
-        except ServerRestartRequested:
-            print(
-                "Motion Server restart requested; restarting process.",
-                flush=True,
-            )
-            restart_current_process()
-
-
-if __name__ == "__main__":
-    main()
