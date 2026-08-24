@@ -10,7 +10,6 @@ from motion_server.config import (
     DEVICE_PROFILE,
     MOTION_MODES,
     require_pdo_fields_for_mode,
-    status_log,
 )
 from motion_server.control.axis_operations import (
     axis_count,
@@ -256,7 +255,7 @@ def set_profile(message, runtime, state, client):
         raise_operation_rejected(client, command, str(exc))
         return
 
-    status_log(
+    runtime.logger.status(
         "Received axis/profile: "
         f"axes={axes} profile_settings={state['profile_settings']}",
     )
@@ -374,7 +373,7 @@ def set_software_position_limits(message, runtime, state, client):
                 negative_limit,
                 positive_limit,
             ]
-            status_log(
+            runtime.logger.status(
                 "Axis software position limits write: "
                 f"axis={axis_index} "
                 f"api=({negative_limit_api}, {positive_limit_api}) "
@@ -386,7 +385,7 @@ def set_software_position_limits(message, runtime, state, client):
         raise_operation_rejected(client, command, str(exc))
         return
 
-    status_log(
+    runtime.logger.status(
         "Received axis/software_position_limits: "
         f"axes={axes} limits={state['software_position_limits']}",
     )
@@ -461,7 +460,7 @@ def set_mode(message, runtime, state, client=None):
             failed.append((axis_index, exc))
             previous_code = mode_code(previous_mode)
             runtime.slaves[axis_index].rxpdo.mode_of_operation = previous_code
-            status_log(
+            runtime.logger.status(
                 "Motion mode change failed "
                 f"axis={axis_index} requested={requested_mode.upper()} "
                 f"previous={previous_mode.upper()} error={exc}",
@@ -484,7 +483,7 @@ def set_mode(message, runtime, state, client=None):
 
     update_motion_mode_summary(state)
     if changed_axes:
-        status_log(
+        runtime.logger.status(
             f"Motion mode changed axes={changed_axes} "
             f"to {requested_mode.upper()} modes={state['motion_modes']}",
         )

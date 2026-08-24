@@ -12,11 +12,6 @@ PROJECT_ROOT = Path(
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-from motion_server.config import (
-    CYCLE_STATS_LOGS,
-    CYCLE_STATS_PERIOD,
-    status_log,
-)
 from configuration import CmmtDeviceConfig
 from motion_server.handlers.command.homing import update_homing_state
 from motion_server.app.cycle import CycleStats, exchange, wait_until_cycle_time
@@ -30,7 +25,7 @@ from motion_server.app.cycle_diagnostics import (
     log_position_feedback_lag,
     log_status_if_due,
     log_velocity_anomalies,
-    record_tx_history,
+    record_pre_log_snapshot,
 )
 from motion_server.device_manager.axis_diagnostics import default_diagnostics
 from motion_server.diagnostic import DiagnosticManager
@@ -179,7 +174,7 @@ def run_server_loop(server, runtime, state, server_config):
         if send_call_duration_ns is not None:
             cycle_stats.add("send_call", send_call_duration_ns / 1_000_000_000.0)
         dc_phase_lock.update(getattr(runtime, "last_tx_dc_time_ns", None), cycle_stats)
-        record_tx_history(runtime, state, cycle_stats)
+        record_pre_log_snapshot(runtime, state, cycle_stats)
         update_homing_state(runtime, state)
         log_csp_command_step_anomalies(runtime, state)
         log_position_feedback_lag(runtime, state)
@@ -199,13 +194,14 @@ def run_server_loop(server, runtime, state, server_config):
             last_feedback_update_time = now
 
         if (
-            CYCLE_STATS_LOGS
-            and CYCLE_STATS_PERIOD > 0.0
-            and now - last_cycle_stats_log_time >= CYCLE_STATS_PERIOD
+            runtime.logger.config.cycle_stats.enabled
+            and runtime.logger.config.cycle_stats.period > 0.0
+            and now - last_cycle_stats_log_time
+            >= runtime.logger.config.cycle_stats.period
         ):
             report = cycle_stats.report_and_reset()
             if report:
-                print(f"EtherCAT cycle stats: {report}", flush=True)
+                runtime.logger.event(f"EtherCAT cycle stats: {report}")
             last_cycle_stats_log_time = now
 
         while True:
@@ -221,7 +217,7 @@ def run_server_loop(server, runtime, state, server_config):
                     "last_feedback_time": 0.0,
                 }
                 clients.append(client)
-                status_log(
+                runtime.logger.status(
                     f"Client connected: id={client['id']} addr={addr}",
                 )
             except BlockingIOError:
@@ -230,7 +226,7 @@ def run_server_loop(server, runtime, state, server_config):
         for client in list(clients):
             try:
                 if not service_client(client, runtime, state, dispatch_message):
-                    close_client(client, state)
+                    close_client(client, runtime, state)
                     clients.remove(client)
                     continue
                 send_feedback_if_due(
@@ -244,7 +240,7 @@ def run_server_loop(server, runtime, state, server_config):
                     f"Client connection error: id={client['id']} error={exc}",
                     flush=True,
                 )
-                close_client(client, state)
+                close_client(client, runtime, state)
                 clients.remove(client)
 
         action = requested_server_action(state)
@@ -284,12 +280,14 @@ def run_degraded_server_loop(server, runtime, state, server_config):
             }
             clients.append(client)
             next_client_id += 1
-            status_log(f"Client connected: id={client['id']} addr={addr}")
+            runtime.logger.status(
+                f"Client connected: id={client['id']} addr={addr}"
+            )
 
         for client in list(clients):
             try:
                 if not service_client(client, runtime, state, dispatch_message):
-                    close_client(client, state)
+                    close_client(client, runtime, state)
                     clients.remove(client)
                     continue
                 send_feedback_if_due(
@@ -303,7 +301,7 @@ def run_degraded_server_loop(server, runtime, state, server_config):
                     f"Client error: id={client['id']} error={exc}",
                     flush=True,
                 )
-                close_client(client, state)
+                close_client(client, runtime, state)
                 clients.remove(client)
 
         action = requested_server_action(state)

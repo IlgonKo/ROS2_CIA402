@@ -1,10 +1,8 @@
-import json
 import logging
 
 from motion_server.api.specification import (
     command_spec,
 )
-from motion_server.config import MOTION_SERVER_COMMAND_LOGS
 from motion_server.api.decoder import (
     command_name,
     public_command_name,
@@ -76,12 +74,13 @@ def route_message(message, runtime, state, client):
 
 
 def _route_message_to_handler(message, runtime, state, client):
-    if MOTION_SERVER_COMMAND_LOGS:
-        print(
+    if runtime.logger.config.command.enabled:
+        import json
+
+        runtime.logger.command(
             "Motion Server received command: "
             f"client={client.get('id')} "
-            f"{json.dumps(message, sort_keys=True, ensure_ascii=False)}",
-            flush=True,
+            f"{json.dumps(message, sort_keys=True, ensure_ascii=False)}"
         )
 
     raw_message_type = command_name(message)
@@ -107,7 +106,7 @@ def _route_message_to_handler(message, runtime, state, client):
         raise ServerNotReadyException(state.get("initialization_error"))
 
     if spec.is_authority:
-        return handle_authority(message_type, client, state)
+        return handle_authority(message_type, client, state, runtime)
 
     if spec.is_status:
         return handle_status(message_type, message, runtime, state, client)

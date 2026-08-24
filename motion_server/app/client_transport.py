@@ -2,7 +2,6 @@ import json
 import select
 import time
 
-from motion_server.config import status_log
 from motion_server.api.encoder import send_client_message
 from motion_server.handlers.status import system_feedback_message
 
@@ -38,18 +37,18 @@ def send_feedback_if_due(client, runtime, state, feedback_period):
     client["last_feedback_time"] = now
 
 
-def close_client(client, state):
+def close_client(client, runtime, state):
     client_id = client["id"]
     if state.get("command_authority_owner") == client_id:
         state["command_authority_owner"] = None
-        status_log(
+        runtime.logger.status(
             f"Command authority released because client {client_id} disconnected",
         )
     try:
         client["conn"].close()
     except OSError:
         pass
-    status_log(f"Client disconnected: id={client_id}")
+    runtime.logger.status(f"Client disconnected: id={client_id}")
 
 
 def allocate_client_id(clients):

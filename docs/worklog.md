@@ -8,6 +8,11 @@
 
 ### 완료
 
+- `TD-014-S05`에서 전역 logging 상수와 `status_log()`, state의 `tx_history`를 제거하고
+  runtime-owned `RuntimeLogger` 및 optional bounded pre-logging을 도입했다. 비활성 시
+  buffer/기록을 만들지 않고 활성 시 non-command event에 이전 cycle snapshot을
+  첨부하며 command log는 제외한다. 계약 테스트 3개를 포함한 전체 unittest 166개와
+  source compile 검사가 통과했다.
 - `TD-014-S04`에서 CMMT/CPX typed device instance config를 공통 profile factory에
   주입했다. CMMT PDO와 CPX module/IOL 설정의 장치 내부 환경 변수 재해석을 제거하고
   mock/PySOEM이 같은 CMMT profile 설정을 소비하도록 통일했으며, profile projection

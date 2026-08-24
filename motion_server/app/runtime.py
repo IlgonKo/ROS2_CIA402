@@ -9,10 +9,12 @@ class AxisRuntime:
         device_manager,
         motion_controller,
         diagnostic_manager=None,
+        runtime_logger=None,
     ):
         self.device_manager = device_manager
         self.motion_controller = motion_controller
         self.diagnostic_manager = diagnostic_manager or DiagnosticManager()
+        self.logger = runtime_logger
         if len(self.device_manager.axis_devices) != self.motion_controller.axis_count:
             raise ValueError(
                 "axis device count must match MotionController axis_count"

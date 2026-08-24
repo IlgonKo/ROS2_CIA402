@@ -1,10 +1,9 @@
 from motion_server.api.specification import authority_message_types
-from motion_server.config import status_log
 from motion_server.failure import AuthorityBusyException, AuthorityRequiredException
 from motion_server.handlers.authority.status import authority_status_payload
 
 
-def acquire_authority(client, state):
+def acquire_authority(client, state, runtime):
     owner = state.get("command_authority_owner")
     if owner is None or owner == client["id"]:
         state["command_authority_owner"] = client["id"]
@@ -15,22 +14,22 @@ def acquire_authority(client, state):
             if owner is None
             else "This connection already owns command authority."
         )
-        status_log(f"Command authority granted to client {client['id']}")
+        runtime.logger.status(f"Command authority granted to client {client['id']}")
         return _authority_data(payload)
 
-    status_log(
+    runtime.logger.status(
         f"Command authority denied to client {client['id']}; owner={owner}",
     )
     raise AuthorityBusyException(owner)
 
 
-def release_authority(client, state):
+def release_authority(client, state, runtime):
     owner = state.get("command_authority_owner")
     if owner == client["id"]:
         state["command_authority_owner"] = None
         reason = None
         message = "Command authority released."
-        status_log(f"Command authority released by client {client['id']}")
+        runtime.logger.status(f"Command authority released by client {client['id']}")
     elif owner is None:
         reason = "authority_required"
         message = "This connection does not hold command authority."
@@ -55,7 +54,9 @@ AUTHORITY_HANDLERS = {
     "system/authority/request": acquire_authority,
     "system/authority/release": release_authority,
     "system/authority/status": (
-        lambda client, state: _authority_data(authority_status_payload(client, state))
+        lambda client, state, runtime: _authority_data(
+            authority_status_payload(client, state)
+        )
     ),
 }
 
@@ -75,12 +76,12 @@ def validate_authority_registry():
 validate_authority_registry()
 
 
-def handle_authority(message_type, client, state):
+def handle_authority(message_type, client, state, runtime):
     handler = AUTHORITY_HANDLERS.get(message_type)
     if handler is None:
         from motion_server.failure import UnknownCommandException
         raise UnknownCommandException(message_type)
-    return handler(client, state)
+    return handler(client, state, runtime)
 
 
 def _authority_data(payload):

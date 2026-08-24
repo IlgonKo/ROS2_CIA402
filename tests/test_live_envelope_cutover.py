@@ -18,17 +18,26 @@ def client(client_id="client-1"):
     return {"id": client_id, "conn": Connection()}
 
 
+def runtime(**values):
+    logger = SimpleNamespace(
+        config=SimpleNamespace(command=SimpleNamespace(enabled=False)),
+        status=lambda message: None,
+        command=lambda message: None,
+    )
+    return SimpleNamespace(logger=logger, **values)
+
+
 class LiveEnvelopeCutoverTest(unittest.TestCase):
     def test_status_sends_one_success_envelope_with_request_id(self):
         active_client = client()
-        runtime = SimpleNamespace(slaves=[], cycle_time=0.008)
+        runtime_value = runtime(slaves=[], cycle_time=0.008)
 
         response = route_message(
             {
                 "cmd": "system/server/status",
                 "request_id": "status-1",
             },
-            runtime,
+            runtime_value,
             {},
             active_client,
         )
@@ -45,7 +54,7 @@ class LiveEnvelopeCutoverTest(unittest.TestCase):
 
         response = route_message(
             {"cmd": "system/unknown"},
-            SimpleNamespace(),
+            runtime(),
             {},
             active_client,
         )
@@ -63,7 +72,7 @@ class LiveEnvelopeCutoverTest(unittest.TestCase):
 
         response = route_message(
             {"cmd": "system/axis/enable", "axis": 0},
-            SimpleNamespace(),
+            runtime(),
             {"command_authority_owner": "client-1"},
             active_client,
         )
@@ -82,7 +91,7 @@ class LiveEnvelopeCutoverTest(unittest.TestCase):
         ):
             response = route_message(
                 {"cmd": "system/io/reset"},
-                SimpleNamespace(),
+                runtime(),
                 state,
                 active_client,
             )
@@ -101,7 +110,7 @@ class LiveEnvelopeCutoverTest(unittest.TestCase):
 
         response = route_message(
             {"cmd": "system/authority/status"},
-            SimpleNamespace(),
+            runtime(),
             {"command_authority_owner": None},
             active_client,
         )
@@ -124,7 +133,7 @@ class LiveEnvelopeCutoverTest(unittest.TestCase):
         ), patch("motion_server.api.router._LOGGER"):
             response = route_message(
                 {"cmd": "system/io/reset"},
-                SimpleNamespace(),
+                runtime(),
                 state,
                 active_client,
             )

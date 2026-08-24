@@ -7,7 +7,6 @@ from motion_server.config import (
     HOMING_REFERENCED_MASK,
     HOMING_START_BIT,
     MOTION_MODES,
-    status_log,
 )
 from motion_server.app.cycle import exchange
 from motion_server.api.encoder import public_homing_state
@@ -86,7 +85,7 @@ def finish_homing(runtime, state, result, message):
     homing["active"] = False
     homing["state"] = result
     homing["message"] = message
-    status_log(
+    runtime.logger.status(
         "Homing finished: "
         f"state={result} axes={axes} message={message} "
         f"modes={state['motion_modes']} "
@@ -151,7 +150,7 @@ def start_homing(message, runtime, state, client):
         "initial_referenced": initial_referenced,
         "referenced_seen_low": referenced_seen_low,
     }
-    status_log(
+    runtime.logger.status(
         f"Received {command}: "
         f"axes={axis_indices} "
         f"original_modes={original_modes} "

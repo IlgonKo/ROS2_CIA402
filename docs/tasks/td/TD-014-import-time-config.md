@@ -447,6 +447,26 @@ platform DLL path 준비는 configuration loading과 별도의 명시적인 boot
 - optional pre-history buffer와 command 제외 계약을 구현한다.
 - pre-logging 비활성 시 buffer 생성과 cycle snapshot 기록을 하지 않는다.
 
+완료 기록:
+
+- 상태: `complete`
+- 변경: `motion_server/runtime_logging.py`, runtime/startup/server/client transport,
+  cycle/trajectory logging, API router와 status 변경 handler
+- `RuntimeLogger`가 `LoggingConfig`와 optional bounded history를 소유하고
+  `AxisRuntime`에 주입된다. 변경 가능한 server state의 `tx_history`와 전역
+  `status_log()` 및 runtime logging 전역 상수를 제거했다.
+- pre-logging 비활성 시 deque를 만들지 않고 cycle snapshot 기록을 즉시 건너뛴다.
+  활성 시 target/actual/command position과 velocity, mode, statusword, WKC 및 tx/DC
+  timing을 설정 length만큼 보관한다.
+- status, cycle stats, trajectory, velocity/position/CSP anomaly event에는 pre-history를
+  첨부하고 외부 요청인 command log에는 첨부하지 않는다.
+- `.env.example`에 `MOTION_SERVER_PRE_LOGGING_ENABLED/LENGTH`를 추가하고 기존
+  `MOTION_SERVER_TX_HISTORY_LENGTH` 경로는 제거했다.
+- pre-logging on/off, bounded length와 command 제외 테스트 3개를 추가했다.
+- 결과: 전체 unittest 166개, source compile, legacy logging 참조와 diff 검사가
+  통과했다.
+- 다음 단계는 derived velocity와 legacy mock/configured index 설정을 제거하는 S06다.
+
 ### S06 중복·legacy 설정 제거
 
 - derived velocity 계산, state, API, UI와 설정을 제거한다.

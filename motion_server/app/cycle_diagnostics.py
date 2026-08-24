@@ -1,16 +1,5 @@
 import time
 
-from motion_server.config import (
-    MOTION_SERVER_STATUS_LOGS,
-    CSP_COMMAND_STEP_LOGS,
-    POSITION_FEEDBACK_LAG_LOG_PERIOD,
-    POSITION_FEEDBACK_LAG_LOGS,
-    STATUS_LOG_PERIOD,
-    VELOCITY_ANOMALY_LOG_PERIOD,
-    VELOCITY_ANOMALY_LOGS,
-    VELOCITY_ANOMALY_THRESHOLD,
-    VELOCITY_JUMP_THRESHOLD,
-)
 from motion_server.device_manager.axis_diagnostics import format_diagnostics
 
 
@@ -60,9 +49,8 @@ def velocity_anomaly_dc_snapshot(runtime, state, cycle_stats):
     )
 
 
-def record_tx_history(runtime, state, cycle_stats):
-    history = state.get("tx_history")
-    if history is None:
+def record_pre_log_snapshot(runtime, state, cycle_stats):
+    if not runtime.logger.history_enabled:
         return
 
     cycle_time_ns = max(1, int(round(float(runtime.cycle_time) * 1_000_000_000.0)))
@@ -71,11 +59,23 @@ def record_tx_history(runtime, state, cycle_stats):
     if tx_dc_time_ns is not None:
         tx_phase_ms = (int(tx_dc_time_ns) % cycle_time_ns) / 1_000_000.0
 
-    history.append(
+    runtime.logger.record_snapshot(
         {
             "time": time.monotonic(),
             "targets": [
                 int(slave.rxpdo.target_position)
+                for slave in runtime.slaves
+            ],
+            "actual_positions": [
+                int(slave.txpdo.actual_position)
+                for slave in runtime.slaves
+            ],
+            "actual_velocities": [
+                float(slave.txpdo.actual_velocity)
+                for slave in runtime.slaves
+            ],
+            "statuswords": [
+                int(slave.txpdo.statusword)
                 for slave in runtime.slaves
             ],
             "modes": [
@@ -94,16 +94,22 @@ def record_tx_history(runtime, state, cycle_stats):
                     runtime.trajectory_generators
                 )
             ],
+            "command_positions": [
+                float(generator.command_position)
+                for generator in runtime.trajectory_generators
+            ],
+            "wkc": int(runtime.wkc),
+            "expected_wkc": int(runtime.expected_wkc()),
             "tx_gap_ms": cycle_stats.latest.get("tx_gap", 0.0) * 1000.0,
             "tx_phase_ms": tx_phase_ms,
         }
     )
 
 
-def format_tx_history_for_axes(state, axes, sample_count=10):
-    history = list(state.get("tx_history") or [])
+def format_pre_history_for_axes(runtime, axes, sample_count=10):
+    history = list(runtime.logger.history)
     if not history:
-        return "TX_HISTORY=None"
+        return "PRE_HISTORY=None"
 
     samples = history[-sample_count:]
     parts = []
@@ -122,11 +128,11 @@ def format_tx_history_for_axes(state, axes, sample_count=10):
             )
         parts.append(f"A{axis_index}=[" + ",".join(entries) + "]")
 
-    return "TX_HISTORY " + " ".join(parts)
+    return "PRE_HISTORY " + " ".join(parts)
 
 
-def position_feedback_lag(state, axis_index, feedback_position):
-    history = list(state.get("tx_history") or [])
+def position_feedback_lag(runtime, axis_index, feedback_position):
+    history = list(runtime.logger.history)
     if not history:
         return None
 
@@ -155,7 +161,7 @@ def format_position_feedback_lag(runtime, state, axes):
         feedback_position = float(runtime.slaves[axis_index].txpdo.actual_position)
         command_position = float(generator.command_position)
         command_diff = feedback_position - command_position
-        lag = position_feedback_lag(state, axis_index, feedback_position)
+        lag = position_feedback_lag(runtime, axis_index, feedback_position)
         if lag is None:
             parts.append(
                 f"A{axis_index}:FB={feedback_position:.0f},"
@@ -179,35 +185,36 @@ def format_position_feedback_lag(runtime, state, axes):
 
 
 def log_position_feedback_lag(runtime, state):
-    if not POSITION_FEEDBACK_LAG_LOGS:
+    config = runtime.logger.config.position_feedback_lag
+    if not config.enabled:
         return
 
     now = time.monotonic()
     last_log_time = state.get("position_feedback_lag_last_log_time", 0.0)
-    if now - last_log_time < POSITION_FEEDBACK_LAG_LOG_PERIOD:
+    if now - last_log_time < config.period:
         return
 
     axes = list(state.get("trajectory", {}).get("axes", []))
     if not axes:
         return
 
-    print(
+    runtime.logger.event(
         "Position feedback lag: "
         f"trajectory_state={state.get('trajectory', {}).get('state')} "
         f"trajectory_time={state.get('trajectory', {}).get('time_from_start', 0.0):.3f} "
         f"{format_position_feedback_lag(runtime, state, axes)}",
-        flush=True,
     )
     state["position_feedback_lag_last_log_time"] = now
 
 
 def log_velocity_anomalies(runtime, state, cycle_stats):
-    if not VELOCITY_ANOMALY_LOGS:
+    config = runtime.logger.config.velocity_anomaly
+    if not config.enabled:
         return
 
     now = time.monotonic()
     last_log_time = state.get("velocity_anomaly_last_log_time", 0.0)
-    if now - last_log_time < VELOCITY_ANOMALY_LOG_PERIOD:
+    if now - last_log_time < config.period:
         return
 
     previous_actual = state.get("velocity_anomaly_previous_actual")
@@ -245,8 +252,8 @@ def log_velocity_anomalies(runtime, state, cycle_stats):
         velocity_error = actual_velocity - command_velocity
         velocity_jump = actual_velocity - previous_actual[axis_index]
         if (
-            abs(velocity_error) < VELOCITY_ANOMALY_THRESHOLD
-            and abs(velocity_jump) < VELOCITY_JUMP_THRESHOLD
+            abs(velocity_error) < config.error_threshold
+            and abs(velocity_jump) < config.jump_threshold
         ):
             continue
 
@@ -264,7 +271,7 @@ def log_velocity_anomalies(runtime, state, cycle_stats):
         anomaly_axes.append(axis_index)
 
     if anomalies:
-        print(
+        runtime.logger.event(
             "Velocity anomaly: "
             f"{' | '.join(anomalies)} "
             f"trajectory_state={state.get('trajectory', {}).get('state')} "
@@ -272,14 +279,13 @@ def log_velocity_anomalies(runtime, state, cycle_stats):
             f"dc_phase_avg_ms={latest_dc_phase_ms} "
             f"{format_position_feedback_lag(runtime, state, anomaly_axes)} "
             f"{velocity_anomaly_dc_snapshot(runtime, state, cycle_stats)} "
-            f"{format_tx_history_for_axes(state, anomaly_axes)}",
-            flush=True,
+            f"{format_pre_history_for_axes(runtime, anomaly_axes)}",
         )
         state["velocity_anomaly_last_log_time"] = now
 
 
 def log_csp_command_step_anomalies(runtime, state):
-    if not CSP_COMMAND_STEP_LOGS:
+    if not runtime.logger.config.csp_command_step.enabled:
         return
 
     trajectory = state.get("trajectory", {})
@@ -297,7 +303,7 @@ def log_csp_command_step_anomalies(runtime, state):
             timed_start = generator.timed_points[0]
             timed_end = generator.timed_points[-1]
         actual_position = runtime.slaves[axis_index].txpdo.actual_position
-        print(
+        runtime.logger.event(
             "CSP command step anomaly: "
             f"axis={axis_index} "
             f"previous_sent_position={event['previous_sent_position']} "
@@ -319,7 +325,6 @@ def log_csp_command_step_anomalies(runtime, state):
             f"timed_end={timed_end} "
             f"trajectory_state={trajectory.get('state')} "
             f"trajectory_time={trajectory.get('time_from_start', 0.0):.3f}",
-            flush=True,
         )
 
     output_events = getattr(runtime, "last_csp_output_steps", [])
@@ -331,7 +336,7 @@ def log_csp_command_step_anomalies(runtime, state):
         )
         generator = runtime.trajectory_generators[axis_index]
         actual_position = runtime.slaves[axis_index].txpdo.actual_position
-        print(
+        runtime.logger.event(
             "CSP output buffer step anomaly: "
             f"axis={axis_index} "
             f"previous_output_target={event['previous_output_target']} "
@@ -350,18 +355,18 @@ def log_csp_command_step_anomalies(runtime, state):
             f"timed_segment={generator.timed_segment} "
             f"trajectory_state={trajectory.get('state')} "
             f"trajectory_time={trajectory.get('time_from_start', 0.0):.3f}",
-            flush=True,
         )
 
 
 def log_status_if_due(runtime, state, last_status_log_time):
-    if not MOTION_SERVER_STATUS_LOGS:
+    config = runtime.logger.config.status
+    if not config.enabled:
         return last_status_log_time
-    if STATUS_LOG_PERIOD <= 0.0:
+    if config.period <= 0.0:
         return last_status_log_time
 
     now = time.monotonic()
-    if now - last_status_log_time < STATUS_LOG_PERIOD:
+    if now - last_status_log_time < config.period:
         return last_status_log_time
 
     axis_statuses = []
@@ -380,10 +385,9 @@ def log_status_if_due(runtime, state, last_status_log_time):
             f"{format_diagnostics(runtime.last_diagnostics[axis_index])}"
         )
 
-    print(
+    runtime.logger.event(
         "Axis status: "
         f"WKC={runtime.wkc}/{runtime.expected_wkc()} "
         + " | ".join(axis_statuses),
-        flush=True,
     )
     return now

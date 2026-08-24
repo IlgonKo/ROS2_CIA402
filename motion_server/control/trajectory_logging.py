@@ -1,12 +1,6 @@
 import json
 import time
 
-from motion_server.config import (
-    TRAJECTORY_DEBUG_LOGS,
-    TRAJECTORY_SNAPSHOT_LOGS,
-)
-
-
 def trajectory_debug_snapshot(runtime, state, axes):
     snapshots = []
     trajectory = state.get("trajectory", {})
@@ -41,20 +35,19 @@ def trajectory_debug_snapshot(runtime, state, axes):
 
 
 def log_trajectory_debug(label, runtime, state, axes, extra=None):
-    if not TRAJECTORY_DEBUG_LOGS:
+    if not runtime.logger.config.trajectory.debug_enabled:
         return
 
     payload = trajectory_debug_snapshot(runtime, state, axes)
     if extra:
         payload.update(extra)
-    print(
-        f"Trajectory debug {label}: {json.dumps(payload, sort_keys=True)}",
-        flush=True,
+    runtime.logger.event(
+        f"Trajectory debug {label}: {json.dumps(payload, sort_keys=True)}"
     )
 
 
 def log_trajectory_snapshot(label, runtime, state, axes, points=None, extra=None):
-    if not TRAJECTORY_SNAPSHOT_LOGS:
+    if not runtime.logger.config.trajectory.snapshot_enabled:
         return
 
     axis_parts = []
@@ -102,9 +95,8 @@ def log_trajectory_snapshot(label, runtime, state, axes, points=None, extra=None
     if extra:
         details.extend(f"{key}={value}" for key, value in extra.items())
 
-    print(
+    runtime.logger.event(
         f"Trajectory snapshot {label}: "
         f"{' '.join(details)} "
-        f"{' | '.join(axis_parts)}",
-        flush=True,
+        f"{' | '.join(axis_parts)}"
     )

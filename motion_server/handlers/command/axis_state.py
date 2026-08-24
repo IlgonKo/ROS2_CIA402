@@ -25,7 +25,6 @@ from motion_server.app.state import inactive_trajectory_state
 from motion_server.config import (
     AXIS_RESTART_DISABLE_SETTLE_TIME,
     DEVICE_PROFILE,
-    status_log,
 )
 from motion_server.failure import (
     DeviceAccessException,
@@ -76,7 +75,7 @@ def stop_system(message, runtime, state):
         elif motion_mode == "csp":
             request_axis_halt(runtime, axis_index)
 
-    status_log(
+    runtime.logger.status(
         "Received system/stop: "
         f"mode={mode} hold_positions={positions}",
     )
@@ -128,7 +127,7 @@ def stop_axes(message, runtime, state, client):
 
 
 def reset_faults(runtime, state, axis_indices=None):
-    status_log(
+    runtime.logger.status(
         "Received fault reset: pulsing fault reset bit, then switching on",
     )
     if axis_indices is None:
@@ -161,7 +160,7 @@ def reset_faults(runtime, state, axis_indices=None):
         runtime.slaves[axis_index].rxpdo.controlword = 0x0007
     exchange(runtime, cycles=5)
 
-    status_log(
+    runtime.logger.status(
         "Fault reset complete. "
         f"axes={axis_indices} "
         f"statuswords={[f'0x{runtime.slaves[index].txpdo.statusword:04X}' for index in axis_indices]} "
@@ -247,7 +246,7 @@ def restart_axis(message, runtime, state, client):
         result["disable_settle_time"] = disable_settle_time
     except Exception as exc:
         raise DeviceAccessException("axis_restart") from exc
-    status_log(
+    runtime.logger.status(
         "Axis restart requested: "
         f"axis={axis_index} result={result}",
     )
@@ -274,7 +273,7 @@ def enable(message, runtime, state, client):
         raise_operation_rejected(client, command, "Axis command partially failed.")
         return result
     exchange(runtime, cycles=3)
-    status_log(
+    runtime.logger.status(
         "Received axis/enable: "
         f"axes={axes} "
         f"statuswords={[f'0x{runtime.slaves[index].txpdo.statusword:04X}' for index in axes]}",
@@ -311,7 +310,7 @@ def disable(message, runtime, state, client):
         raise_operation_rejected(client, command, "Axis command partially failed.")
     runtime.set_target_positions(state["target_positions"])
     exchange(runtime, cycles=3)
-    status_log(
+    runtime.logger.status(
         "Received axis/disable: "
         f"axes={axes} "
         f"statuswords={[f'0x{runtime.slaves[index].txpdo.statusword:04X}' for index in axes]}",
@@ -372,6 +371,6 @@ def set_controlword(message, runtime, state):
             hold_axis_at_actual_position(runtime, state, axis_index)
         runtime.set_target_positions(state["target_positions"])
 
-    status_log(
+    runtime.logger.status(
         f"Manual controlword applied to {target_text}: 0x{controlword:04X}",
     )

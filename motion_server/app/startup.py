@@ -21,6 +21,7 @@ from ethercat.mock_master import MockMaster
 from ethercat.mock_slave import MockSlave
 from ethercat.pysoem_master import PySOEMMaster
 from motion_server.control.motion_controller import MotionController
+from motion_server.runtime_logging import RuntimeLogger
 
 MOCK_AXIS_TYPE_USER_UNITS = {
     "linear": 0x0100,
@@ -29,6 +30,7 @@ MOCK_AXIS_TYPE_USER_UNITS = {
 
 
 def create_axis_runtime(ethercat, motion, logging, devices, motion_limits):
+    runtime_logger = RuntimeLogger(logging)
     sync_mode = ethercat.sync_mode
     device_profile_names = [device.profile_name for device in devices]
     device_profiles = [
@@ -105,7 +107,11 @@ def create_axis_runtime(ethercat, motion, logging, devices, motion_limits):
                 limits["jerk"],
             )
         device_manager = DeviceManager(ethercat_master, axis_bindings)
-        runtime = AxisRuntime(device_manager, motion_controller)
+        runtime = AxisRuntime(
+            device_manager,
+            motion_controller,
+            runtime_logger=runtime_logger,
+        )
         require_pdo_fields_for_mode(runtime, motion.initial_motion_mode)
         require_txpdo_fields(runtime)
         return runtime
@@ -132,7 +138,11 @@ def create_axis_runtime(ethercat, motion, logging, devices, motion_limits):
         csp_profile=motion.csp_profile.value,
     )
     device_manager = DeviceManager(ethercat_master, axis_bindings)
-    return AxisRuntime(device_manager, motion_controller)
+    return AxisRuntime(
+        device_manager,
+        motion_controller,
+        runtime_logger=runtime_logger,
+    )
 
 
 def get_device_profile_for_slave(

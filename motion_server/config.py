@@ -21,10 +21,6 @@ def env_float(name, default):
     return float(env_value(name, default))
 
 
-def env_int(name, default):
-    return int(env_value(name, default))
-
-
 def bus_env_value():
     return env_value("MOTION_SERVER_BUS", "cmmt_as")
 
@@ -71,48 +67,8 @@ FEEDBACK_PERIOD = float(os.environ.get("MOTION_SERVER_FEEDBACK_PERIOD", "0.05"))
 AXIS_RESTART_DISABLE_SETTLE_TIME = float(
     os.environ.get("MOTION_SERVER_AXIS_RESTART_DISABLE_SETTLE_TIME", "1.0")
 )
-STATUS_LOG_PERIOD = env_float(
-    "MOTION_SERVER_STATUS_LOG_PERIOD",
-    "1.0",
-)
-MOTION_SERVER_COMMAND_LOGS = env_value(
-    "MOTION_SERVER_COMMAND_LOGS",
-    "0",
-).strip() == "1"
-MOTION_SERVER_STATUS_LOGS = env_value(
-    "MOTION_SERVER_STATUS_LOGS",
-    "0",
-).strip() == "1"
-CYCLE_STATS_LOGS = env_bool(
-    "MOTION_SERVER_CYCLE_STATS_LOGS",
-    "1",
-)
-CYCLE_STATS_PERIOD = env_float(
-    "MOTION_SERVER_CYCLE_STATS_PERIOD",
-    "1.0",
-)
-TX_HISTORY_LENGTH = env_int(
-    "MOTION_SERVER_TX_HISTORY_LENGTH",
-    "16",
-)
-TRAJECTORY_DEBUG_LOGS = env_value(
-    "MOTION_SERVER_TRAJECTORY_DEBUG_LOGS",
-    "0",
-).strip() == "1"
-TRAJECTORY_SNAPSHOT_LOGS = env_value(
-    "MOTION_SERVER_TRAJECTORY_SNAPSHOT_LOGS",
-    "0",
-).strip() == "1"
 ROS_BRIDGE_COMMAND_LOGS = os.environ.get(
     "ROS_BRIDGE_COMMAND_LOGS",
-    "0",
-).strip() == "1"
-VELOCITY_ANOMALY_LOGS = env_value(
-    "MOTION_SERVER_VELOCITY_ANOMALY_LOGS",
-    "0",
-).strip() == "1"
-CSP_COMMAND_STEP_LOGS = env_value(
-    "MOTION_SERVER_CSP_COMMAND_STEP_LOGS",
     "0",
 ).strip() == "1"
 VELOCITY_ANOMALY_THRESHOLD = env_float(
@@ -127,10 +83,6 @@ VELOCITY_ANOMALY_LOG_PERIOD = env_float(
     "MOTION_SERVER_VELOCITY_ANOMALY_LOG_PERIOD",
     "0.05",
 )
-POSITION_FEEDBACK_LAG_LOGS = env_value(
-    "MOTION_SERVER_POSITION_FEEDBACK_LAG_LOGS",
-    "0",
-).strip() == "1"
 POSITION_FEEDBACK_LAG_LOG_PERIOD = env_float(
     "MOTION_SERVER_POSITION_FEEDBACK_LAG_LOG_PERIOD",
     "0.2",
@@ -503,9 +455,3 @@ def require_pdo_fields(pdo, fields, context):
             f"{context} is missing required PDO field(s): "
             f"{', '.join(missing)}"
         )
-
-
-def status_log(*args, **kwargs):
-    if MOTION_SERVER_STATUS_LOGS:
-        kwargs.setdefault("flush", True)
-        print(*args, **kwargs)

@@ -1,7 +1,4 @@
-from collections import deque
-
 from motion_server.control.axis_units import axis_position_counts_per_api_units
-from motion_server.config import TX_HISTORY_LENGTH
 
 
 def inactive_trajectory_state(result="idle"):
@@ -118,7 +115,6 @@ def initial_server_state(
         "trajectory": inactive_trajectory_state(),
         "trajectory_sequence": 0,
         "last_trajectory_complete_time": None,
-        "tx_history": deque(maxlen=max(1, TX_HISTORY_LENGTH)),
         "homing": inactive_homing_state(),
         "jog_previous_modes": [None for _ in range(axis_count_value)],
         "command_authority_owner": None,
