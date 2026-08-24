@@ -381,7 +381,6 @@ def log_status_if_due(runtime, state, last_status_log_time):
             f"CSP_CP={runtime.trajectory_generators[axis_index].command_position:.3f} "
             f"AP={slave.txpdo.actual_position} "
             f"AV={slave.txpdo.actual_velocity} "
-            f"DV={state['derived_velocities'][axis_index]:.3f} "
             f"{format_diagnostics(runtime.last_diagnostics[axis_index])}"
         )
 

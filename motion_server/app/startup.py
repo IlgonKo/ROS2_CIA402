@@ -23,12 +23,6 @@ from ethercat.pysoem_master import PySOEMMaster
 from motion_server.control.motion_controller import MotionController
 from motion_server.runtime_logging import RuntimeLogger
 
-MOCK_AXIS_TYPE_USER_UNITS = {
-    "linear": 0x0100,
-    "rotary": 0x4100,
-}
-
-
 def create_axis_runtime(ethercat, motion, logging, devices, motion_limits):
     runtime_logger = RuntimeLogger(logging)
     sync_mode = ethercat.sync_mode
@@ -183,51 +177,6 @@ def get_device_profile_for_device(device):
     else:
         kwargs["io_id"] = device.logical_id
     return get_device_profile(device.profile_name, **kwargs)
-
-
-def parse_mock_axis_user_units(args):
-    raw_units = str(getattr(args, "mock_axis_user_units", "")).strip()
-    if raw_units:
-        return parse_axis_values(
-            raw_units,
-            int(args.axis_count),
-            lambda value: int(value, 0),
-            "--mock-axis-user-units",
-        )
-
-    raw_types = str(getattr(args, "mock_axis_types", "")).strip()
-    if raw_types:
-        return parse_axis_values(
-            raw_types,
-            int(args.axis_count),
-            parse_mock_axis_type,
-            "--mock-axis-types",
-        )
-
-    return [MOCK_AXIS_TYPE_USER_UNITS["linear"] for _ in range(int(args.axis_count))]
-
-
-def parse_axis_values(raw_value, axis_count_value, parser, option_name):
-    parts = [part.strip() for part in raw_value.split(",") if part.strip()]
-    if not parts:
-        raise ValueError(f"{option_name} does not contain any values")
-    if len(parts) == 1:
-        parts = parts * axis_count_value
-    if len(parts) != axis_count_value:
-        raise ValueError(f"{option_name} count must match motion axes in --bus")
-    return [parser(part) for part in parts]
-
-
-def parse_mock_axis_type(value):
-    key = str(value).strip().lower()
-    if key not in MOCK_AXIS_TYPE_USER_UNITS:
-        print(
-            "Unsupported mock axis type; using linear fallback. "
-            f"value={value!r} expected=linear|rotary",
-            flush=True,
-        )
-        key = "linear"
-    return MOCK_AXIS_TYPE_USER_UNITS[key]
 
 
 def parse_optional_sync_mode(raw_value):

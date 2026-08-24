@@ -33,7 +33,7 @@ COMPOSE_ENV_FILE="$(prepare_compose_env_file "${PROJECT_ROOT}")"
 
 echo "Using env file: ${ENV_FILE}"
 echo "Using compose env file: ${COMPOSE_ENV_FILE}"
-grep -E '^(MOTION_SERVER_BACKEND|MOTION_SERVER_BUS|MOTION_SERVER_DEVICE_CONFIG_ROOT|PYSOEM_INTERFACE|MOCK_AXIS_TYPES|MOCK_AXIS_USER_UNITS)=' "${COMPOSE_ENV_FILE}" || true
+grep -E '^(MOTION_SERVER_BACKEND|MOTION_SERVER_BUS|MOTION_SERVER_DEVICE_CONFIG_ROOT|PYSOEM_INTERFACE)=' "${COMPOSE_ENV_FILE}" || true
 
 echo "Stopping existing Motion Server containers"
 docker compose -f "${COMPOSE_FILE}" --env-file "${COMPOSE_ENV_FILE}" stop motion_server

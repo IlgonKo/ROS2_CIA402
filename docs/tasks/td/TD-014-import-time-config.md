@@ -473,6 +473,23 @@ platform DLL path 준비는 configuration loading과 별도의 명시적인 boot
 - `configured_index`, `MOCK_AXIS_TYPES`, `MOCK_AXIS_USER_UNITS`를 제거한다.
 - 제거 항목의 정적 참조 검사를 추가한다.
 
+완료 기록:
+
+- 상태: `complete`
+- derived velocity 계산 module, cycle update, state와 Axis/Axes status field 및 Control
+  Panel merge mapping을 제거했다. actual velocity는 필수 TxPDO `0x606C`만 사용한다.
+- `MOTION_SERVER_DERIVED_VELOCITY_ALPHA` 환경 변수/CLI/shell/문서 설정을 제거했다.
+- `BusDevice.configured_index`를 제거하고 numeric label은 parsing에만 사용하며 최종
+  model에는 실제 순서의 `slave_index`만 보존한다.
+- mock axis type/user-unit parser, CLI와 virtual-servo 전용 환경 파일을 제거했다.
+  가상축 OD/unit은 실제축과 동일하게 CMMT device profile에서 결정한다.
+- 제거된 runtime/configuration/API/UI identifier가 다시 추가되지 않도록 정적 검사와
+  `BusDevice` field 계약 테스트 2개를 추가했다.
+- 결과: 전체 unittest 168개, source compile, CLI help, Linux shell 문법과 diff 검사가
+  통과했다.
+- 다음 단계는 import-time loader/environment mutation, active configuration과 전역
+  profile을 제거하는 S07이다.
+
 ### S07 Import isolation 마무리
 
 - import-time loader, environment mutation, active configuration과 전역 profile을 제거한다.

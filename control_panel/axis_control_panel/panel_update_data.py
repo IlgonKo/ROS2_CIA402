@@ -62,7 +62,6 @@ def merge_axis_status(feedback, message, axis_count):
         "target_position": "target_positions",
         "actual_position": "actual_positions",
         "actual_velocity": "actual_velocities",
-        "derived_velocity": "derived_velocities",
         "command_position": "command_positions",
         "command_velocity": "command_velocities",
         "statusword": "statuswords",

@@ -71,19 +71,12 @@ MOTION_SERVER_BACKEND=pysoem
 MOTION_SERVER_BUS=cmmt
 MOTION_SERVER_PORT=15000
 PYSOEM_CYCLE_TIME=0.01
-MOTION_SERVER_DERIVED_VELOCITY_ALPHA=0.2
 ```
 
 CMMT-specific settings are stored in `device/cmmt/.env`:
 
 ```text
 MOTION_SERVER_MOTION_MODE=pp
-```
-
-Virtual servo drive settings are stored in `device/virtual_servo_drive/.env`:
-
-```text
-MOCK_AXIS_TYPES=linear,linear,rotary
 ```
 
 On Linux, `.env` is a hidden file. In the Files app, press `Ctrl+H` to show it,
@@ -206,16 +199,6 @@ linear axes use `mm`, `mm/s`, `mm/s^2`, and rotary axes use `deg`, `deg/s`,
 `deg/s^2`. The server reads the drive user unit and conversion settings during
 startup and converts to the drive's PDO/SDO units internally.
 
-For the mock backend, virtual axis units can be selected from
-`device/virtual_servo_drive/.env`:
-
-```text
-MOCK_AXIS_TYPES=linear,linear,rotary
-```
-
-Use `MOCK_AXIS_USER_UNITS` only when an exact mock `0x216E:01` value is needed,
-for example `0x0100` for linear metre or `0x4100` for rotary degree.
-
 The Motion Server does not use a manual CSP count scale. For real CMMT drives,
 the server reads the drive user unit and converting unit exponents from OD
 objects such as `0x216E` and `0x2194`, then calculates the per-axis API-to-drive
@@ -235,13 +218,9 @@ velocity/position. Some drives do not expose CiA402 object `0x60C2`
 interpolation time period; the Motion Server treats that as a supported fallback
 and continues without writing it.
 
-The drive's `0x606C` actual velocity can use vendor-specific scaling. The Axis
-Server also logs and publishes `DV=...`, a derived velocity calculated from
-actual position delta over time in position-counts per second. The local panel
-shows and traces the drive's actual velocity feedback.
-
-`MOTION_SERVER_DERIVED_VELOCITY_ALPHA` filters the derived velocity display. Smaller
-values are smoother; `1.0` disables filtering.
+The server and local panel use the drive's `0x606C` actual velocity feedback.
+Virtual axes obtain the same OD defaults and unit metadata from their configured
+CMMT device profile as real axes.
 
 The panel needs an active Linux desktop/X11 session. The boot service starts
 only the Motion Server container; open the panel manually with

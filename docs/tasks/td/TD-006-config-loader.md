@@ -45,7 +45,8 @@ ConfigurationModel
 ```
 
 - 장치별 설정 파일은 유지하지만 장치별 parser는 만들지 않는다.
-- numeric index는 `configured_index`, 실제 Bus 순서는 `slave_index`로 구분한다.
+- numeric label은 parsing에만 사용하고 runtime 식별에는 실제 Bus 순서의
+  `slave_index`만 유지한다. 이 규칙은 DEC-022와 TD-014에서 확정했다.
 - `axis`/`drive`와 `io`/`device`/`slave` 별칭은 parser 경계에서 각각
   `DeviceRole.AXIS`, `DeviceRole.IO`로 정규화한다.
 

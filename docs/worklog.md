@@ -8,6 +8,10 @@
 
 ### 완료
 
+- `TD-014-S06`에서 derived velocity 계산·설정·API·UI를 제거하고 필수 TxPDO actual
+  velocity만 사용하도록 정리했다. `configured_index`와 mock axis type/user-unit 전용
+  설정도 제거하여 가상/실제축이 같은 device profile OD/unit을 사용하며, 재도입 방지
+  정적 검사 2개를 포함한 전체 unittest 168개가 통과했다.
 - `TD-014-S05`에서 전역 logging 상수와 `status_log()`, state의 `tx_history`를 제거하고
   runtime-owned `RuntimeLogger` 및 optional bounded pre-logging을 도입했다. 비활성 시
   buffer/기록을 만들지 않고 활성 시 non-command event에 이전 cycle snapshot을

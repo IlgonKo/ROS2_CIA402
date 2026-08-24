@@ -42,7 +42,6 @@ from motion_server.app.startup import (
 from motion_server.handlers.command.trajectory import (
     update_active as update_active_trajectory,
 )
-from motion_server.app.state_updates import update_derived_velocities
 from motion_server.control.axis_operations import (
     actual_positions,
     hold_faulted_axes,
@@ -93,7 +92,6 @@ def requested_server_action(state):
 def run_server_loop(server, runtime, state, server_config):
     server.setblocking(False)
     clients = []
-    last_feedback_update_time = 0.0
     last_status_log_time = 0.0
     cycle_stats = CycleStats()
     last_cycle_start_time = None
@@ -186,13 +184,6 @@ def run_server_loop(server, runtime, state, server_config):
                 next_cycle_time = cycle_start_time + runtime.cycle_time
 
         now = time.monotonic()
-        if (
-            clients
-            and now - last_feedback_update_time >= server_config.feedback_period
-        ):
-            update_derived_velocities(runtime, state, now)
-            last_feedback_update_time = now
-
         if (
             runtime.logger.config.cycle_stats.enabled
             and runtime.logger.config.cycle_stats.period > 0.0

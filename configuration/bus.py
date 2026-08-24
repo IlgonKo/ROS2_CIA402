@@ -12,7 +12,6 @@ class DeviceRole(str, Enum):
 @dataclass(frozen=True)
 class BusDevice:
     slave_index: int
-    configured_index: int
     role: DeviceRole
     profile: str
     logical_id: str | None = None
@@ -59,7 +58,7 @@ def parse_bus_config(raw_bus, available_profiles=None):
     available = None if available_profiles is None else set(available_profiles)
     devices = []
     io_count = 0
-    for configured_index, raw_entry in split_indexed_config_list(
+    for _numeric_label, raw_entry in split_indexed_config_list(
         raw_bus,
         default_start=0,
     ):
@@ -104,7 +103,6 @@ def parse_bus_config(raw_bus, available_profiles=None):
         devices.append(
             BusDevice(
                 slave_index=len(devices),
-                configured_index=configured_index,
                 role=role,
                 profile=profile_name,
                 logical_id=logical_id,

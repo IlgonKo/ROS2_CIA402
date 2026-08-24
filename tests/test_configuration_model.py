@@ -43,7 +43,7 @@ class BusConfigTest(unittest.TestCase):
         self.assertEqual(bus.devices[0].role, DeviceRole.AXIS)
         self.assertEqual(bus.devices[1].role, DeviceRole.IO)
         self.assertEqual(bus.devices[1].logical_id, "station0")
-        self.assertEqual(bus.devices[2].configured_index, 2)
+        self.assertEqual(bus.devices[2].slave_index, 2)
 
     def test_unknown_role_is_rejected(self):
         with self.assertRaisesRegex(ValueError, "Unsupported.*role"):

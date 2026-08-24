@@ -51,11 +51,6 @@ def axis_status_message(runtime, state, axis_index, client_id=None):
             axis_index,
             runtime.slaves[axis_index].txpdo.actual_velocity,
         ),
-        "derived_velocity": axis_motion_drive_to_api(
-            state,
-            axis_index,
-            state["derived_velocities"][axis_index],
-        ),
         "command_position": axis_position_drive_to_api(
             state,
             axis_index,
@@ -140,10 +135,6 @@ def axes_status_message(runtime, state, client_id=None):
         "actual_velocities": [
             axis_motion_drive_to_api(state, axis_index, slave.txpdo.actual_velocity)
             for axis_index, slave in enumerate(runtime.slaves)
-        ],
-        "derived_velocities": [
-            axis_motion_drive_to_api(state, axis_index, value)
-            for axis_index, value in enumerate(state["derived_velocities"])
         ],
         "command_positions": [
             axis_position_drive_to_api(state, axis_index, generator.command_position)

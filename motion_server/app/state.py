@@ -82,13 +82,6 @@ def initial_server_state(
         "initialization_error": initialization_error,
         "server_mode": server_config.mode.value,
         "target_positions": positions,
-        "derived_velocities": [0.0 for _ in range(axis_count_value)],
-        "derived_velocity_positions": positions,
-        "derived_velocity_time": None,
-        "derived_velocity_alpha": max(
-            0.0,
-            min(1.0, 0.2),
-        ),
         "motion_limits": motion_limits,
         "profile_settings": profile_settings,
         "software_position_limits": software_position_limits,

@@ -21,6 +21,10 @@ def env_float(name, default):
     return float(env_value(name, default))
 
 
+def env_int(name, default):
+    return int(env_value(name, default))
+
+
 def bus_env_value():
     return env_value("MOTION_SERVER_BUS", "cmmt_as")
 
@@ -59,10 +63,6 @@ MOTION_SERVER_MODE = env_value(
 ).strip().lower()
 DEFAULT_CYCLE_TIME = float(os.environ.get("PYSOEM_CYCLE_TIME", "0.01"))
 DEFAULT_SPIN_WAIT_TIME = float(os.environ.get("PYSOEM_SPIN_WAIT_TIME", "0.00015"))
-DERIVED_VELOCITY_ALPHA = env_float(
-    "MOTION_SERVER_DERIVED_VELOCITY_ALPHA",
-    "0.2",
-)
 FEEDBACK_PERIOD = float(os.environ.get("MOTION_SERVER_FEEDBACK_PERIOD", "0.05"))
 AXIS_RESTART_DISABLE_SETTLE_TIME = float(
     os.environ.get("MOTION_SERVER_AXIS_RESTART_DISABLE_SETTLE_TIME", "1.0")
@@ -158,23 +158,6 @@ def parse_args(argv=None):
             "pysoem",
         ).lower(),
         help="Device backend. pysoem drives real EtherCAT slaves; mock uses VirtualCiA402Servo.",
-    )
-    parser.add_argument(
-        "--mock-axis-types",
-        default=os.environ.get("MOCK_AXIS_TYPES", ""),
-        help=(
-            "Comma-separated virtual axis types for mock backend: "
-            "linear or rotary. A single value is repeated for all axes."
-        ),
-    )
-    parser.add_argument(
-        "--mock-axis-user-units",
-        default=os.environ.get("MOCK_AXIS_USER_UNITS", ""),
-        help=(
-            "Comma-separated mock 0x216E:01 user position units. "
-            "Overrides --mock-axis-types. Examples: 0x0100 linear m, "
-            "0x4100 rotary deg, 0x1000 rotary rad, 0xB400 rotary rev."
-        ),
     )
     parser.add_argument(
         "--bus",
@@ -374,12 +357,6 @@ def parse_args(argv=None):
             "Send CSP command velocity as 0x60B1 velocity offset in user units. "
             "Use with CSP interpolation mode CSP-V."
         ),
-    )
-    parser.add_argument(
-        "--derived-velocity-alpha",
-        type=float,
-        default=DERIVED_VELOCITY_ALPHA,
-        help="Low-pass filter alpha for derived velocity. Use 1.0 to disable.",
     )
     parser.add_argument(
         "--motion-mode",
