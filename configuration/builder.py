@@ -2,6 +2,7 @@ from dataclasses import dataclass
 
 from configuration.file_parser import split_config_list, split_indexed_config_list
 from configuration.loader import ConfigurationModel
+from configuration.bus import parse_bus_config
 from configuration.models import (
     BackendType,
     BusDeviceConfig,
@@ -38,6 +39,63 @@ class CliOverrides:
     port: int | None = None
     backend: BackendType | None = None
     interface: str | None = None
+    bus: str | None = None
+    server_mode: ServerMode | None = None
+    cycle_time: float | None = None
+    spin_wait_time: float | None = None
+    sync_mode: int | None = None
+    dc_enabled: bool | None = None
+    dc_sync0_shift_time_ns: int | None = None
+    dc_phase_lock: bool | None = None
+    dc_absolute_shift: bool | None = None
+    dc_phase_offset_ns: int | None = None
+    dc_phase_kp: float | None = None
+    dc_phase_ki: float | None = None
+    dc_phase_max_correction: float | None = None
+    max_velocity: float | None = None
+    acceleration: float | None = None
+    deceleration: float | None = None
+    jerk: float | None = None
+    pp_jerk: int | None = None
+    motion_mode: str | None = None
+    csp_profile: CspProfile | None = None
+    csp_interpolation_mode: CspInterpolationMode | None = None
+    csp_velocity_offset: bool | None = None
+    csp_command_step_threshold: float | None = None
+    csp_command_step_error_threshold: float | None = None
+
+    @classmethod
+    def from_namespace(cls, args):
+        return cls(
+            host=args.host,
+            port=args.port,
+            backend=BackendType(args.backend),
+            interface=args.interface,
+            bus=args.bus,
+            server_mode=ServerMode(args.server_mode),
+            cycle_time=args.cycle_time,
+            spin_wait_time=args.spin_wait_time,
+            sync_mode=(None if str(args.sync_mode).strip() == "" else int(args.sync_mode, 0)),
+            dc_enabled=args.dc_enabled,
+            dc_sync0_shift_time_ns=args.dc_sync0_shift_time,
+            dc_phase_lock=args.dc_phase_lock,
+            dc_absolute_shift=args.dc_absolute_shift,
+            dc_phase_offset_ns=args.dc_phase_offset,
+            dc_phase_kp=args.dc_phase_kp,
+            dc_phase_ki=args.dc_phase_ki,
+            dc_phase_max_correction=args.dc_phase_max_correction,
+            max_velocity=args.max_velocity,
+            acceleration=args.acceleration,
+            deceleration=args.deceleration,
+            jerk=args.jerk,
+            pp_jerk=args.pp_jerk,
+            motion_mode=args.motion_mode,
+            csp_profile=CspProfile(args.csp_profile),
+            csp_interpolation_mode=CspInterpolationMode(args.csp_interpolation_mode),
+            csp_velocity_offset=args.csp_velocity_offset,
+            csp_command_step_threshold=args.csp_command_step_threshold,
+            csp_command_step_error_threshold=args.csp_command_step_error_threshold,
+        )
 
 
 def build_motion_server_config(
@@ -49,7 +107,7 @@ def build_motion_server_config(
     server = ServerConfig(
         host=cli.host if cli.host is not None else value(values, "MOTION_SERVER_HOST", "0.0.0.0"),
         port=cli.port if cli.port is not None else integer(values, "MOTION_SERVER_PORT", 15000),
-        mode=enum_value(ServerMode, value(values, "MOTION_SERVER_MODE", "basic")),
+        mode=cli.server_mode or enum_value(ServerMode, value(values, "MOTION_SERVER_MODE", "basic")),
         feedback_period=number(values, "MOTION_SERVER_FEEDBACK_PERIOD", 0.05),
         axis_restart_disable_settle_time=number(
             values,
@@ -58,22 +116,22 @@ def build_motion_server_config(
         ),
     )
     cycle = CycleConfig(
-        period=number(values, "PYSOEM_CYCLE_TIME", 0.01),
-        spin_wait_time=number(values, "PYSOEM_SPIN_WAIT_TIME", 0.00015),
+        period=choose(cli.cycle_time, number(values, "PYSOEM_CYCLE_TIME", 0.01)),
+        spin_wait_time=choose(cli.spin_wait_time, number(values, "PYSOEM_SPIN_WAIT_TIME", 0.00015)),
     )
     dc = DistributedClockConfig(
-        enabled=boolean(values, "PYSOEM_DC_ENABLED", False),
-        sync0_shift_time_ns=integer(values, "PYSOEM_DC_SYNC0_SHIFT_TIME_NS", 0),
-        phase_lock=boolean(values, "PYSOEM_DC_PHASE_LOCK", False),
-        absolute_shift=boolean(values, "PYSOEM_DC_ABSOLUTE_SHIFT", False),
-        phase_offset_ns=integer(values, "PYSOEM_DC_PHASE_OFFSET_NS", 800000),
-        phase_kp=number(values, "PYSOEM_DC_PHASE_KP", 0.05),
-        phase_ki=number(values, "PYSOEM_DC_PHASE_KI", 0.0005),
-        phase_max_correction=number(
+        enabled=choose(cli.dc_enabled, boolean(values, "PYSOEM_DC_ENABLED", False)),
+        sync0_shift_time_ns=choose(cli.dc_sync0_shift_time_ns, integer(values, "PYSOEM_DC_SYNC0_SHIFT_TIME_NS", 0)),
+        phase_lock=choose(cli.dc_phase_lock, boolean(values, "PYSOEM_DC_PHASE_LOCK", False)),
+        absolute_shift=choose(cli.dc_absolute_shift, boolean(values, "PYSOEM_DC_ABSOLUTE_SHIFT", False)),
+        phase_offset_ns=choose(cli.dc_phase_offset_ns, integer(values, "PYSOEM_DC_PHASE_OFFSET_NS", 800000)),
+        phase_kp=choose(cli.dc_phase_kp, number(values, "PYSOEM_DC_PHASE_KP", 0.05)),
+        phase_ki=choose(cli.dc_phase_ki, number(values, "PYSOEM_DC_PHASE_KI", 0.0005)),
+        phase_max_correction=choose(cli.dc_phase_max_correction, number(
             values,
             "PYSOEM_DC_PHASE_MAX_CORRECTION",
             0.001,
-        ),
+        )),
     )
     backend = cli.backend or enum_value(
         BackendType,
@@ -82,26 +140,27 @@ def build_motion_server_config(
     ethercat = EtherCATConfig(
         backend=backend,
         interface=cli.interface if cli.interface is not None else value(values, "PYSOEM_INTERFACE", ""),
-        sync_mode=optional_integer(values, "PYSOEM_SYNC_MODE"),
+        sync_mode=choose(cli.sync_mode, optional_integer(values, "PYSOEM_SYNC_MODE")),
         cycle=cycle,
         dc=dc,
     )
     motion = MotionConfig(
         default_limits=MotionLimitConfig(
-            max_velocity=number(values, "MOTION_SERVER_MAX_VELOCITY", 50.0),
-            acceleration=number(values, "MOTION_SERVER_ACCELERATION", 100.0),
-            deceleration=number(values, "MOTION_SERVER_DECELERATION", 100.0),
-            jerk=number(values, "MOTION_SERVER_JERK", 1000.0),
-            pp_jerk=integer(values, "MOTION_SERVER_PP_JERK", 100000),
+            max_velocity=choose(cli.max_velocity, number(values, "MOTION_SERVER_MAX_VELOCITY", 50.0)),
+            acceleration=choose(cli.acceleration, number(values, "MOTION_SERVER_ACCELERATION", 100.0)),
+            deceleration=choose(cli.deceleration, number(values, "MOTION_SERVER_DECELERATION", 100.0)),
+            jerk=choose(cli.jerk, number(values, "MOTION_SERVER_JERK", 1000.0)),
+            pp_jerk=choose(cli.pp_jerk, integer(values, "MOTION_SERVER_PP_JERK", 100000)),
         ),
-        initial_motion_mode=value(values, "MOTION_SERVER_MOTION_MODE", "pp").lower(),
-        csp_profile=enum_value(
+        initial_motion_mode=choose(cli.motion_mode, value(values, "MOTION_SERVER_MOTION_MODE", "pp")).lower(),
+        csp_profile=cli.csp_profile or enum_value(
             CspProfile,
             value(values, "MOTION_SERVER_CSP_PROFILE", "quintic"),
         ),
     )
-    logging = build_logging_config(values)
-    devices = build_device_configs(source)
+    logging = build_logging_config(values, cli)
+    bus = source.bus if cli.bus is None else parse_bus_config(cli.bus)
+    devices = build_device_configs(source, bus=bus, cli=cli)
     config = MotionServerConfig(
         project_root=source.project_root,
         server=server,
@@ -114,7 +173,8 @@ def build_motion_server_config(
     return config
 
 
-def build_logging_config(values):
+def build_logging_config(values, cli=None):
+    cli = cli or CliOverrides()
     return LoggingConfig(
         command=CommandLogConfig(boolean(values, "MOTION_SERVER_COMMAND_LOGS", False)),
         status=StatusLogConfig(
@@ -141,8 +201,8 @@ def build_logging_config(values):
         ),
         csp_command_step=CspCommandStepLogConfig(
             boolean(values, "MOTION_SERVER_CSP_COMMAND_STEP_LOGS", False),
-            number(values, "MOTION_SERVER_CSP_COMMAND_STEP_THRESHOLD", 250.0),
-            number(values, "MOTION_SERVER_CSP_COMMAND_STEP_ERROR_THRESHOLD", 75.0),
+            choose(cli.csp_command_step_threshold, number(values, "MOTION_SERVER_CSP_COMMAND_STEP_THRESHOLD", 250.0)),
+            choose(cli.csp_command_step_error_threshold, number(values, "MOTION_SERVER_CSP_COMMAND_STEP_ERROR_THRESHOLD", 75.0)),
         ),
         pre_logging=PreLoggingConfig(
             boolean(values, "MOTION_SERVER_PRE_LOGGING_ENABLED", False),
@@ -151,13 +211,15 @@ def build_logging_config(values):
     )
 
 
-def build_device_configs(source):
+def build_device_configs(source, bus=None, cli=None):
     values = source.values
+    bus = bus or source.bus
+    cli = cli or CliOverrides()
     devices = []
     axis_index = 0
-    for bus_device in source.bus.devices:
+    for bus_device in bus.devices:
         if bus_device.profile in {"cmmt_as", "cmmt_st"}:
-            device_config = build_cmmt_config(values, bus_device, axis_index)
+            device_config = build_cmmt_config(values, bus_device, axis_index, cli)
             axis_index += 1
         elif bus_device.profile == "cpx_ap_i_ec":
             device_config = build_cpx_config(values, bus_device)
@@ -175,7 +237,8 @@ def build_device_configs(source):
     return tuple(devices)
 
 
-def build_cmmt_config(values, bus_device, axis_index):
+def build_cmmt_config(values, bus_device, axis_index, cli=None):
+    cli = cli or CliOverrides()
     pdo_name = value(
         values,
         f"MOTION_SERVER_CMMT_AXIS_{axis_index}_PDO_CONFIGURATION",
@@ -204,15 +267,15 @@ def build_cmmt_config(values, bus_device, axis_index):
         profile_name=bus_device.profile,
         axis_index=axis_index,
         pdo_configuration=configuration.name,
-        csp_interpolation_mode=enum_value(
+        csp_interpolation_mode=cli.csp_interpolation_mode or enum_value(
             CspInterpolationMode,
             integer(values, "MOTION_SERVER_CSP_INTERPOLATION_MODE", 1),
         ),
-        csp_velocity_offset=boolean(
+        csp_velocity_offset=choose(cli.csp_velocity_offset, boolean(
             values,
             "MOTION_SERVER_CSP_VELOCITY_OFFSET",
             False,
-        ),
+        )),
     )
 
 
@@ -306,5 +369,9 @@ def enum_value(enum_type, raw):
         raise ValueError(
             f"Unsupported {enum_type.__name__} {raw!r}; supported: {supported}"
         ) from exc
+
+
+def choose(override, default):
+    return default if override is None else override
     CommandLogConfig,
     CycleStatsLogConfig,

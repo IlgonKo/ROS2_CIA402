@@ -2,7 +2,7 @@ import json
 import select
 import time
 
-from motion_server.config import FEEDBACK_PERIOD, status_log
+from motion_server.config import status_log
 from motion_server.api.encoder import send_client_message
 from motion_server.handlers.status import system_feedback_message
 
@@ -26,9 +26,9 @@ def service_client(client, runtime, state, dispatch_message):
     return True
 
 
-def send_feedback_if_due(client, runtime, state):
+def send_feedback_if_due(client, runtime, state, feedback_period):
     now = time.monotonic()
-    if now - client["last_feedback_time"] < FEEDBACK_PERIOD:
+    if now - client["last_feedback_time"] < feedback_period:
         return
 
     send_client_message(

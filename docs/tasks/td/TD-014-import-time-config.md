@@ -397,6 +397,24 @@ platform DLL path 준비는 configuration loading과 별도의 명시적인 boot
 - server loop, master와 MotionController가 필요한 typed projection을 받게 한다.
 - `argparse.Namespace`의 runtime 전달과 관련 전역 상수 import를 제거한다.
 
+완료 기록:
+
+- 상태: `complete`
+- 변경: `configuration/builder.py`, `motion_server/application.py`,
+  `motion_server/server.py`, `motion_server/app/startup.py`,
+  `motion_server/app/state.py`, `motion_server/app/client_transport.py`
+- CLI `Namespace`는 `CliOverrides` 변환 경계 안으로 제한하고 server runtime에는
+  immutable `MotionServerConfig`만 전달한다.
+- TCP loop에는 `ServerConfig`, runtime factory에는 `EtherCATConfig`, `MotionConfig`,
+  `LoggingConfig`, `BusDeviceConfig[]`, state factory에는 server/EtherCAT/motion
+  projection만 전달하여 하위 component의 최상위 config 의존을 제거했다.
+- feedback period, socket, cycle/DC, motion limit/CSP 설정은 typed projection에서
+  소비한다. logging 전역 설정은 S05 전환 범위로 유지했다.
+- startup log에서 장치 상태를 제거하고 DC 비활성 시 DC 세부 설정을 출력하지 않게
+  했다.
+- 결과: 전체 unittest 162개, source compile과 diff 검사가 통과했다.
+- 다음 단계는 장치별 instance config를 실제/mock backend에 주입하는 S04다.
+
 ### S04 Device instance config 주입
 
 - Bus entry를 CMMT/CPX instance별 typed config와 결합한다.

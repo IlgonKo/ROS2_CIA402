@@ -8,6 +8,11 @@
 
 ### 완료
 
+- `TD-014-S03`에서 CLI `Namespace`의 runtime 전달을 제거하고 server, EtherCAT,
+  motion, logging 및 Bus device typed projection을 TCP loop, runtime/state factory에
+  주입했다. feedback/socket/cycle/DC/motion 설정의 전역 의존을 제거하고 startup
+  log의 장치 상태 및 비활성 DC 세부값도 정리했으며 전체 unittest 162개와 source
+  compile 검사가 통과했다.
 - `TD-014-S01`에서 immutable server, EtherCAT/cycle/DC, motion, logging 및 CMMT/CPX
   instance configuration model과 builder/validation을 추가했다. 기존 runtime은 아직
   기존 경로를 유지하며 typed configuration 테스트 5개와 전체 unittest 160개가 통과했다.

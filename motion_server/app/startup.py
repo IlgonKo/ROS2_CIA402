@@ -28,36 +28,48 @@ MOCK_AXIS_TYPE_USER_UNITS = {
 }
 
 
-def create_axis_runtime(args, motion_limits):
-    sync_mode = parse_optional_sync_mode(args.sync_mode)
-    device_profile_names = list(args.device_profile_names)
-    axis_slave_indices = list(args.axis_slave_indices)
+def create_axis_runtime(ethercat, motion, logging, devices, motion_limits):
+    sync_mode = ethercat.sync_mode
+    device_profile_names = [device.profile_name for device in devices]
+    axis_slave_indices = [
+        device.slave_index
+        for device in devices
+        if device.role.value == "axis"
+    ]
+    io_devices = [
+        {
+            "id": device.logical_id,
+            "profile": device.profile_name,
+            "slave_index": device.slave_index,
+        }
+        for device in devices
+        if device.role.value == "io"
+    ]
+    axis_count_value = len(axis_slave_indices)
     axis_bindings = [
         AxisBinding(axis_index=axis_index, slave_index=slave_index)
         for axis_index, slave_index in enumerate(axis_slave_indices)
     ]
 
-    if args.backend == "mock":
-        if axis_slave_indices != list(range(args.axis_count)) or (
-            len(device_profile_names) != args.axis_count
+    if ethercat.backend.value == "mock":
+        if axis_slave_indices != list(range(axis_count_value)) or (
+            len(device_profile_names) != axis_count_value
         ):
             raise ValueError(
                 "mock backend supports only one-to-one axis/slave mapping"
             )
         slaves = []
-        mock_user_units = parse_mock_axis_user_units(args)
         for axis_index, limits in enumerate(motion_limits):
             device_profile = get_device_profile_for_slave(
                 device_profile_names[axis_index],
                 axis_index,
-                args.io_devices,
+                io_devices,
                 axis_slave_indices,
             )
             servo = VirtualCiA402Servo(
-                cycle_time=args.cycle_time,
+                cycle_time=ethercat.cycle.period,
                 device_profile=device_profile,
             )
-            servo.od.write(0x216E, mock_user_units[axis_index], 0x01)
             servo.set_motion_limits(
                 limits["max_velocity"],
                 limits["acceleration"],
@@ -67,24 +79,23 @@ def create_axis_runtime(args, motion_limits):
                 servo,
                 device_profile,
             ))
-            print(
-                "Mock axis user position unit: "
-                f"axis={axis_index} 0x216E:01=0x{mock_user_units[axis_index]:04X}",
-                flush=True,
-            )
 
         ethercat_master = MockMaster(
             slaves,
-            cycle_time=args.cycle_time,
+            cycle_time=ethercat.cycle.period,
         )
         motion_controller = MotionController(
-            args.axis_count,
-            args.cycle_time,
+            axis_count_value,
+            ethercat.cycle.period,
             motion_limits=motion_limits,
-            csp_velocity_offset_enabled=args.csp_velocity_offset,
-            csp_command_step_threshold=args.csp_command_step_threshold,
-            csp_command_step_error_threshold=args.csp_command_step_error_threshold,
-            csp_profile=args.csp_profile,
+            csp_velocity_offset_enabled=any(
+                getattr(device.device, "csp_velocity_offset", False)
+                for device in devices
+                if device.role.value == "axis"
+            ),
+            csp_command_step_threshold=logging.csp_command_step.step_threshold,
+            csp_command_step_error_threshold=logging.csp_command_step.error_threshold,
+            csp_profile=motion.csp_profile.value,
         )
         for axis_index, limits in enumerate(motion_limits):
             motion_controller.set_axis_motion_limits(
@@ -96,34 +107,38 @@ def create_axis_runtime(args, motion_limits):
             )
         device_manager = DeviceManager(ethercat_master, axis_bindings)
         runtime = AxisRuntime(device_manager, motion_controller)
-        require_pdo_fields_for_mode(runtime, args.motion_mode)
+        require_pdo_fields_for_mode(runtime, motion.initial_motion_mode)
         require_txpdo_fields(runtime)
         return runtime
 
     ethercat_master = PySOEMMaster(
-        interface_name=args.interface,
+        interface_name=ethercat.interface,
         device_profiles=[
             get_device_profile_for_slave(
                 name,
                 slave_index,
-                args.io_devices,
+                io_devices,
                 axis_slave_indices,
             )
             for slave_index, name in enumerate(device_profile_names)
         ],
-        cycle_time=args.cycle_time,
+        cycle_time=ethercat.cycle.period,
         sync_mode=sync_mode,
-        dc_enabled=args.dc_enabled,
-        dc_sync0_shift_time=args.dc_sync0_shift_time,
+        dc_enabled=ethercat.dc.enabled,
+        dc_sync0_shift_time=ethercat.dc.sync0_shift_time_ns,
     )
     motion_controller = MotionController(
-        args.axis_count,
-        args.cycle_time,
+        axis_count_value,
+        ethercat.cycle.period,
         motion_limits=motion_limits,
-        csp_velocity_offset_enabled=args.csp_velocity_offset,
-        csp_command_step_threshold=args.csp_command_step_threshold,
-        csp_command_step_error_threshold=args.csp_command_step_error_threshold,
-        csp_profile=args.csp_profile,
+        csp_velocity_offset_enabled=any(
+            getattr(device.device, "csp_velocity_offset", False)
+            for device in devices
+            if device.role.value == "axis"
+        ),
+        csp_command_step_threshold=logging.csp_command_step.step_threshold,
+        csp_command_step_error_threshold=logging.csp_command_step.error_threshold,
+        csp_profile=motion.csp_profile.value,
     )
     device_manager = DeviceManager(ethercat_master, axis_bindings)
     return AxisRuntime(device_manager, motion_controller)

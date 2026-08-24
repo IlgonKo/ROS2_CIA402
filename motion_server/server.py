@@ -15,10 +15,9 @@ if str(PROJECT_ROOT) not in sys.path:
 from motion_server.config import (
     CYCLE_STATS_LOGS,
     CYCLE_STATS_PERIOD,
-    FEEDBACK_PERIOD,
-    parse_args,
     status_log,
 )
+from configuration import CmmtDeviceConfig
 from motion_server.handlers.command.homing import update_homing_state
 from motion_server.app.cycle import CycleStats, exchange, wait_until_cycle_time
 from motion_server.control.axis_units import (
@@ -96,7 +95,7 @@ def requested_server_action(state):
         return "reset"
     return None
 
-def run_server_loop(server, runtime, state):
+def run_server_loop(server, runtime, state, server_config):
     server.setblocking(False)
     clients = []
     last_feedback_update_time = 0.0
@@ -192,7 +191,10 @@ def run_server_loop(server, runtime, state):
                 next_cycle_time = cycle_start_time + runtime.cycle_time
 
         now = time.monotonic()
-        if clients and now - last_feedback_update_time >= FEEDBACK_PERIOD:
+        if (
+            clients
+            and now - last_feedback_update_time >= server_config.feedback_period
+        ):
             update_derived_velocities(runtime, state, now)
             last_feedback_update_time = now
 
@@ -231,7 +233,12 @@ def run_server_loop(server, runtime, state):
                     close_client(client, state)
                     clients.remove(client)
                     continue
-                send_feedback_if_due(client, runtime, state)
+                send_feedback_if_due(
+                    client,
+                    runtime,
+                    state,
+                    server_config.feedback_period,
+                )
             except OSError as exc:
                 print(
                     f"Client connection error: id={client['id']} error={exc}",
@@ -251,7 +258,7 @@ def run_server_loop(server, runtime, state):
         )
 
 
-def run_degraded_server_loop(server, runtime, state):
+def run_degraded_server_loop(server, runtime, state, server_config):
     server.setblocking(False)
     clients = []
     next_client_id = 1
@@ -285,7 +292,12 @@ def run_degraded_server_loop(server, runtime, state):
                     close_client(client, state)
                     clients.remove(client)
                     continue
-                send_feedback_if_due(client, runtime, state)
+                send_feedback_if_due(
+                    client,
+                    runtime,
+                    state,
+                    server_config.feedback_period,
+                )
             except (ConnectionError, OSError, json.JSONDecodeError) as exc:
                 print(
                     f"Client error: id={client['id']} error={exc}",
@@ -322,35 +334,48 @@ def restart_current_process():
     os.execv(sys.executable, [sys.executable, *sys.argv])
 
 
-def run_main_once(diagnostic_manager=None, args=None):
-    args = args or parse_args()
-    if args.list_adapters:
-        list_adapters()
-        return
-
-    if args.axis_count < 1:
+def run_main_once(diagnostic_manager=None, config=None):
+    if config is None:
+        raise TypeError("config must be a MotionServerConfig")
+    if config.axis_count < 1:
         raise ValueError("MOTION_SERVER_BUS must contain at least one motion axis")
 
+    limits = config.motion.default_limits
     motion_limits = [
         {
-            "max_velocity": args.max_velocity,
-            "acceleration": args.acceleration,
-            "deceleration": args.deceleration,
-            "jerk": args.jerk,
+            "max_velocity": limits.max_velocity,
+            "acceleration": limits.acceleration,
+            "deceleration": limits.deceleration,
+            "jerk": limits.jerk,
         }
-        for _ in range(args.axis_count)
+        for _ in range(config.axis_count)
     ]
-    runtime = create_axis_runtime(args, motion_limits)
+    runtime = create_axis_runtime(
+        config.ethercat,
+        config.motion,
+        config.logging,
+        config.devices,
+        motion_limits,
+    )
     if diagnostic_manager is not None:
         runtime.diagnostic_manager = diagnostic_manager
+
+    cmmt_devices = [
+        device.device
+        for device in config.devices
+        if isinstance(device.device, CmmtDeviceConfig)
+    ]
+    if not cmmt_devices:
+        raise ValueError("Motion Server configuration contains no CMMT axis")
+    csp_interpolation_mode = int(cmmt_devices[0].csp_interpolation_mode)
 
     try:
         drive_initialized = False
         try:
             startup_sdo = initialize_drive(
                 runtime,
-                args.motion_mode,
-                args.csp_interpolation_mode,
+                config.motion.initial_motion_mode,
+                csp_interpolation_mode,
                 read_startup_axis_sdo,
             )
             drive_initialized = True
@@ -364,20 +389,23 @@ def run_main_once(diagnostic_manager=None, args=None):
             )
             runtime.close()
             runtime.last_diagnostics = default_diagnostics(
-                args.axis_count,
+                config.axis_count,
                 initialization_error,
             )
             software_position_limits = [
                 [0.0, 0.0]
-                for _ in range(args.axis_count)
+                for _ in range(config.axis_count)
             ]
             profile_settings = None
             read_motion_limits_state = None
             user_position_units = None
             converting_unit_exponents = None
-            positions = [0.0 for _ in range(args.axis_count)]
+            positions = [0.0 for _ in range(config.axis_count)]
             state = initial_server_state(
-                args,
+                config.server,
+                config.ethercat,
+                config.motion,
+                config.axis_count,
                 runtime.device_manager.axes,
                 positions,
                 software_position_limits,
@@ -390,12 +418,12 @@ def run_main_once(diagnostic_manager=None, args=None):
             )
         else:
             runtime.last_diagnostics = default_diagnostics(
-                args.axis_count,
+                config.axis_count,
                 "Panel SDO read pending",
             )
             default_software_position_limits = [
                 [-1000000, 1000000]
-                for _ in range(args.axis_count)
+                for _ in range(config.axis_count)
             ]
             software_position_limits = startup_sdo.get(
                 "software_position_limits",
@@ -416,7 +444,7 @@ def run_main_once(diagnostic_manager=None, args=None):
             unit_state["axis_metadata"] = axis_metadata
             axis_position_scales = axis_position_counts_per_api_units(
                 unit_state,
-                args.axis_count,
+                config.axis_count,
             )
             for axis_index, scale in enumerate(axis_position_scales):
                 runtime.set_axis_position_counts_per_api_unit(
@@ -425,27 +453,31 @@ def run_main_once(diagnostic_manager=None, args=None):
                 )
             default_profile_settings = [
                 [
-                    axis_motion_api_to_drive(unit_state, axis_index, args.max_velocity),
                     axis_motion_api_to_drive(
                         unit_state,
                         axis_index,
-                        args.acceleration,
+                        limits.max_velocity,
+                    ),
+                    axis_motion_api_to_drive(
+                        unit_state,
+                        axis_index,
+                        limits.acceleration,
                         "acceleration",
                     ),
                     axis_motion_api_to_drive(
                         unit_state,
                         axis_index,
-                        args.deceleration,
+                        limits.deceleration,
                         "deceleration",
                     ),
                     axis_motion_api_to_drive(
                         unit_state,
                         axis_index,
-                        args.pp_jerk,
+                        limits.pp_jerk,
                         "jerk",
                     ),
                 ]
-                for axis_index in range(args.axis_count)
+                for axis_index in range(config.axis_count)
             ]
             profile_settings = [
                 values if values is not None else default_profile_settings[axis_index]
@@ -455,26 +487,30 @@ def run_main_once(diagnostic_manager=None, args=None):
             ]
             default_motion_limits_state = [
                 [
-                    axis_motion_api_to_drive(unit_state, axis_index, args.max_velocity),
                     axis_motion_api_to_drive(
                         unit_state,
                         axis_index,
-                        -abs(args.max_velocity),
+                        limits.max_velocity,
                     ),
                     axis_motion_api_to_drive(
                         unit_state,
                         axis_index,
-                        args.acceleration,
+                        -abs(limits.max_velocity),
+                    ),
+                    axis_motion_api_to_drive(
+                        unit_state,
+                        axis_index,
+                        limits.acceleration,
                         "acceleration",
                     ),
                     axis_motion_api_to_drive(
                         unit_state,
                         axis_index,
-                        args.deceleration,
+                        limits.deceleration,
                         "deceleration",
                     ),
                 ]
-                for axis_index in range(args.axis_count)
+                for axis_index in range(config.axis_count)
             ]
             read_motion_limits_state = [
                 values if values is not None else default_motion_limits_state[axis_index]
@@ -501,32 +537,32 @@ def run_main_once(diagnostic_manager=None, args=None):
                     max(abs(api_axis_limits[0]), abs(api_axis_limits[1])),
                     api_axis_limits[2],
                     api_axis_limits[3],
-                    args.jerk,
+                    limits.jerk,
                 )
             positions = actual_positions(runtime)
+            dc_summary = f"dc_enabled={config.ethercat.dc.enabled}"
+            if config.ethercat.dc.enabled:
+                dc_summary += (
+                    f" dc_phase_lock={config.ethercat.dc.phase_lock}"
+                    f" dc_absolute_shift={config.ethercat.dc.absolute_shift}"
+                )
             print(
                 "Drive initialized. "
-                f"backend={args.backend} "
-                f"axes={args.axis_count} "
-                f"cycle_time={args.cycle_time} "
-                f"spin_wait_time={args.spin_wait_time} "
+                f"backend={config.ethercat.backend.value} "
+                f"axes={config.axis_count} "
+                f"cycle_time={config.ethercat.cycle.period} "
+                f"spin_wait_time={config.ethercat.cycle.spin_wait_time} "
                 f"axis_position_counts_per_api_unit={axis_position_scales} "
-                f"csp_profile={args.csp_profile} "
-                f"dc_phase_lock={args.dc_phase_lock} "
-                f"dc_absolute_shift={args.dc_absolute_shift} "
-                f"dc_phase_offset_ns={args.dc_phase_offset} "
-                f"dc_phase_kp={args.dc_phase_kp} "
-                f"dc_phase_ki={args.dc_phase_ki} "
-                f"csp_interpolation_mode={args.csp_interpolation_mode} "
-                f"csp_velocity_offset={args.csp_velocity_offset} "
-                f"derived_velocity_alpha={args.derived_velocity_alpha} "
-                f"statuswords={[f'0x{slave.txpdo.statusword:04X}' for slave in runtime.slaves]} "
-                f"software_position_limits={software_position_limits} "
-                f"AP={positions}",
+                f"csp_profile={config.motion.csp_profile.value} "
+                f"{dc_summary} "
+                f"csp_interpolation_mode={csp_interpolation_mode}",
                 flush=True,
             )
             state = initial_server_state(
-                args,
+                config.server,
+                config.ethercat,
+                config.motion,
+                config.axis_count,
                 runtime.device_manager.axes,
                 positions,
                 software_position_limits,
@@ -547,17 +583,22 @@ def run_main_once(diagnostic_manager=None, args=None):
 
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as server:
             server.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-            server.bind((args.host, args.port))
+            server.bind((config.server.host, config.server.port))
             server.listen(1)
             print(
-                f"Motion Server listening on {args.host}:{args.port} "
-                f"backend={args.backend} axes={args.axis_count}",
+                f"Motion Server listening on {config.server.host}:{config.server.port} "
+                f"backend={config.ethercat.backend.value} axes={config.axis_count}",
                 flush=True,
             )
             if drive_initialized:
-                action = run_server_loop(server, runtime, state)
+                action = run_server_loop(server, runtime, state, config.server)
             else:
-                action = run_degraded_server_loop(server, runtime, state)
+                action = run_degraded_server_loop(
+                    server,
+                    runtime,
+                    state,
+                    config.server,
+                )
 
             if action == "restart":
                 raise ServerRestartRequested
@@ -570,11 +611,11 @@ def run_main_once(diagnostic_manager=None, args=None):
         runtime.close()
 
 
-def main(args=None, diagnostic_manager=None):
+def main(config, diagnostic_manager=None):
     diagnostic_manager = diagnostic_manager or DiagnosticManager()
     while True:
         try:
-            run_main_once(diagnostic_manager, args=args)
+            run_main_once(diagnostic_manager, config=config)
             return
         except ServerResetRequested:
             print(
