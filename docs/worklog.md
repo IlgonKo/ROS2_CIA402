@@ -11,6 +11,9 @@
 - `TD-014-S01`에서 immutable server, EtherCAT/cycle/DC, motion, logging 및 CMMT/CPX
   instance configuration model과 builder/validation을 추가했다. 기존 runtime은 아직
   기존 경로를 유지하며 typed configuration 테스트 5개와 전체 unittest 160개가 통과했다.
+- `TD-014-S02`에서 명시적 `ConfigurationSource`와 `MotionServerApplication` composition
+  root를 도입하고 일반/Windows entrypoint를 같은 1회 configuration 생성 경로로 연결했다.
+  복수 application 격리와 runner 경계 테스트를 포함한 전체 unittest 162개가 통과했다.
 - `TD-006`에서 file parser, environment overlay와 typed Bus model을
   `configuration` package로 분리했다.
 - Motion Server와 Windows packaging이 동일한 `ConfigurationModel` 및 `BusConfig`를

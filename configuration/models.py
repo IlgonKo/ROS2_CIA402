@@ -5,6 +5,13 @@ from pathlib import Path
 from configuration.bus import DeviceRole
 
 
+@dataclass(frozen=True)
+class ConfigurationSource:
+    project_root: Path
+    project_filename: str = ".env"
+    device_filename: str = ".env"
+
+
 class ServerMode(str, Enum):
     BASIC = "basic"
     ADVANCED = "advanced"

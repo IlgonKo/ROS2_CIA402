@@ -378,6 +378,20 @@ platform DLL path 준비는 configuration loading과 별도의 명시적인 boot
 - 일반/Windows entrypoint가 source를 전달하고 typed config를 한 번 생성하게 한다.
 - reset/reconnect lifecycle을 Application 경계로 이동한다.
 
+완료 기록:
+
+- 상태: `complete`
+- 변경: `motion_server/application.py`, `motion_server/__main__.py`,
+  `motion_server/server.py`, Windows packaging entrypoint와 runtime bootstrap
+- 일반/Windows entrypoint가 명시적인 `ConfigurationSource`를 사용하고
+  `MotionServerApplication`이 raw/typed configuration을 한 번 생성한다.
+- 기존 runtime은 S03 전까지 내부 Namespace adapter로 유지하며 Application 전체를
+  하위 runner에 전달하지 않는다.
+- 서로 다른 source 두 개의 application/config 격리와 runner 전달 경계 테스트 2개를
+  추가했다.
+- 결과: 전체 unittest 162개와 source compile 검사가 통과했다.
+- 다음 단계는 Namespace adapter를 typed projection으로 대체하는 S03이다.
+
 ### S03 Server·EtherCAT·Motion projection 주입
 
 - server loop, master와 MotionController가 필요한 typed projection을 받게 한다.

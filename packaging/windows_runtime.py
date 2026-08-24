@@ -42,11 +42,12 @@ def add_windows_npcap_dll_paths():
             os.add_dll_directory(str(path))
 
 
-def prepare_runtime():
+def prepare_runtime(load_config=True):
     root = app_root()
     if str(root) not in sys.path:
         sys.path.insert(0, str(root))
-    load_axis_env(root)
+    if load_config:
+        load_axis_env(root)
     add_windows_npcap_dll_paths()
     return root
 

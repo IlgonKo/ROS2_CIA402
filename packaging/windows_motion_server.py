@@ -1,10 +1,19 @@
 from windows_runtime import prepare_runtime
+import sys
 
 
-prepare_runtime()
+root = prepare_runtime(load_config=False)
 
-from motion_server.server import main
+from configuration import ConfigurationSource
+from motion_server.application import MotionServerApplication
 
 
 if __name__ == "__main__":
-    main()
+    MotionServerApplication.from_source(
+        ConfigurationSource(
+            project_root=root,
+            project_filename="config.txt",
+            device_filename="config.txt",
+        ),
+        argv=sys.argv[1:],
+    ).run()

@@ -18,6 +18,7 @@ from configuration.models import (
     BackendType,
     BusDeviceConfig,
     CspInterpolationMode,
+    ConfigurationSource,
     MotionServerConfig,
 )
 
@@ -26,6 +27,7 @@ __all__ = [
     "BusDevice",
     "BusDeviceConfig",
     "ConfigurationModel",
+    "ConfigurationSource",
     "CliOverrides",
     "DeviceRole",
     "BackendType",

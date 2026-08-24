@@ -322,8 +322,8 @@ def restart_current_process():
     os.execv(sys.executable, [sys.executable, *sys.argv])
 
 
-def run_main_once(diagnostic_manager=None):
-    args = parse_args()
+def run_main_once(diagnostic_manager=None, args=None):
+    args = args or parse_args()
     if args.list_adapters:
         list_adapters()
         return
@@ -570,11 +570,11 @@ def run_main_once(diagnostic_manager=None):
         runtime.close()
 
 
-def main():
-    diagnostic_manager = DiagnosticManager()
+def main(args=None, diagnostic_manager=None):
+    diagnostic_manager = diagnostic_manager or DiagnosticManager()
     while True:
         try:
-            run_main_once(diagnostic_manager)
+            run_main_once(diagnostic_manager, args=args)
             return
         except ServerResetRequested:
             print(
