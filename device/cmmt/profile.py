@@ -1,7 +1,7 @@
 from device.cmmt.error_catalog import load_cmmt_error_catalog
 from device.cmmt.esi_catalog import cmmt_catalog_by_profile_name
 from device.cmmt.pdo_codec import CiA402PdoCodec
-from device.cmmt.pdo_configuration import pdo_configuration_from_env, pdo_od_role
+from device.cmmt.pdo_configuration import get_pdo_configuration, pdo_od_role
 from device.cmmt.required_od import required_od, required_od_roles as cmmt_required_od_roles
 from device.cmmt.rxpdo import RxPDO
 from device.cmmt.txpdo import TxPDO
@@ -405,7 +405,7 @@ class CMMTDeviceProfile:
         (18, 7): "ProfiDrive",
     }
 
-    def __init__(self, axis_index=None, slave_index=None):
+    def __init__(self, axis_index=None, slave_index=None, device_config=None):
         self.axis_index = axis_index
         self.slave_index = slave_index
         self.error_catalog = load_cmmt_error_catalog()
@@ -414,12 +414,14 @@ class CMMTDeviceProfile:
             if self.variant is not None
             else None
         )
-        self.pdo_configuration, self.pdo_configuration_source = (
-            pdo_configuration_from_env(
-                axis_index=axis_index,
-                slave_index=slave_index,
+        if device_config is None:
+            self.pdo_configuration = get_pdo_configuration()
+            self.pdo_configuration_source = "profile default"
+        else:
+            self.pdo_configuration = get_pdo_configuration(
+                device_config.pdo_configuration,
             )
-        )
+            self.pdo_configuration_source = "typed device config"
 
     def mode_code(self, mode_name):
         if mode_name == "homing":

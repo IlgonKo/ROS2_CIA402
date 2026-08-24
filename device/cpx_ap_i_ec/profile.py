@@ -1,6 +1,6 @@
 from device.cpx_ap_i_ec.ap_module_idents import configure_ap_module_idents
 from device.cpx_ap_i_ec.esi_module_catalog import esi_module_catalog
-from device.cpx_ap_i_ec.io_config import load_cpx_io_config
+from device.cpx_ap_i_ec.io_config import build_cpx_io_config
 from device.cpx_ap_i_ec.io_link_variants import configure_io_link_variants
 from device.cpx_ap_i_ec.pdo import CPXRxPDO, CPXTxPDO
 from device.cpx_ap_i_ec.pdo_codec import CPXPdoCodec
@@ -15,10 +15,22 @@ class CPXApIEcDeviceProfile:
     pdo_codec = CPXPdoCodec
     capabilities = frozenset()
 
-    def __init__(self, io_id=None):
+    def __init__(self, io_id=None, device_config=None):
+        if device_config is not None:
+            io_id = device_config.logical_id
         self.io_id = io_id
         self.esi_catalog = esi_module_catalog()
-        self.config = load_cpx_io_config(io_id)
+        if device_config is None:
+            raise TypeError("CPX-AP-I-EC profile requires typed device_config")
+        raw_modules = ",".join(
+            f"{module.slot}:{module.module_type}"
+            for module in device_config.modules
+        )
+        raw_ports = ",".join(
+            f"{port.selector}:{port.device_name}"
+            for port in device_config.io_link_ports
+        )
+        self.config = build_cpx_io_config(io_id, raw_modules, raw_ports)
         self.pdo_configuration = cpx_pdo_configuration(self.config)
         self.pdo_configuration.validate_catalog_support(self.esi_catalog)
 

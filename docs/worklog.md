@@ -8,6 +8,10 @@
 
 ### 완료
 
+- `TD-014-S04`에서 CMMT/CPX typed device instance config를 공통 profile factory에
+  주입했다. CMMT PDO와 CPX module/IOL 설정의 장치 내부 환경 변수 재해석을 제거하고
+  mock/PySOEM이 같은 CMMT profile 설정을 소비하도록 통일했으며, profile projection
+  테스트를 포함한 전체 unittest 163개와 source compile 검사가 통과했다.
 - `TD-014-S03`에서 CLI `Namespace`의 runtime 전달을 제거하고 server, EtherCAT,
   motion, logging 및 Bus device typed projection을 TCP loop, runtime/state factory에
   주입했다. feedback/socket/cycle/DC/motion 설정의 전역 의존을 제거하고 startup

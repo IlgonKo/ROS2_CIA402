@@ -1,7 +1,7 @@
-import os
 import unittest
-from unittest.mock import patch
 
+from configuration import CspInterpolationMode
+from configuration.models import CmmtDeviceConfig
 from device.cmmt.pdo_configuration import get_pdo_configuration
 from device.cmmt.profile import CMMTASDeviceProfile
 from device.virtual_servo_drive.od_bridge import VirtualOdBridge
@@ -34,13 +34,25 @@ class VirtualOdModelTest(unittest.TestCase):
         self.assertEqual(txpdo.actual_position, 54321)
 
     def test_axis_specific_configuration_uses_real_profile_policy(self):
-        values = {
-            "MOTION_SERVER_CMMT_AXIS_PDO_CONFIGURATIONS":
-                "0:profile_position_basic,1:csp_basic",
-        }
-        with patch.dict(os.environ, values, clear=True):
-            axis0 = CMMTASDeviceProfile(axis_index=0, slave_index=0)
-            axis1 = CMMTASDeviceProfile(axis_index=1, slave_index=1)
+        def config(axis_index, pdo_configuration):
+            return CmmtDeviceConfig(
+                profile_name="cmmt_as",
+                axis_index=axis_index,
+                pdo_configuration=pdo_configuration,
+                csp_interpolation_mode=CspInterpolationMode.CSP,
+                csp_velocity_offset=False,
+            )
+
+        axis0 = CMMTASDeviceProfile(
+            axis_index=0,
+            slave_index=0,
+            device_config=config(0, "profile_position_basic"),
+        )
+        axis1 = CMMTASDeviceProfile(
+            axis_index=1,
+            slave_index=1,
+            device_config=config(1, "csp_basic"),
+        )
         self.assertEqual(axis0.pdo_configuration.name, "profile_position_basic")
         self.assertEqual(axis1.pdo_configuration.name, "csp_basic")
 

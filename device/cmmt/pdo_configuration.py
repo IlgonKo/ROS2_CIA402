@@ -1,7 +1,5 @@
 from dataclasses import dataclass
-import os
 
-from configuration import split_indexed_config_list
 from device.pdo_metadata import (
     ObjectDictionaryEntry,
     PdoPadding,
@@ -189,62 +187,6 @@ def get_pdo_configuration(name=None, *, context="CMMT PDO configuration"):
             f"Unsupported {context}: {name!r}. "
             f"Supported: {', '.join(pdo_configuration_names())}"
         ) from exc
-
-
-def pdo_configuration_from_env(axis_index=None, slave_index=None):
-    raw_value, source = pdo_configuration_env_value(axis_index, slave_index)
-    configuration = get_pdo_configuration(
-        raw_value,
-        context=source or "CMMT PDO configuration",
-    )
-    return configuration, source
-
-
-def pdo_configuration_env_value(axis_index=None, slave_index=None):
-    candidates = []
-    if axis_index is not None:
-        candidates.append((
-            f"MOTION_SERVER_CMMT_AXIS_{int(axis_index)}_PDO_CONFIGURATION",
-            os.environ.get(
-                f"MOTION_SERVER_CMMT_AXIS_{int(axis_index)}_PDO_CONFIGURATION"
-            ),
-        ))
-        list_value = axis_pdo_configuration_from_list(axis_index)
-        if list_value is not None:
-            candidates.append((
-                f"MOTION_SERVER_CMMT_AXIS_PDO_CONFIGURATIONS[{int(axis_index)}]",
-                list_value,
-            ))
-    if slave_index is not None:
-        candidates.append((
-            f"MOTION_SERVER_CMMT_SLAVE_{int(slave_index)}_PDO_CONFIGURATION",
-            os.environ.get(
-                f"MOTION_SERVER_CMMT_SLAVE_{int(slave_index)}_PDO_CONFIGURATION"
-            ),
-        ))
-    candidates.append((
-        "MOTION_SERVER_CMMT_PDO_CONFIGURATION",
-        os.environ.get("MOTION_SERVER_CMMT_PDO_CONFIGURATION"),
-    ))
-
-    for key, value in candidates:
-        if value is not None and str(value).strip():
-            return value, key
-    return DEFAULT_PDO_CONFIGURATION, "default"
-
-
-def axis_pdo_configuration_from_list(axis_index):
-    raw_value = os.environ.get("MOTION_SERVER_CMMT_AXIS_PDO_CONFIGURATIONS")
-    if raw_value is None:
-        return None
-    axis_index = int(axis_index)
-    for current_axis, configuration_name in split_indexed_config_list(
-        raw_value,
-        default_start=0,
-    ):
-        if int(current_axis) == axis_index:
-            return configuration_name.strip()
-    return None
 
 
 def normalize_pdo_configuration_name(value):

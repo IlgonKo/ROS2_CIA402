@@ -31,6 +31,10 @@ MOCK_AXIS_TYPE_USER_UNITS = {
 def create_axis_runtime(ethercat, motion, logging, devices, motion_limits):
     sync_mode = ethercat.sync_mode
     device_profile_names = [device.profile_name for device in devices]
+    device_profiles = [
+        get_device_profile_for_device(device)
+        for device in devices
+    ]
     axis_slave_indices = [
         device.slave_index
         for device in devices
@@ -60,12 +64,7 @@ def create_axis_runtime(ethercat, motion, logging, devices, motion_limits):
             )
         slaves = []
         for axis_index, limits in enumerate(motion_limits):
-            device_profile = get_device_profile_for_slave(
-                device_profile_names[axis_index],
-                axis_index,
-                io_devices,
-                axis_slave_indices,
-            )
+            device_profile = device_profiles[axis_index]
             servo = VirtualCiA402Servo(
                 cycle_time=ethercat.cycle.period,
                 device_profile=device_profile,
@@ -113,15 +112,7 @@ def create_axis_runtime(ethercat, motion, logging, devices, motion_limits):
 
     ethercat_master = PySOEMMaster(
         interface_name=ethercat.interface,
-        device_profiles=[
-            get_device_profile_for_slave(
-                name,
-                slave_index,
-                io_devices,
-                axis_slave_indices,
-            )
-            for slave_index, name in enumerate(device_profile_names)
-        ],
+        device_profiles=device_profiles,
         cycle_time=ethercat.cycle.period,
         sync_mode=sync_mode,
         dc_enabled=ethercat.dc.enabled,
@@ -168,6 +159,20 @@ def get_device_profile_for_slave(
         axis_index=axis_index,
         slave_index=slave_index,
     )
+
+
+def get_device_profile_for_device(device):
+    kwargs = {
+        "device_config": device.device,
+    }
+    if device.role.value == "axis":
+        kwargs.update(
+            axis_index=device.device.axis_index,
+            slave_index=device.slave_index,
+        )
+    else:
+        kwargs["io_id"] = device.logical_id
+    return get_device_profile(device.profile_name, **kwargs)
 
 
 def parse_mock_axis_user_units(args):

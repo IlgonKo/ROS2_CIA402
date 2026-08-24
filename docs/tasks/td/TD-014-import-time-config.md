@@ -421,6 +421,26 @@ platform DLL path 준비는 configuration loading과 별도의 명시적인 boot
 - CMMT PDO/CSP mode와 CPX module/IOL 설정의 환경 변수 직접 접근을 제거한다.
 - mock과 PySOEM이 동일한 device instance config를 소비하게 한다.
 
+완료 기록:
+
+- 상태: `complete`
+- 변경: `device/__init__.py`, CMMT profile/PDO configuration, CPX profile/I/O
+  configuration, `motion_server/app/startup.py`
+- 공통 profile factory가 `BusDeviceConfig.device`를 profile constructor에 전달하며,
+  CMMT profile은 `CmmtDeviceConfig.pdo_configuration`, CPX profile은
+  `CpxApIEcDeviceConfig.modules/io_link_ports`만 소비한다.
+- CMMT PDO와 CPX module/IOL을 장치 코드가 `os.environ`에서 다시 읽는 경로를
+  제거했다. CMMT profile 기본 생성은 고정 profile default만 사용하고 CPX profile은
+  typed instance config를 필수로 요구한다.
+- mock virtual servo와 PySOEM master는 동일 factory에서 생성된 CMMT profile을
+  사용하므로 backend에 관계없이 같은 PDO/OD instance 설정을 소비한다.
+- typed CMMT 두 축의 서로 다른 PDO 선택과 CPX module projection을 검증하는 profile
+  테스트를 추가했다.
+- 결과: 전체 unittest 163개, source compile, 장치 환경 변수 정적 참조와 diff 검사가
+  통과했다.
+- 다음 단계는 logging 전역과 tx history를 `RuntimeLogger`/pre-logging으로 전환하는
+  S05다.
+
 ### S05 Logging과 pre-logging
 
 - 표준 logger 및 `RuntimeLogger`로 전환하고 전역 `status_log()`를 제거한다.

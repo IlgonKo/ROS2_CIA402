@@ -1,4 +1,3 @@
-import os
 from dataclasses import dataclass
 
 from configuration import split_indexed_config_list
@@ -85,15 +84,9 @@ class CPXIoConfig:
         return self.layout.output_bytes
 
 
-def load_cpx_io_config(io_id):
+def build_cpx_io_config(io_id, raw_modules, raw_ports=""):
     io_id = normalized_io_id(io_id)
-    values = {
-        key.upper(): value
-        for key, value in os.environ.items()
-        if key.startswith("MOTION_SERVER_IO_")
-    }
     layout_key = f"MOTION_SERVER_IO_{io_id}_MODULES"
-    raw_modules = env_value(values, layout_key, "")
     if not raw_modules.strip():
         raise ValueError(
             f"Missing {layout_key}. CPX-AP-I-EC I/O layouts must be declared "
@@ -103,8 +96,8 @@ def load_cpx_io_config(io_id):
     io_link_modules = io_link_module_refs(raw_modules)
     io_link_devices = []
     if io_link_modules:
-        io_link_devices = parse_io_link_device_bindings(
-            values,
+        io_link_devices = parse_io_link_device_bindings_from_value(
+            raw_ports,
             io_id,
             io_link_modules,
         )
@@ -133,12 +126,7 @@ def normalized_io_id(io_id):
     return value
 
 
-def env_value(values, key, default):
-    return values.get(str(key).upper(), default)
-
-
-def parse_io_link_device_bindings(values, io_id, io_link_modules):
-    raw_ports = env_value(values, f"MOTION_SERVER_IO_{io_id}_IOL_PORTS", "")
+def parse_io_link_device_bindings_from_value(raw_ports, io_id, io_link_modules):
     bindings = []
     seen = set()
     for item in split_env_list(raw_ports):

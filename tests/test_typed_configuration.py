@@ -10,6 +10,7 @@ from configuration import (
     load_configuration,
 )
 from configuration.models import CmmtDeviceConfig, CpxApIEcDeviceConfig
+from motion_server.app.startup import get_device_profile_for_device
 
 
 AVAILABLE_PROFILES = {"cmmt_as", "cmmt_st", "cpx_ap_i_ec"}
@@ -59,6 +60,25 @@ class TypedConfigurationTest(unittest.TestCase):
         )
         with self.assertRaises(FrozenInstanceError):
             config.server.port = 16000
+
+    def test_device_profiles_consume_typed_instance_configuration(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            config = self.load_typed(temp_dir)
+
+        cmmt_profile = get_device_profile_for_device(config.devices[0])
+        cpx_profile = get_device_profile_for_device(config.devices[1])
+        second_cmmt_profile = get_device_profile_for_device(config.devices[2])
+
+        self.assertEqual(cmmt_profile.pdo_configuration.name, "csp_basic")
+        self.assertEqual(
+            second_cmmt_profile.pdo_configuration.name,
+            "profile_position_basic",
+        )
+        self.assertEqual(cpx_profile.config.io_id, "io0")
+        self.assertEqual(
+            [module.module_type for module in cpx_profile.config.layout.modules],
+            ["do", "di"],
+        )
 
     def test_rejects_spin_wait_at_or_above_cycle_period(self):
         with tempfile.TemporaryDirectory() as temp_dir:
