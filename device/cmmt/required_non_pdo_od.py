@@ -9,10 +9,9 @@ class RequiredNonPdoOdRole:
     name: str
     data_type: str
     access: str = ""
-    default: int | float = 0
 
 
-def od(role, index, subindex, name, data_type, access="", default=0):
+def od(role, index, subindex, name, data_type, access=""):
     return RequiredNonPdoOdRole(
         role,
         index,
@@ -20,7 +19,6 @@ def od(role, index, subindex, name, data_type, access="", default=0):
         name,
         data_type,
         access,
-        default,
     )
 
 
@@ -34,7 +32,6 @@ CMMT_REQUIRED_NON_PDO_OD = {
             "User unit position",
             "uint16",
             "ro",
-            0x4100,
         ),
         od(
             "converting_unit_position",
@@ -43,7 +40,6 @@ CMMT_REQUIRED_NON_PDO_OD = {
             "Resolution position",
             "int8",
             "ro",
-            6,
         ),
         od(
             "converting_unit_velocity",
@@ -52,7 +48,6 @@ CMMT_REQUIRED_NON_PDO_OD = {
             "Resolution velocity",
             "int8",
             "ro",
-            3,
         ),
         od(
             "converting_unit_acceleration",
@@ -61,7 +56,6 @@ CMMT_REQUIRED_NON_PDO_OD = {
             "Resolution acceleration",
             "int8",
             "ro",
-            3,
         ),
         od(
             "converting_unit_jerk",
@@ -70,7 +64,6 @@ CMMT_REQUIRED_NON_PDO_OD = {
             "Resolution jerk",
             "int8",
             "ro",
-            3,
         ),
         od(
             "software_position_limit_negative",
@@ -79,7 +72,6 @@ CMMT_REQUIRED_NON_PDO_OD = {
             "Minimum position limit",
             "int32",
             "rw",
-            -1000000,
         ),
         od(
             "software_position_limit_positive",
@@ -88,7 +80,6 @@ CMMT_REQUIRED_NON_PDO_OD = {
             "Maximum position limit",
             "int32",
             "rw",
-            1000000,
         ),
         od(
             "position_window",
@@ -97,7 +88,6 @@ CMMT_REQUIRED_NON_PDO_OD = {
             "Position window",
             "uint32",
             "rw",
-            20,
         ),
         od(
             "position_window_time",
@@ -106,7 +96,6 @@ CMMT_REQUIRED_NON_PDO_OD = {
             "Position window time",
             "uint16",
             "rw",
-            20,
         ),
         od(
             "max_profile_velocity",
@@ -115,7 +104,6 @@ CMMT_REQUIRED_NON_PDO_OD = {
             "Max profile velocity",
             "uint32",
             "rw",
-            200,
         ),
         od(
             "negative_velocity_limit",
@@ -123,15 +111,6 @@ CMMT_REQUIRED_NON_PDO_OD = {
             0x0C,
             "Limit value velocity limit negative direction of movement",
             "float32",
-            "rw",
-            -0.1,
-        ),
-        od(
-            "profile_velocity",
-            0x6081,
-            0x00,
-            "Profile velocity",
-            "uint32",
             "rw",
         ),
         od(
@@ -141,7 +120,6 @@ CMMT_REQUIRED_NON_PDO_OD = {
             "Profile acceleration",
             "uint32",
             "rw",
-            1000,
         ),
         od(
             "profile_deceleration",
@@ -150,7 +128,6 @@ CMMT_REQUIRED_NON_PDO_OD = {
             "Profile deceleration",
             "uint32",
             "rw",
-            1000,
         ),
         od(
             "homing_method",
@@ -159,7 +136,6 @@ CMMT_REQUIRED_NON_PDO_OD = {
             "Homing method",
             "int8",
             "rw",
-            35,
         ),
         od(
             "homing_speed_search_switch",
@@ -168,7 +144,6 @@ CMMT_REQUIRED_NON_PDO_OD = {
             "Speed during search for switch",
             "uint32",
             "rw",
-            100,
         ),
         od(
             "homing_speed_search_zero",
@@ -177,7 +152,6 @@ CMMT_REQUIRED_NON_PDO_OD = {
             "Speed during search for zero",
             "uint32",
             "rw",
-            50,
         ),
         od(
             "homing_acceleration",
@@ -186,7 +160,6 @@ CMMT_REQUIRED_NON_PDO_OD = {
             "Homing acceleration",
             "uint32",
             "rw",
-            100,
         ),
         od(
             "max_acceleration",
@@ -195,7 +168,6 @@ CMMT_REQUIRED_NON_PDO_OD = {
             "Max acceleration",
             "uint32",
             "rw",
-            2000,
         ),
         od(
             "max_deceleration",
@@ -204,7 +176,6 @@ CMMT_REQUIRED_NON_PDO_OD = {
             "Max deceleration",
             "uint32",
             "rw",
-            2000,
         ),
         od(
             "pp_jerk",
@@ -213,7 +184,6 @@ CMMT_REQUIRED_NON_PDO_OD = {
             "Jerk",
             "uint32",
             "rw",
-            100000,
         ),
         od(
             "csp_interpolation_mode",
@@ -254,7 +224,6 @@ CMMT_REQUIRED_NON_PDO_OD = {
             "Output sync manager synchronization type",
             "uint16",
             "rw",
-            1,
         ),
         od(
             "output_sync_manager_cycle_time",
@@ -263,7 +232,6 @@ CMMT_REQUIRED_NON_PDO_OD = {
             "Output sync manager cycle time",
             "uint32",
             "rw",
-            8000000,
         ),
         od(
             "device_reset_command",
@@ -323,6 +291,34 @@ CMMT_REQUIRED_NON_PDO_OD = {
         ),
     )
 }
+
+NON_PDO_CONFIGURATION_ROLE_NAMES = (
+    "user_position_unit",
+    "converting_unit_position",
+    "converting_unit_velocity",
+    "converting_unit_acceleration",
+    "converting_unit_jerk",
+    "software_position_limit_negative",
+    "software_position_limit_positive",
+    "position_window",
+    "position_window_time",
+    "max_profile_velocity",
+    "negative_velocity_limit",
+    "profile_acceleration",
+    "profile_deceleration",
+    "homing_method",
+    "homing_speed_search_switch",
+    "homing_speed_search_zero",
+    "homing_acceleration",
+    "max_acceleration",
+    "max_deceleration",
+    "pp_jerk",
+)
+
+NON_PDO_CONFIGURATION_OD_ROLES = tuple(
+    CMMT_REQUIRED_NON_PDO_OD[name]
+    for name in NON_PDO_CONFIGURATION_ROLE_NAMES
+)
 
 
 def required_non_pdo_od(role):

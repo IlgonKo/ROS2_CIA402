@@ -242,15 +242,13 @@ class CmmtDeviceConfig:
     profile_name: str
     axis_index: int
     pdo_configuration: str
-    csp_interpolation_mode: CspInterpolationMode
-    csp_velocity_offset: bool
     startup_parameters: tuple[OdStartupParameter, ...]
 ```
 
-CSP interpolation mode와 velocity offset은 서버 trajectory 알고리즘이 아니라 CMMT
-장치 동작이므로 `MotionConfig`에 두지 않는다. PDO override 우선순위도 typed config
-생성 시 해결하여 장치 코드가 환경 변수 이름을 알지 않게 한다. startup parameter는
-현재 사용 범위만 projection하고 정책 자체는 TD-023에서 변경한다.
+CSP interpolation mode와 velocity offset은 TD-023 완료 리뷰에서 전 축 공통 정책으로
+재분류하여 메인 `.env`와 `MotionConfig`로 이동했다. PDO override 우선순위는 typed config
+생성 시 해결하여 장치 코드가 환경 변수 이름을 알지 않게 한다. startup parameter 정책은
+TD-023에서 Non-PDO configuration으로 대체했다.
 
 ### CPX-AP-I
 
@@ -519,8 +517,9 @@ platform DLL path 준비는 configuration loading과 별도의 명시적인 boot
 - DC가 활성화된 상태에서 phase lock 없이 absolute shift를 설정하는 조합을 configuration
   validation에서 거부한다. DC 비활성 시 세부 설정은 보존하되 server loop와 runtime
   diagnostic에서 적용하지 않는다.
-- CMMT interpolation mode와 CSP velocity offset을 축별 device instance 설정으로 전달하고
-  적용한다. 서로 다른 축 설정과 설정 개수 불일치에 대한 회귀 테스트를 추가했다.
+- CMMT interpolation mode와 CSP velocity offset의 초기 구현은 축별 device instance로
+  전달했으나, TD-023 완료 리뷰에서 축별 설정 계획이 없는 전 축 공통 `MotionConfig`로
+  이동했다. 내부 runtime은 축별 적용 가능성을 유지한다.
 - `MotionServerApplication`이 최상위 config를 하위 runner에 넘기지 않고 server,
   EtherCAT, motion, logging 및 device projection을 명시적으로 주입하도록 경계를 정리했다.
   cycle/DC configuration도 mutable server state에서 제거했다.
@@ -532,6 +531,19 @@ platform DLL path 준비는 configuration loading과 별도의 명시적인 boot
   작업 폴더와 관계없이 project root에서 configuration module을 실행한다.
 - 결과: 전체 unittest 182개, source compile, Linux CLI와 프로젝트 외부 작업 폴더의
   Windows 실제 실행 smoke 및 diff 검사가 통과했다.
+
+### Windows 환경변수 대소문자 충돌 후속 보완
+
+- Windows process environment에 남아 있던 `MOTION_SERVER_IO_IO0_MODULES`와 프로젝트
+  설정의 `MOTION_SERVER_IO_io0_MODULES`처럼 대소문자만 다른 이름을 Python mapping이
+  별도 key로 유지하여 PowerShell JSON projection이 실패하는 문제를 수정했다.
+- 설정 파일에 정의된 key 표기를 canonical name으로 사용하고, process environment의
+  대소문자 변형은 동일 key의 override로 병합한다.
+- PowerShell JSON 변환은 7.x의 `-AsHashtable` 경로와 Windows PowerShell 5.1 호환
+  경로를 모두 지원하며, 변환 실패는 불완전한 환경으로 서버 실행을 계속하지 않고
+  명시적인 configuration load error로 중단한다.
+- 대소문자 변형 환경변수와 프로젝트 외부 작업 폴더의 Windows loader 회귀 검사를
+  추가했고 전체 unittest 194개가 통과했다.
 
 각 단계 완료 시 변경 파일, 테스트 결과와 다음 단계를 이 문서에 기록한다.
 

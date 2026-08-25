@@ -1,6 +1,12 @@
+from __future__ import annotations
+
 from dataclasses import dataclass
 from enum import Enum, IntEnum
 from pathlib import Path
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from device.cmmt.non_pdo_configuration import NonPdoConfiguration
 
 from configuration.bus import DeviceRole
 
@@ -71,19 +77,12 @@ class EtherCATConfig:
 
 
 @dataclass(frozen=True)
-class MotionLimitConfig:
-    max_velocity: float
-    acceleration: float
-    deceleration: float
-    jerk: float
-    pp_jerk: int
-
-
-@dataclass(frozen=True)
 class MotionConfig:
-    default_limits: MotionLimitConfig
     initial_motion_mode: str
     csp_profile: CspProfile
+    csp_jerk: float
+    csp_interpolation_mode: CspInterpolationMode
+    csp_velocity_offset: bool
 
 
 @dataclass(frozen=True)
@@ -149,20 +148,11 @@ class LoggingConfig:
 
 
 @dataclass(frozen=True)
-class OdStartupParameter:
-    index: int
-    subindex: int
-    value: int | float | str
-
-
-@dataclass(frozen=True)
 class CmmtDeviceConfig:
     profile_name: str
     axis_index: int
     pdo_configuration: str
-    csp_interpolation_mode: CspInterpolationMode
-    csp_velocity_offset: bool
-    startup_parameters: tuple[OdStartupParameter, ...] = ()
+    non_pdo_configuration: NonPdoConfiguration | None = None
 
 
 @dataclass(frozen=True)

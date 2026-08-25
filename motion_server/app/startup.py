@@ -21,9 +21,11 @@ from ethercat.mock_master import MockMaster
 from ethercat.mock_slave import MockSlave
 from ethercat.pysoem_master import PySOEMMaster
 from motion_server.control.motion_controller import MotionController
+from motion_server.control.axis_units import motion_limits_drive_to_api
+from motion_server.api import require_uint32
 from motion_server.runtime_logging import RuntimeLogger
 
-def create_axis_runtime(ethercat, motion, logging, devices, motion_limits):
+def create_axis_runtime(ethercat, motion, logging, devices):
     runtime_logger = RuntimeLogger(logging)
     sync_mode = ethercat.sync_mode
     device_profile_names = [device.profile_name for device in devices]
@@ -59,16 +61,11 @@ def create_axis_runtime(ethercat, motion, logging, devices, motion_limits):
                 "mock backend supports only one-to-one axis/slave mapping"
             )
         slaves = []
-        for axis_index, limits in enumerate(motion_limits):
+        for axis_index in range(axis_count_value):
             device_profile = device_profiles[axis_index]
             servo = VirtualCiA402Servo(
                 cycle_time=ethercat.cycle.period,
                 device_profile=device_profile,
-            )
-            servo.set_motion_limits(
-                limits["max_velocity"],
-                limits["acceleration"],
-                limits["deceleration"],
             )
             slaves.append(MockSlave(
                 servo,
@@ -82,24 +79,11 @@ def create_axis_runtime(ethercat, motion, logging, devices, motion_limits):
         motion_controller = MotionController(
             axis_count_value,
             ethercat.cycle.period,
-            motion_limits=motion_limits,
-            csp_velocity_offset_enabled=tuple(
-                getattr(device.device, "csp_velocity_offset", False)
-                for device in devices
-                if device.role.value == "axis"
-            ),
+            csp_velocity_offset_enabled=motion.csp_velocity_offset,
             csp_command_step_threshold=logging.csp_command_step.step_threshold,
             csp_command_step_error_threshold=logging.csp_command_step.error_threshold,
             csp_profile=motion.csp_profile.value,
         )
-        for axis_index, limits in enumerate(motion_limits):
-            motion_controller.set_axis_motion_limits(
-                axis_index,
-                limits["max_velocity"],
-                limits["acceleration"],
-                limits["deceleration"],
-                limits["jerk"],
-            )
         device_manager = DeviceManager(ethercat_master, axis_bindings)
         runtime = AxisRuntime(
             device_manager,
@@ -121,12 +105,7 @@ def create_axis_runtime(ethercat, motion, logging, devices, motion_limits):
     motion_controller = MotionController(
         axis_count_value,
         ethercat.cycle.period,
-        motion_limits=motion_limits,
-        csp_velocity_offset_enabled=tuple(
-            getattr(device.device, "csp_velocity_offset", False)
-            for device in devices
-            if device.role.value == "axis"
-        ),
+        csp_velocity_offset_enabled=motion.csp_velocity_offset,
         csp_command_step_threshold=logging.csp_command_step.step_threshold,
         csp_command_step_error_threshold=logging.csp_command_step.error_threshold,
         csp_profile=motion.csp_profile.value,
@@ -266,13 +245,26 @@ def read_axis_converting_unit_exponents(runtime):
 
 
 def read_startup_axis_sdo(runtime):
-    return {
+    values = {
         "user_position_units": read_axis_user_position_units(runtime),
         "converting_unit_exponents": read_axis_converting_unit_exponents(runtime),
         "software_position_limits": read_axis_software_position_limits(runtime),
         "profile_settings": read_axis_profile_settings(runtime),
         "motion_limits": read_axis_motion_limits(runtime),
     }
+    if any(item is None for item in values["user_position_units"]):
+        raise RuntimeError("Required axis user position unit readback failed")
+    if any(item is None for item in values["converting_unit_exponents"]):
+        raise RuntimeError("Required axis converting unit readback failed")
+    values["profile_settings"] = [
+        item if item is not None else [0.0, 0.0, 0.0, 0.0]
+        for item in values["profile_settings"]
+    ]
+    values["motion_limits"] = [
+        item if item is not None else [0.0, 0.0, 0.0, 0.0]
+        for item in values["motion_limits"]
+    ]
+    return values
 
 
 def read_axis_software_position_limits(runtime):
@@ -324,6 +316,52 @@ def read_axis_motion_limits(runtime):
             values = None
         limits.append(values)
     return limits
+
+
+def refresh_axis_parameter_cache(runtime, axis_index):
+    """Refresh one axis cache from authoritative device OD readback."""
+    profile = axis_device_profile(runtime, axis_index)
+    unit = int(profile.read_user_unit_position(runtime, axis_index))
+    exponents = profile.read_converting_unit_exponents(runtime, axis_index)
+    software_limits = profile.read_software_position_limits(runtime, axis_index)
+    profile_settings = profile.read_profile_settings(runtime, axis_index)
+    motion_limits = profile.read_motion_limits(runtime, axis_index)
+
+    cached_units = runtime.axis_parameters.user_position_units
+    cached_exponents = runtime.axis_parameters.converting_unit_exponents
+    cached_units[axis_index] = unit
+    cached_exponents[axis_index] = exponents
+    runtime.device_manager.axes.configure_unit_conversion(
+        cached_units, cached_exponents
+    )
+    metadata = runtime.device_manager.axes.unit_metadata()[axis_index]
+    runtime.axis_parameters.update_axis(
+        axis_index,
+        user_position_unit=unit,
+        converting_unit_exponents=exponents,
+        software_position_limits=software_limits,
+        profile_settings=profile_settings,
+        motion_limits=motion_limits,
+        axis_metadata=metadata,
+    )
+    scale = runtime.device_manager.axes.position_counts_per_api_unit(axis_index)
+    runtime.set_axis_position_counts_per_api_unit(axis_index, scale)
+    unit_state = {"axis_devices": runtime.device_manager.axes}
+    api_limits = motion_limits_drive_to_api(unit_state, axis_index, motion_limits)
+    current_jerk = runtime.motion_limits[axis_index].jerk
+    runtime.set_axis_motion_limits(
+        axis_index,
+        max(abs(api_limits[0]), abs(api_limits[1])),
+        api_limits[2],
+        api_limits[3],
+        current_jerk,
+    )
+    runtime.slaves[axis_index].motion_server_motion_limits = list(motion_limits)
+    if runtime.slaves[axis_index].rxpdo.has_field("profile_velocity"):
+        runtime.slaves[axis_index].rxpdo.profile_velocity = require_uint32(
+            profile_settings[0], f"axis {axis_index} profile_velocity"
+        )
+    return runtime.axis_parameters.axes[axis_index]
 
 
 def initialize_drive(runtime, motion_mode, csp_interpolation_modes, startup_sdo_reader=None):

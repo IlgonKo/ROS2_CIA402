@@ -3,7 +3,7 @@
 이 문서는 앞으로 구현할 기능과 현재 코드에 남아 있는 기술 부채를 관리한다.
 완료된 작업 이력은 [Work Log](worklog.md)에 기록한다.
 
-마지막 전체 점검: 2026-08-24
+마지막 전체 점검: 2026-08-25
 
 점검 범위는 Python source, shell/PowerShell script, Docker Compose, 설정 예제와 Markdown 문서다.
 외부 제공 ESI/IODD, PDF/packet capture, build/install/dist 산출물은 구조 분석 대상에서 제외했다.
@@ -82,6 +82,7 @@ Tech Debt 상태 값은 `open`, `in_progress`, `complete`를 사용한다.
   - 정상, initialization-error, bus-disconnected와 recoverable-fault 상태 및 전이가 명세된다.
   - server reset, bus reconnect와 process restart의 책임 및 허용 조건이 구현된다.
   - runtime 재구성 시 authority와 client notification 정책이 일관되게 적용된다.
+  - PySOEM Axis restart 완료·timeout·재연결 결과가 TD-025 cache refresh 경계에 전달된다.
   - mock 오류 주입과 대표 실장치 복구 시나리오가 모두 통과한다.
 - 상세: [RF-005 기능 명세](tasks/rf/RF-005-runtime-recovery.md)
 
@@ -390,7 +391,7 @@ Tech Debt 상태 값은 `open`, `in_progress`, `complete`를 사용한다.
 
 ### TD-023 Virtual Servo OD 초기값의 Startup 덮어쓰기
 
-- 상태: `open`
+- 상태: `complete`
 - 우선순위: 보통
 - 요약: 가상축 생성 직후 서버 motion limit 설정이 profile의 OD 초기값을 덮어쓰는 실축과의 비대칭을 제거한다.
 - 완료 조건:
@@ -401,9 +402,11 @@ Tech Debt 상태 값은 `open`, `in_progress`, `complete`를 사용한다.
   - `MOTION_SERVER_MAX_VELOCITY`, `MOTION_SERVER_ACCELERATION`, `MOTION_SERVER_DECELERATION`과 대응 command-line option 및 fallback이 제거된다.
   - CSP jerk는 메인 설정의 `MOTION_SERVER_CSP_PROFILE` 다음 `MOTION_SERVER_CSP_JERK`와 `MotionConfig.csp_jerk`로 관리된다.
   - MotionController의 velocity, acceleration과 deceleration 제한은 device OD readback으로 구성된다.
-  - 필수 motion limit OD readback 실패가 임의 기본값 대신 initialization error로 처리된다.
+  - profile/motion limit readback 실패는 장치 값을 덮어쓰지 않고 0 기반 안전 fallback으로 처리된다.
+  - user position unit과 converting unit readback 실패도 잘못된 scale로 계속하지 않고 initialization error로 처리된다.
   - device OD parameter는 명시적인 설정 명령을 실행할 때만 변경된다.
   - mock과 실축 startup이 기존 device parameter를 동일하게 읽어 runtime 상태를 구성한다.
+  - 서버 제어용 축 parameter는 단일 typed runtime cache에 보관되고 startup, 설정 변경과 reset 후 OD readback으로 동기화된다.
   - Non-PDO configuration validation, startup/reset 이후 값, readback 실패와 명시적 설정 변경을 검증하는 자동 테스트가 통과한다.
 - 상세: [TD-023 기술 명세](tasks/td/TD-023-virtual-od-startup-defaults.md)
 
@@ -419,3 +422,16 @@ Tech Debt 상태 값은 `open`, `in_progress`, `complete`를 사용한다.
   - 정상적인 Control Panel 시작·종료가 서버에서 connection reset 오류로 기록되지 않는다.
   - 연결 실패, 지연 응답과 재접속 이후에도 UI가 올바른 축 수로 복구되는 자동 테스트가 통과한다.
 - 상세: [TD-024 기술 명세](tasks/td/TD-024-axis-panel-bootstrap-connection.md)
+
+### TD-025 Runtime Parameter Cache 관리 체계 확장
+
+- 상태: `open`
+- 우선순위: 보통
+- 요약: TD-023의 CMMT 축 parameter cache를 장치 공통 refresh·validity·Diagnostic 체계로 확장한다.
+- 완료 조건:
+  - parameter definition, source, validity와 갱신 시각 모델이 확정된다.
+  - 축/항목별 명시적 refresh와 일반 parameter write 후 cache 연동이 구현된다.
+  - RF-005의 PySOEM Axis restart 완료 후 해당 축 cache refresh와 invalid 처리가 수행된다.
+  - readback 실패, 외부 commissioning 변경과 다중 항목 갱신 정책이 정의된다.
+  - CMMT 외 장치 확장 경계와 Diagnostic 연동 자동 테스트가 통과한다.
+- 상세: [TD-025 기술 명세](tasks/td/TD-025-runtime-parameter-cache.md)

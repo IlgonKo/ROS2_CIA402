@@ -1,4 +1,5 @@
 from motion_server.diagnostic import DiagnosticManager
+from motion_server.app.axis_parameters import AxisParameterRuntimeCache
 
 
 class AxisRuntime:
@@ -15,6 +16,9 @@ class AxisRuntime:
         self.motion_controller = motion_controller
         self.diagnostic_manager = diagnostic_manager or DiagnosticManager()
         self.logger = runtime_logger
+        self.axis_parameters = AxisParameterRuntimeCache(
+            self.motion_controller.axis_count
+        )
         if len(self.device_manager.axis_devices) != self.motion_controller.axis_count:
             raise ValueError(
                 "axis device count must match MotionController axis_count"

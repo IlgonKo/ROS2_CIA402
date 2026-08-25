@@ -32,6 +32,9 @@ class VirtualObjectDictionary:
         self._overlay_required_non_pdo_od(
             device_profile.required_non_pdo_od_roles()
         )
+        self._apply_non_pdo_configuration(
+            device_profile.non_pdo_configuration
+        )
         self._overlay_pdo(device_profile.pdo_configuration.rxpdo_objects(), "rxpdo")
         self._overlay_pdo(device_profile.pdo_configuration.txpdo_objects(), "txpdo")
         self.objects = _RuntimeValueView(self)
@@ -56,8 +59,25 @@ class VirtualObjectDictionary:
             self._overlay(
                 role.index, role.subindex, name=role.name,
                 data_type=role.data_type, access=role.access,
-                default=role.default, role=role.role,
+                role=role.role,
             )
+
+    def _apply_non_pdo_configuration(self, configuration):
+        if configuration is None:
+            return
+        for configured in configuration.values:
+            key = self._storage_key(configured.index, configured.subindex)
+            if key not in self.entries:
+                raise ValueError(
+                    "Non-PDO configuration references missing OD "
+                    f"0x{configured.index:04X}:{configured.subindex:02X}"
+                )
+            self.entries[key].value = configured.value
+
+    def reset_non_pdo_configuration(self):
+        self._apply_non_pdo_configuration(
+            self.device_profile.non_pdo_configuration
+        )
 
     def _overlay_pdo(self, entries, direction):
         for entry in entries:

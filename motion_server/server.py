@@ -333,22 +333,11 @@ def run_main_once(
     if axis_count_value < 1:
         raise ValueError("MOTION_SERVER_BUS must contain at least one motion axis")
 
-    limits = motion_config.default_limits
-    motion_limits = [
-        {
-            "max_velocity": limits.max_velocity,
-            "acceleration": limits.acceleration,
-            "deceleration": limits.deceleration,
-            "jerk": limits.jerk,
-        }
-        for _ in range(axis_count_value)
-    ]
     runtime = create_axis_runtime(
         ethercat_config,
         motion_config,
         logging_config,
         devices,
-        motion_limits,
     )
     if diagnostic_manager is not None:
         runtime.diagnostic_manager = diagnostic_manager
@@ -361,7 +350,8 @@ def run_main_once(
     if not cmmt_devices:
         raise ValueError("Motion Server configuration contains no CMMT axis")
     csp_interpolation_modes = tuple(
-        device.csp_interpolation_mode for device in cmmt_devices
+        motion_config.csp_interpolation_mode
+        for _device in cmmt_devices
     )
 
     try:
@@ -436,6 +426,16 @@ def run_main_once(
                 converting_unit_exponents,
             )
             axis_metadata = runtime.device_manager.axes.unit_metadata()
+            for axis_index in range(axis_count_value):
+                runtime.axis_parameters.update_axis(
+                    axis_index,
+                    user_position_unit=user_position_units[axis_index],
+                    converting_unit_exponents=converting_unit_exponents[axis_index],
+                    software_position_limits=software_position_limits[axis_index],
+                    profile_settings=startup_profile_settings[axis_index],
+                    motion_limits=startup_motion_limits[axis_index],
+                    axis_metadata=axis_metadata[axis_index],
+                )
             unit_state["axis_metadata"] = axis_metadata
             axis_position_scales = axis_position_counts_per_api_units(
                 unit_state,
@@ -446,73 +446,8 @@ def run_main_once(
                     axis_index,
                     scale,
                 )
-            default_profile_settings = [
-                [
-                    axis_motion_api_to_drive(
-                        unit_state,
-                        axis_index,
-                        limits.max_velocity,
-                    ),
-                    axis_motion_api_to_drive(
-                        unit_state,
-                        axis_index,
-                        limits.acceleration,
-                        "acceleration",
-                    ),
-                    axis_motion_api_to_drive(
-                        unit_state,
-                        axis_index,
-                        limits.deceleration,
-                        "deceleration",
-                    ),
-                    axis_motion_api_to_drive(
-                        unit_state,
-                        axis_index,
-                        limits.pp_jerk,
-                        "jerk",
-                    ),
-                ]
-                for axis_index in range(axis_count_value)
-            ]
-            profile_settings = [
-                values if values is not None else default_profile_settings[axis_index]
-                for axis_index, values in enumerate(
-                    startup_profile_settings or default_profile_settings
-                )
-            ]
-            default_motion_limits_state = [
-                [
-                    axis_motion_api_to_drive(
-                        unit_state,
-                        axis_index,
-                        limits.max_velocity,
-                    ),
-                    axis_motion_api_to_drive(
-                        unit_state,
-                        axis_index,
-                        -abs(limits.max_velocity),
-                    ),
-                    axis_motion_api_to_drive(
-                        unit_state,
-                        axis_index,
-                        limits.acceleration,
-                        "acceleration",
-                    ),
-                    axis_motion_api_to_drive(
-                        unit_state,
-                        axis_index,
-                        limits.deceleration,
-                        "deceleration",
-                    ),
-                ]
-                for axis_index in range(axis_count_value)
-            ]
-            read_motion_limits_state = [
-                values if values is not None else default_motion_limits_state[axis_index]
-                for axis_index, values in enumerate(
-                    startup_motion_limits or default_motion_limits_state
-                )
-            ]
+            profile_settings = startup_profile_settings
+            read_motion_limits_state = startup_motion_limits
             for axis_index, axis_profile_settings in enumerate(profile_settings):
                 slave = runtime.slaves[axis_index]
                 if slave.rxpdo.has_field("profile_velocity"):
@@ -532,7 +467,7 @@ def run_main_once(
                     max(abs(api_axis_limits[0]), abs(api_axis_limits[1])),
                     api_axis_limits[2],
                     api_axis_limits[3],
-                    limits.jerk,
+                    motion_config.csp_jerk,
                 )
             positions = actual_positions(runtime)
             dc_summary = f"dc_enabled={ethercat_config.dc.enabled}"

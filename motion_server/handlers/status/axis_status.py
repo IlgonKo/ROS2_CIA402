@@ -24,13 +24,14 @@ from motion_server.diagnostic.serialization import diagnostic_status_snapshot
 def axis_status_message(runtime, state, axis_index, client_id=None):
     axis_index = int(axis_index)
     owner = state.get("command_authority_owner")
-    user_position_units = state.get("user_position_units", [])
-    converting_unit_exponents = state.get("converting_unit_exponents", [])
+    parameters = runtime.axis_parameters
+    user_position_units = parameters.user_position_units
+    converting_unit_exponents = parameters.converting_unit_exponents
     axis_position_counts_per_unit = state.get(
         "axis_position_counts_per_unit",
         [],
     )
-    axis_metadata = state.get("axis_metadata", [])
+    axis_metadata = parameters.axis_metadata
     return {
         "type": "system/axis/status",
         "axis": axis_index,
@@ -76,16 +77,16 @@ def axis_status_message(runtime, state, axis_index, client_id=None):
         "motion_limits": motion_limits_drive_to_api(
             state,
             axis_index,
-            state["motion_limits"][axis_index],
+            parameters.motion_limits[axis_index],
         ),
         "profile_settings": profile_settings_drive_to_api(
             state,
             axis_index,
-            state["profile_settings"][axis_index],
+            parameters.profile_settings[axis_index],
         ),
         "software_position_limits": [
             axis_position_drive_to_api(state, axis_index, value)
-            for value in state["software_position_limits"][axis_index]
+            for value in parameters.software_position_limits[axis_index]
         ],
         "axis_metadata": axis_list_value(axis_metadata, axis_index, {}),
         "user_position_unit": axis_list_value(
@@ -148,18 +149,18 @@ def axes_status_message(runtime, state, client_id=None):
             int(slave.txpdo.statusword)
             for slave in runtime.slaves
         ],
-        "motion_limits": motion_limits_api_values(state["motion_limits"], state),
+        "motion_limits": motion_limits_api_values(runtime.axis_parameters.motion_limits, state),
         "profile_settings": profile_settings_api_values(
-            state["profile_settings"],
+            runtime.axis_parameters.profile_settings,
             state,
         ),
         "software_position_limits": software_position_limits_api_values(
-            state["software_position_limits"],
+            runtime.axis_parameters.software_position_limits,
             state,
         ),
-        "axis_metadata": state.get("axis_metadata", []),
-        "user_position_units": state.get("user_position_units", []),
-        "converting_unit_exponents": state.get("converting_unit_exponents", []),
+        "axis_metadata": runtime.axis_parameters.axis_metadata,
+        "user_position_units": runtime.axis_parameters.user_position_units,
+        "converting_unit_exponents": runtime.axis_parameters.converting_unit_exponents,
         "motion_mode": state["motion_mode"],
         "motion_modes": state["motion_modes"],
         "server_mode": state.get("server_mode", "basic"),

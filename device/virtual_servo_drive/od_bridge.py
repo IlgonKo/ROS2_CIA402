@@ -65,6 +65,7 @@ class VirtualOdBridge:
 
     def _restart_virtual_device(self):
         current_position = self.od_model.read_role("actual_position")
+        self.od_model.reset_non_pdo_configuration()
         self.rxpdo.reset_values()
         self.txpdo.reset_values()
         if self.rxpdo.has_field("target_position"):

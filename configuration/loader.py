@@ -44,6 +44,24 @@ def resolve_path(root, raw_path, default_path):
     return path
 
 
+def _environment_values(raw_environment, canonical_keys):
+    """Return relevant environment values using config-file key casing.
+
+    Windows environment-variable names are case-insensitive.  Canonicalizing
+    known names here prevents a process variable such as ``..._IO0_...`` from
+    coexisting with the configured ``..._io0_...`` spelling in the model.
+    """
+    canonical_by_casefold = {key.casefold(): key for key in canonical_keys}
+    selected = {}
+    for key, value in raw_environment.items():
+        canonical_key = canonical_by_casefold.get(key.casefold())
+        if canonical_key is not None:
+            selected[canonical_key] = str(value)
+        elif key.startswith(CONFIG_ENV_PREFIXES):
+            selected[key] = str(value)
+    return selected
+
+
 def load_configuration(
     project_root,
     *,
@@ -55,11 +73,7 @@ def load_configuration(
     project_root = Path(project_root).resolve()
     raw_environment = os.environ if environ is None else environ
     project_values = read_key_value_config(project_root / project_filename)
-    bootstrap_environment = {
-        key: str(value)
-        for key, value in raw_environment.items()
-        if key in project_values or key.startswith(CONFIG_ENV_PREFIXES)
-    }
+    bootstrap_environment = _environment_values(raw_environment, project_values)
     effective_common = dict(project_values)
     effective_common.update(bootstrap_environment)
 
@@ -79,11 +93,7 @@ def load_configuration(
             device_defaults.setdefault(key, value)
 
     known_keys = set(project_values) | set(device_defaults)
-    process_values = {
-        key: str(value)
-        for key, value in raw_environment.items()
-        if key in known_keys or key.startswith(CONFIG_ENV_PREFIXES)
-    }
+    process_values = _environment_values(raw_environment, known_keys)
     values = device_defaults
     values.update(project_values)
     values.update(process_values)

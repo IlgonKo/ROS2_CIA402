@@ -96,6 +96,18 @@ class ConfigurationLoaderTest(unittest.TestCase):
         self.assertEqual(model.value("COMMON_VALUE"), "environment")
         self.assertEqual(model.bus.axis_slave_indices, (0, 2))
 
+    def test_environment_key_casing_is_canonicalized_to_project_key(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            self.make_project(temp_dir, ".env")
+            model = load_configuration(
+                temp_dir,
+                environ={"MOTION_SERVER_IO_IO0_MODULES": "1:do:8"},
+                available_profiles=AVAILABLE_PROFILES,
+            )
+
+        self.assertEqual(model.value("MOTION_SERVER_IO_io0_MODULES"), "1:do:8")
+        self.assertNotIn("MOTION_SERVER_IO_IO0_MODULES", model.values)
+
     def test_unused_device_profile_file_is_not_loaded(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)

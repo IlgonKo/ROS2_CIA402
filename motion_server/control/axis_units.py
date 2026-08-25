@@ -1,13 +1,6 @@
 from motion_server.api import require_int32
 
 
-def axis_metadata(state, axis_index):
-    metadata = state.get("axis_metadata", [])
-    if axis_index < len(metadata) and isinstance(metadata[axis_index], dict):
-        return metadata[axis_index]
-    return {}
-
-
 def axis_position_counts_per_api_unit(state, axis_index):
     return state["axis_devices"].position_counts_per_api_unit(axis_index)
 

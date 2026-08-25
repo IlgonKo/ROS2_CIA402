@@ -10,13 +10,51 @@ from configuration import (
     load_configuration,
 )
 from configuration.models import CmmtDeviceConfig, CpxApIEcDeviceConfig
+from configuration.builder import CliOverrides
 from motion_server.app.startup import get_device_profile_for_device
+from tests.configuration_fixtures import TEST_NON_PDO_SELECTION
 
 
 AVAILABLE_PROFILES = {"cmmt_as", "cmmt_st", "cpx_ap_i_ec"}
-
-
 class TypedConfigurationTest(unittest.TestCase):
+    def test_legacy_server_motion_limit_overrides_are_absent(self):
+        fields = CliOverrides.__dataclass_fields__
+        for name in ("max_velocity", "acceleration", "deceleration", "jerk", "pp_jerk"):
+            self.assertNotIn(name, fields)
+        project_root = Path(__file__).resolve().parents[1]
+        legacy_names = (
+            "MOTION_SERVER_MAX_VELOCITY",
+            "MOTION_SERVER_ACCELERATION",
+            "MOTION_SERVER_DECELERATION",
+            "MOTION_SERVER_JERK",
+            "MOTION_SERVER_PP_JERK",
+        )
+        for relative_path in (
+            ".env",
+            ".env.example",
+            "device/cmmt/.env",
+            "device/cmmt/.env.example",
+            "docker/motion_server/compose.yaml",
+            "motion_server/start_server.sh",
+        ):
+            text = (project_root / relative_path).read_text(encoding="utf-8")
+            for legacy_name in legacy_names:
+                self.assertNotIn(legacy_name, text, relative_path)
+
+    def test_motion_and_cmmt_settings_keep_their_owner_boundary(self):
+        project_root = Path(__file__).resolve().parents[1]
+        common = (project_root / ".env.example").read_text(encoding="utf-8")
+        cmmt = (project_root / "device/cmmt/.env.example").read_text(encoding="utf-8")
+
+        self.assertIn("MOTION_SERVER_MOTION_MODE=", common)
+        self.assertNotIn("MOTION_SERVER_MOTION_MODE=", cmmt)
+        self.assertNotIn("MOTION_SERVER_CSP_COUNTS_PER_UNIT", common + cmmt)
+        self.assertIn("MOTION_SERVER_CSP_INTERPOLATION_MODE=", common)
+        self.assertIn("MOTION_SERVER_CSP_VELOCITY_OFFSET=", common)
+        self.assertNotIn("MOTION_SERVER_CSP_INTERPOLATION_MODE=", cmmt)
+        self.assertNotIn("MOTION_SERVER_CSP_VELOCITY_OFFSET=", cmmt)
+        self.assertIn("MOTION_SERVER_CMMT_PDO_CONFIGURATION=", cmmt)
+
     def write_project(self, root, extra=""):
         root = Path(root)
         (root / ".env").write_text(
@@ -27,6 +65,7 @@ class TypedConfigurationTest(unittest.TestCase):
             "MOTION_SERVER_CSP_INTERPOLATION_MODE=4\n"
             "MOTION_SERVER_PRE_LOGGING_ENABLED=1\n"
             "MOTION_SERVER_PRE_LOGGING_LENGTH=12\n"
+            f"{TEST_NON_PDO_SELECTION}"
             f"{extra}",
             encoding="utf-8",
         )
@@ -50,7 +89,7 @@ class TypedConfigurationTest(unittest.TestCase):
         self.assertIsInstance(config.devices[0].device, CmmtDeviceConfig)
         self.assertIsInstance(config.devices[1].device, CpxApIEcDeviceConfig)
         self.assertEqual(
-            config.devices[0].device.csp_interpolation_mode,
+            config.motion.csp_interpolation_mode,
             CspInterpolationMode.CSP_V,
         )
         self.assertEqual(config.devices[0].device.pdo_configuration, "csp_basic")
@@ -79,6 +118,48 @@ class TypedConfigurationTest(unittest.TestCase):
             [module.module_type for module in cpx_profile.config.layout.modules],
             ["do", "di"],
         )
+
+    def test_non_pdo_configuration_is_typed_and_selected_by_slave(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            config = self.load_typed(temp_dir)
+
+        first = config.devices[0].device.non_pdo_configuration
+        second = config.devices[2].device.non_pdo_configuration
+        self.assertEqual(first.name, "linear_mm")
+        self.assertEqual(second.name, "rotary_deg")
+        self.assertEqual(len(first.values), 20)
+        self.assertEqual(
+            next(value.value for value in first.values if value.index == 0x6098),
+            37,
+        )
+
+    def test_slave_specific_non_pdo_selection_overrides_list(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            config = self.load_typed(
+                temp_dir,
+                "MOTION_SERVER_CMMT_SLAVE_2_NON_PDO_CONFIGURATION=linear_mm\n",
+            )
+
+        self.assertEqual(
+            config.devices[2].device.non_pdo_configuration.name,
+            "linear_mm",
+        )
+
+    def test_mock_rejects_missing_non_pdo_selection(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            with self.assertRaisesRegex(ValueError, "slaves require.*2"):
+                self.load_typed(
+                    temp_dir,
+                    "MOTION_SERVER_CMMT_SLAVE_NON_PDO_CONFIGURATIONS=0:linear_mm\n",
+                )
+
+    def test_rejects_unknown_non_pdo_selection(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            with self.assertRaisesRegex(ValueError, "Unsupported.*unknown"):
+                self.load_typed(
+                    temp_dir,
+                    "MOTION_SERVER_CMMT_SLAVE_0_NON_PDO_CONFIGURATION=unknown\n",
+                )
 
     def test_rejects_spin_wait_at_or_above_cycle_period(self):
         with tempfile.TemporaryDirectory() as temp_dir:

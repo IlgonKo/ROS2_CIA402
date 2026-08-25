@@ -1,5 +1,4 @@
 from motion_server.control.axis_units import (
-    axis_metadata,
     axis_motion_api_to_drive,
     axis_motion_drive_to_api,
     axis_position_api_to_drive,
@@ -25,7 +24,18 @@ from motion_server.api import (
     require_uint32,
     selected_axes,
 )
-from motion_server.failure import OperationException
+from motion_server.failure import MotionServerException, OperationException
+
+
+PROFILE_ACCESS_ERRORS = (
+    MotionServerException,
+    OSError,
+    AttributeError,
+    TypeError,
+    ValueError,
+    OverflowError,
+    RuntimeError,
+)
 
 
 def set_motion_limits(message, runtime, state, client):
@@ -33,7 +43,7 @@ def set_motion_limits(message, runtime, state, client):
     try:
         axes = selected_axes(message, runtime, command)
         for axis_index in axes:
-            current_limits = list(state["motion_limits"][axis_index])
+            current_limits = list(runtime.axis_parameters.motion_limits[axis_index])
             positive_velocity_limit = axis_motion_api_to_drive(
                 state,
                 axis_index,
@@ -126,28 +136,37 @@ def update_axis_motion_limits(
     acceleration,
     deceleration,
 ):
-    state["motion_limits"][axis_index] = [
+    requested_limits = [
         positive_velocity_limit,
         negative_velocity_limit,
         acceleration,
         deceleration,
     ]
-    api_axis_limits = motion_limits_drive_to_api(
-        state,
-        axis_index,
-        state["motion_limits"][axis_index],
-    )
+    profile = axis_device_profile(runtime, axis_index)
+    write_error = None
+    try:
+        write_axis_motion_limits(runtime, axis_index, requested_limits)
+    except PROFILE_ACCESS_ERRORS as exc:
+        write_error = exc
+    try:
+        readback = profile.read_motion_limits(runtime, axis_index)
+    except PROFILE_ACCESS_ERRORS as readback_error:
+        if write_error is not None:
+            raise write_error from readback_error
+        raise
+    runtime.axis_parameters.update_axis(axis_index, motion_limits=readback)
+    runtime.slaves[axis_index].motion_server_motion_limits = list(readback)
+    api_axis_limits = motion_limits_drive_to_api(state, axis_index, readback)
+    current_jerk = runtime.motion_limits[axis_index].jerk
     runtime.set_axis_motion_limits(
         axis_index,
         max(abs(api_axis_limits[0]), abs(api_axis_limits[1])),
         api_axis_limits[2],
         api_axis_limits[3],
-        0.0,
+        current_jerk,
     )
-    runtime.slaves[axis_index].motion_server_motion_limits = list(
-        state["motion_limits"][axis_index]
-    )
-    write_axis_motion_limits(runtime, axis_index, state["motion_limits"][axis_index])
+    if write_error is not None:
+        raise write_error
 
 
 def write_axis_motion_limits(runtime, axis_index, axis_limits):
@@ -166,7 +185,7 @@ def set_profile(message, runtime, state, client):
     try:
         axes = selected_axes(message, runtime, command)
         for axis_index in axes:
-            current_settings = list(state["profile_settings"][axis_index])
+            current_settings = list(runtime.axis_parameters.profile_settings[axis_index])
             is_pv_axis = state["motion_modes"][axis_index] == "pv"
             profile_velocity = float(
                 message.get(
@@ -257,7 +276,7 @@ def set_profile(message, runtime, state, client):
 
     runtime.logger.status(
         "Received axis/profile: "
-        f"axes={axes} profile_settings={state['profile_settings']}",
+        f"axes={axes} profile_settings={runtime.axis_parameters.profile_settings}",
     )
 
 
@@ -270,43 +289,52 @@ def update_axis_profile_settings(
     profile_deceleration,
     profile_jerk=None,
 ):
-    current_jerk = state["profile_settings"][axis_index][3]
+    current_jerk = runtime.axis_parameters.profile_settings[axis_index][3]
     is_pv_axis = state["motion_modes"][axis_index] == "pv"
-    state["profile_settings"][axis_index] = [
-        profile_velocity,
-        profile_acceleration,
-        profile_deceleration,
-        current_jerk if profile_jerk is None else profile_jerk,
-    ]
+    profile = axis_device_profile(runtime, axis_index)
+    write_error = None
+    try:
+        if is_pv_axis:
+            runtime.sdo.write_uint32(
+                axis_index,
+                profile.PROFILE_ACCELERATION_INDEX,
+                0,
+                max(0, int(profile_acceleration)),
+            )
+            runtime.sdo.write_uint32(
+                axis_index,
+                profile.PROFILE_DECELERATION_INDEX,
+                0,
+                max(0, int(profile_deceleration)),
+            )
+        else:
+            profile.write_profile_settings(
+                runtime,
+                axis_index,
+                profile_velocity,
+                profile_acceleration,
+                profile_deceleration,
+            )
+        if profile_jerk is not None:
+            profile.write_profile_jerk(runtime, axis_index, profile_jerk)
+    except PROFILE_ACCESS_ERRORS as exc:
+        write_error = exc
+
+    try:
+        readback = profile.read_profile_settings(runtime, axis_index)
+    except PROFILE_ACCESS_ERRORS as readback_error:
+        if write_error is not None:
+            raise write_error from readback_error
+        raise
+
+    runtime.axis_parameters.update_axis(axis_index, profile_settings=readback)
     if not is_pv_axis and runtime.slaves[axis_index].rxpdo.has_field("profile_velocity"):
         runtime.slaves[axis_index].rxpdo.profile_velocity = require_uint32(
-            profile_velocity,
+            readback[0],
             f"axis {axis_index} profile_velocity",
         )
-    if is_pv_axis:
-        runtime.sdo.write_uint32(
-            axis_index,
-            axis_device_profile(runtime, axis_index).PROFILE_ACCELERATION_INDEX,
-            0,
-            max(0, int(profile_acceleration)),
-        )
-        runtime.sdo.write_uint32(
-            axis_index,
-            axis_device_profile(runtime, axis_index).PROFILE_DECELERATION_INDEX,
-            0,
-            max(0, int(profile_deceleration)),
-        )
-    else:
-        profile = axis_device_profile(runtime, axis_index)
-        profile.write_profile_settings(
-            runtime,
-            axis_index,
-            profile_velocity,
-            profile_acceleration,
-            profile_deceleration,
-        )
-    if profile_jerk is not None:
-        profile.write_profile_jerk(runtime, axis_index, profile_jerk)
+    if write_error is not None:
+        raise write_error
 
 
 def set_software_position_limits(message, runtime, state, client):
@@ -314,7 +342,9 @@ def set_software_position_limits(message, runtime, state, client):
     try:
         axes = selected_axes(message, runtime, command)
         for axis_index in axes:
-            current_limits = list(state["software_position_limits"][axis_index])
+            current_limits = list(
+                runtime.axis_parameters.software_position_limits[axis_index]
+            )
             negative_limit_api = float(
                 message.get(
                     "negative_limit",
@@ -358,38 +388,46 @@ def set_software_position_limits(message, runtime, state, client):
                     f"negative={negative_limit} positive={positive_limit}"
                 )
             profile = axis_device_profile(runtime, axis_index)
-            profile.write_software_position_limits(
-                runtime,
-                axis_index,
-                negative_limit,
-                positive_limit,
-            )
+            write_error = None
+            try:
+                profile.write_software_position_limits(
+                    runtime,
+                    axis_index,
+                    negative_limit,
+                    positive_limit,
+                )
+            except PROFILE_ACCESS_ERRORS as exc:
+                write_error = exc
             try:
                 readback_limits = profile.read_software_position_limits(
                     runtime,
                     axis_index,
                 )
-            except Exception as exc:
-                readback_limits = [f"read failed: {exc}", f"read failed: {exc}"]
-            state["software_position_limits"][axis_index] = [
-                negative_limit,
-                positive_limit,
-            ]
+            except PROFILE_ACCESS_ERRORS as readback_error:
+                if write_error is not None:
+                    raise write_error from readback_error
+                raise
+            runtime.axis_parameters.update_axis(
+                axis_index,
+                software_position_limits=readback_limits,
+            )
             runtime.logger.status(
                 "Axis software position limits write: "
                 f"axis={axis_index} "
                 f"api=({negative_limit_api}, {positive_limit_api}) "
                 f"drive=({negative_limit}, {positive_limit}) "
                 f"readback={readback_limits} "
-                f"metadata={axis_metadata(state, axis_index)}",
+                f"metadata={runtime.axis_parameters.axis_metadata[axis_index]}",
             )
+            if write_error is not None:
+                raise write_error
     except Exception as exc:
         raise_operation_rejected(client, command, str(exc))
         return
 
     runtime.logger.status(
         "Received axis/software_position_limits: "
-        f"axes={axes} limits={state['software_position_limits']}",
+        f"axes={axes} limits={runtime.axis_parameters.software_position_limits}",
     )
 
 

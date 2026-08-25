@@ -23,10 +23,28 @@ function Import-AxisServerEnv {
         throw "Failed to load Motion Server configuration.`n$detail"
     }
 
-    $parsed = $json | ConvertFrom-Json
+    $supportsHashtable = (Get-Command ConvertFrom-Json).Parameters.ContainsKey("AsHashtable")
+    try {
+        if ($supportsHashtable) {
+            $parsed = $json | ConvertFrom-Json -AsHashtable -ErrorAction Stop
+        }
+        else {
+            $parsed = $json | ConvertFrom-Json -ErrorAction Stop
+        }
+    }
+    catch {
+        throw "Failed to parse Motion Server configuration.`n$($_.Exception.Message)"
+    }
     $merged = [ordered]@{}
-    foreach ($property in $parsed.PSObject.Properties) {
-        $merged[$property.Name] = [string]$property.Value
+    if ($supportsHashtable) {
+        foreach ($entry in $parsed.GetEnumerator()) {
+            $merged[$entry.Key] = [string]$entry.Value
+        }
+    }
+    else {
+        foreach ($property in $parsed.PSObject.Properties) {
+            $merged[$property.Name] = [string]$property.Value
+        }
     }
 
     foreach ($entry in $merged.GetEnumerator()) {
@@ -56,10 +74,28 @@ function Read-DotEnvFile {
         $detail = ($json | Out-String).Trim()
         throw "Failed to read configuration file: $Path`n$detail"
     }
-    $parsed = $json | ConvertFrom-Json
+    $supportsHashtable = (Get-Command ConvertFrom-Json).Parameters.ContainsKey("AsHashtable")
+    try {
+        if ($supportsHashtable) {
+            $parsed = $json | ConvertFrom-Json -AsHashtable -ErrorAction Stop
+        }
+        else {
+            $parsed = $json | ConvertFrom-Json -ErrorAction Stop
+        }
+    }
+    catch {
+        throw "Failed to parse configuration file: $Path`n$($_.Exception.Message)"
+    }
     $values = [ordered]@{}
-    foreach ($property in $parsed.PSObject.Properties) {
-        $values[$property.Name] = [string]$property.Value
+    if ($supportsHashtable) {
+        foreach ($entry in $parsed.GetEnumerator()) {
+            $values[$entry.Key] = [string]$entry.Value
+        }
+    }
+    else {
+        foreach ($property in $parsed.PSObject.Properties) {
+            $values[$property.Name] = [string]$property.Value
+        }
     }
     return $values
 }

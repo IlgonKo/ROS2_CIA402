@@ -57,7 +57,7 @@ class CMMTDeviceProfile:
     NEGATIVE_VELOCITY_LIMIT_SUBINDEX = required_non_pdo_od(
         "negative_velocity_limit"
     ).subindex
-    PROFILE_VELOCITY_INDEX = required_non_pdo_od("profile_velocity").index
+    PROFILE_VELOCITY_INDEX = pdo_od_role("profile_velocity").index
     PROFILE_ACCELERATION_INDEX = required_non_pdo_od("profile_acceleration").index
     PROFILE_DECELERATION_INDEX = required_non_pdo_od("profile_deceleration").index
     MAX_ACCELERATION_INDEX = required_non_pdo_od("max_acceleration").index
@@ -412,6 +412,11 @@ class CMMTDeviceProfile:
         self.axis_index = axis_index
         self.slave_index = slave_index
         self.error_catalog = load_cmmt_error_catalog()
+        self.non_pdo_configuration = (
+            device_config.non_pdo_configuration
+            if device_config is not None
+            else None
+        )
         self.esi_catalog = (
             cmmt_catalog_by_profile_name(self.name)
             if self.variant is not None

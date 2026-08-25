@@ -1,5 +1,8 @@
 import time
 
+from ethercat.mock_master import MockMaster
+from motion_server.app.startup import refresh_axis_parameter_cache
+
 from device.capabilities import DeviceCapability
 
 from motion_server.handlers.command.homing import finish_homing
@@ -242,6 +245,8 @@ def restart_axis(message, runtime, state, client):
         disabled_controlword = int(runtime.slaves[axis_index].rxpdo.controlword)
         disabled_statusword = int(runtime.slaves[axis_index].txpdo.statusword)
         result = profile.request_axis_restart(runtime, axis_index)
+        if isinstance(runtime.ethercat_master, MockMaster):
+            refresh_axis_parameter_cache(runtime, axis_index)
         result["disabled_controlword"] = f"0x{disabled_controlword:04X}"
         result["disabled_statusword"] = f"0x{disabled_statusword:04X}"
         result["disable_settle_time"] = disable_settle_time

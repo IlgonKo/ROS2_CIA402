@@ -4,6 +4,7 @@ import unittest
 
 from configuration import ConfigurationSource
 from motion_server.application import MotionServerApplication
+from tests.configuration_fixtures import TEST_NON_PDO_SELECTION
 
 
 class MotionServerApplicationTest(unittest.TestCase):
@@ -13,7 +14,8 @@ class MotionServerApplicationTest(unittest.TestCase):
             "MOTION_SERVER_BACKEND=mock\n"
             "MOTION_SERVER_BUS=axis:cmmt_as\n"
             f"MOTION_SERVER_PORT={port}\n"
-            f"PYSOEM_CYCLE_TIME={period}\n",
+            f"PYSOEM_CYCLE_TIME={period}\n"
+            f"{TEST_NON_PDO_SELECTION}",
             encoding="utf-8",
         )
         return ConfigurationSource(project_root=root)

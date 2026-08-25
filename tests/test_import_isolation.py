@@ -6,6 +6,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+from tests.configuration_fixtures import TEST_NON_PDO_SELECTION
 from unittest.mock import patch
 
 import motion_server.application
@@ -87,9 +88,11 @@ assert dict(os.environ) == before
         env_script = project_root / "scripts" / "windows" / "env.ps1"
         command = (
             f". '{env_script}'; "
+            "$env:MOTION_SERVER_IO_IO0_MODULES = '1:do:8'; "
             f"$values = Import-AxisServerEnv -ProjectRoot '{project_root}' "
             f"-Python '{sys.executable}'; "
-            "Write-Output $values['MOTION_SERVER_BACKEND']"
+            "Write-Output $values['MOTION_SERVER_BACKEND']; "
+            "Write-Output $values['MOTION_SERVER_IO_io0_MODULES']"
         )
         with tempfile.TemporaryDirectory() as outside_dir:
             result = subprocess.run(
@@ -102,6 +105,7 @@ assert dict(os.environ) == before
 
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn("mock", result.stdout)
+        self.assertIn("1:do:8", result.stdout)
 
     def test_cli_only_overrides_explicit_values(self):
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -110,7 +114,8 @@ assert dict(os.environ) == before
                 "MOTION_SERVER_BACKEND=mock\n"
                 "MOTION_SERVER_BUS=axis:cmmt_as\n"
                 "MOTION_SERVER_PORT=15001\n"
-                "PYSOEM_CYCLE_TIME=0.01\n",
+                "PYSOEM_CYCLE_TIME=0.01\n"
+                f"{TEST_NON_PDO_SELECTION}",
                 encoding="utf-8",
             )
             application = MotionServerApplication.from_source(

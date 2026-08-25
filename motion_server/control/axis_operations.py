@@ -72,7 +72,7 @@ def pv_allowed_axis(state, axis_index):
 def pv_reject_message(state, axis_indices):
     details = []
     for axis_index in axis_indices:
-        units = state.get("user_position_units", [])
+        units = state["axis_devices"].user_position_units
         user_position_unit = units[axis_index] if axis_index < len(units) else None
         if user_position_unit is None:
             details.append(f"axis {axis_index}: 0x216E:01 unread")

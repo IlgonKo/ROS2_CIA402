@@ -4,6 +4,48 @@
 날짜는 기본적으로 Git commit 날짜를 기준으로 정리했고, 아직 commit되지 않은 작업은 현재 작업일 기준으로 별도 기록한다.
 미완료 기능과 기술 부채는 [Remaining Tasks](remaining_tasks.md)에서 별도로 관리한다.
 
+## 2026-08-25
+
+### 완료
+
+- `TD-014` 후속 보완으로 Windows 환경변수의 대소문자 변형을 설정 파일의 canonical
+  key로 병합하여 PowerShell JSON projection 충돌을 제거했다. PowerShell 5.1/7.x
+  호환 변환과 실패 시 실행 중단을 적용하고 회귀 검사를 포함한 전체 unittest 194개가
+  통과했다.
+- `TD-023` 완료 리뷰에서 전체 CMMT PDO mapping과 required Non-PDO OD를 교차 확인했다.
+  유일한 중복인 `0x6081 Profile velocity`를 Non-PDO 계약과 preset에서 제거하고 PDO
+  schema 소유로 정리했다. Bus reconnect는 runtime 재생성 계약으로 단순화하고 Virtual
+  device reset은 선택된 Non-PDO configuration을 복원하도록 보완했다. 전체 unittest
+  196개, source compile과 diff 검사가 통과했다.
+- `TD-023-S06`에서 Device OD readback을 원본으로 하는 typed
+  `AxisParameterRuntimeCache`를 추가했다. startup·설정 변경·Mock Axis restart에서 cache,
+  unit conversion과 MotionController 제한을 동기화하고 mutable server state의 중복
+  parameter 필드를 제거했다. 범용 cache 관리는 `TD-025`로 분리했다.
+- Profile 설정의 여러 SDO write 중 일부가 실패해도 실제 readback으로 cache와
+  `0x6081` RxPDO command를 재동기화한 뒤 Fail을 반환하도록 보완했다.
+- PySOEM Axis restart 후 cache refresh는 TD-023에서 분리했다. restart 완료 감지와
+  EtherCAT recovery는 RF-005, 완료 통지 이후 OD refresh와 invalid 처리는 TD-025가
+  담당하도록 문서 경계를 확정했다.
+- startup 필수 cache 항목인 user position unit과 converting unit readback 실패를
+  initialization error로 변경했다. Software position limit은 필수가 아니므로 기존 안전
+  fallback 정책을 유지했다.
+- startup 필수 OD를 unit과 exponent로 한정했다. Profile/motion limit 실패는 0 기반
+  fallback으로 계속하며, motion/software limit 부분 write 실패도 가능한 readback으로
+  cache와 제어 projection을 동기화한 뒤 Fail을 반환하도록 보완했다.
+- `TD-023`에서 required non-PDO OD 존재 계약과 code-defined Virtual CMMT commissioning
+  configuration catalog를 분리했다. `.env`는 값 정의 없이 preset만 선택하며 6축은
+  slave 0~2 `linear_mm`, 3~5 `rotary_deg`를 선택한다.
+- CMMT 설정 파일에 섞여 있던 서버 공통 initial motion mode를 메인 설정으로 이동하고,
+  코드에서 더 이상 사용하지 않는 `MOTION_SERVER_CSP_COUNTS_PER_UNIT` 잔재를 제거했다.
+  CSP interpolation mode와 velocity offset도 현재 전 축 공통 정책에 맞춰 메인 설정과
+  `MotionConfig`로 이동하고 CMMT 설정에는 PDO와 Non-PDO preset 선택만 유지했다.
+- Mock Virtual OD만 선택 configuration으로 초기화하고 startup motion-limit 덮어쓰기를
+  제거했다. mock/실축 모두 정상 시 device OD readback으로 runtime 제한을 구성한다.
+- legacy server motion-limit/PP jerk 환경변수와 CLI를 제거하고 CSP jerk를 메인
+  `MOTION_SERVER_CSP_JERK` 및 `MotionConfig.csp_jerk`로 분리했다.
+- configuration 완전성·ESI 자료형·값 범위·slave 선택, Virtual OD 초기화/lifecycle,
+  startup overwrite 부재와 legacy 제거 검증을 추가했으며 전체 unittest 193개가 통과했다.
+
 ## 2026-08-24
 
 ### 등록

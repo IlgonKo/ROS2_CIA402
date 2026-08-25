@@ -8,6 +8,7 @@ runtime fault의 상태, 사용자에게 보이는 진단 정보와 reset/reconn
 
 - normal, initialization-error, bus-disconnected와 recoverable-fault 상태 및 전이를 정의한다.
 - `system/server/reset`, `system/bus/reconnect`와 process restart의 허용 조건을 정한다.
+- PySOEM Axis restart의 완료 감지, timeout, EtherCAT 재연결과 복구 완료 통지 경계를 정의한다.
 - runtime 재구성 전후 authority 소유권과 client notification을 정의한다.
 - 실패한 복구와 반복 오류의 degraded behavior를 정의한다.
 
@@ -16,6 +17,8 @@ runtime fault의 상태, 사용자에게 보이는 진단 정보와 reset/reconn
 runtime 생성 단계의 degraded startup 세부 구조는 [TD-018](../td/TD-018-runtime-initialization-error.md)에서 추적한다.
 공통 Diagnostic 객체와 clear 조건은 [Diagnostic 데이터 모델](../../diagnostic/diagnostic_model.md)을 따른다.
 Definition에서 제외한 recovery policy와 handler 연결은 이 RF에서 확정한다.
+복구 완료 후 parameter OD refresh와 cache invalid 처리는
+[TD-025](../td/TD-025-runtime-parameter-cache.md)가 담당한다.
 
 ## 검증 계획
 

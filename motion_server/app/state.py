@@ -32,7 +32,7 @@ def initial_server_state(
     axis_count_value,
     axis_devices,
     positions,
-    software_position_limits,
+    software_position_limits=None,
     profile_settings=None,
     motion_limits=None,
     user_position_units=None,
@@ -41,27 +41,10 @@ def initial_server_state(
     initialized=True,
     initialization_error="",
 ):
-    limits = motion_config.default_limits
     if motion_limits is None:
-        motion_limits = [
-            [
-                limits.max_velocity,
-                -abs(limits.max_velocity),
-                limits.acceleration,
-                limits.deceleration,
-            ]
-            for _ in range(axis_count_value)
-        ]
+        motion_limits = [[0.0, 0.0, 0.0, 0.0] for _ in range(axis_count_value)]
     if profile_settings is None:
-        profile_settings = [
-            [
-                limits.max_velocity,
-                limits.acceleration,
-                limits.deceleration,
-                limits.pp_jerk,
-            ]
-            for _ in range(axis_count_value)
-        ]
+        profile_settings = [[0.0, 0.0, 0.0, 0.0] for _ in range(axis_count_value)]
     if user_position_units is None:
         user_position_units = [None for _ in range(axis_count_value)]
     if converting_unit_exponents is None:
@@ -85,12 +68,6 @@ def initial_server_state(
             server_config.axis_restart_disable_settle_time
         ),
         "target_positions": positions,
-        "motion_limits": motion_limits,
-        "profile_settings": profile_settings,
-        "software_position_limits": software_position_limits,
-        "axis_metadata": axis_metadata,
-        "user_position_units": user_position_units,
-        "converting_unit_exponents": converting_unit_exponents,
         "motion_mode": motion_config.initial_motion_mode,
         "motion_modes": [
             motion_config.initial_motion_mode

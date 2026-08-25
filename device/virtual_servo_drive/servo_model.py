@@ -99,21 +99,6 @@ class VirtualCiA402Servo:
     def set_profile_velocity(self, velocity):
         self.od.write(0x6081, velocity)
 
-    def set_motion_limits(self, max_velocity, acceleration, deceleration):
-        self.od.write(0x607F, max_velocity)
-        self.od.write(0x2183, -abs(float(max_velocity)) / 1000.0, 0x0C)
-        self.od.write(0x60C5, acceleration)
-        self.od.write(0x60C6, deceleration)
-        self.od.write(0x6083, acceleration)
-        self.od.write(0x6084, deceleration)
-
-    def get_motion_limits(self):
-        return {
-            "max_velocity": self.od.read(0x607F),
-            "acceleration": self.od.read(0x60C5),
-            "deceleration": self.od.read(0x60C6),
-        }
-
     def set_software_position_limits(self, negative_limit, positive_limit):
         self.od.write(0x607D, negative_limit, 1)
         self.od.write(0x607D, positive_limit, 2)

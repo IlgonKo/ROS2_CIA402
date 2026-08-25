@@ -271,7 +271,7 @@ def apply_move_profile_velocity(message, runtime, state, axes):
             axis_index,
             profile_velocity,
         )
-        state["profile_settings"][axis_index][0] = drive_profile_velocity
+        runtime.axis_parameters.profile_settings[axis_index][0] = drive_profile_velocity
         slave = runtime.slaves[axis_index]
         if slave.rxpdo.has_field("profile_velocity"):
             slave.rxpdo.profile_velocity = require_uint32(

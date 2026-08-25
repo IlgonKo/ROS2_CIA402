@@ -388,18 +388,23 @@ Device Profile + ESI
 - 결정:
   - `required_non_pdo_od`는 Motion Server가 요구하는 OD의 주소, 자료형, access와 역할
     계약만 정의하며 초기값을 소유하지 않는다.
-  - `device/cmmt/.env`에 `linear_mm`, `rotary_deg` 이름의 완전한 Non-PDO configuration을
-    정의하고 Mock CMMT slave가 하나를 명시적으로 선택한다. 공통 default와 slave별 부분
-    override는 사용하지 않는다.
-  - Non-PDO configuration은 commissioning parameter 21개만 포함한다. CSP/sync OD는
+  - `device/cmmt/non_pdo_configuration.py`에 `linear_mm`, `rotary_deg` 이름의 완전한
+    Non-PDO configuration catalog를 정의하고 `.env`에서는 Mock CMMT slave가 하나를
+    명시적으로 선택한다. 사용자 정의 preset, 공통 default와 slave별 부분 override는
+    사용하지 않는다.
+  - Non-PDO configuration은 지원하는 PDO mapping과 겹치지 않는 commissioning parameter
+    20개만 포함한다. `0x6081`은 PDO schema가 소유한다. CSP/sync OD는
     startup operational configuration, reset/save/error OD는 Virtual Servo behavior가 관리한다.
   - 같은 configuration의 축은 공통값으로 초기화하고 writable OD만 SDO/API로 축별 변경한다.
     read-only unit/converting-unit OD 변경은 다른 configuration 선택과 runtime reset으로 적용한다.
   - Mock은 Non-PDO configuration으로 Virtual OD를 초기화하고 실축은 이를 무시하며 write하지
-    않는다. runtime reset/process restart/device reset은 공통값으로 복원하고 bus reconnect는
-    현재값을 유지한다.
+    않는다. runtime reset/process restart/device reset과 bus reconnect의 Mock runtime
+    재생성은 공통값으로 복원한다.
   - device motion limit와 PP jerk는 OD readback을 사용한다. CSP jerk는 device OD와 분리하여
     메인 `MOTION_SERVER_CSP_PROFILE` 다음의 `MOTION_SERVER_CSP_JERK`로 관리한다.
+  - CSP interpolation mode와 velocity offset은 현재 모든 축에 공통 적용하며 축별 설정
+    계획이 없으므로 메인 `.env`와 `MotionConfig`가 소유한다. interpolation mode의 CMMT OD
+    write는 장치 profile이 수행하고 velocity offset command 생성은 MotionController가 수행한다.
 - 이유: OD 존재 계약, 실제 commissioning 상태와 runtime command/status 초기값을 분리하고,
   가상축이 실축과 동일한 access 및 readback 경계를 사용하면서도 반복 가능한 공통 초기
   상태를 갖게 하기 위함이다.
@@ -411,12 +416,28 @@ Device Profile + ESI
   - 실축 startup에서 configuration 값을 write하는 방식은 commissioning 상태를 덮어쓰므로
     채택하지 않는다.
 - 영향: TD-023에서 Non-PDO configuration parser/model/validation과 Virtual OD 초기화를
-  구현하고 startup motion-limit fallback 및 `startup_parameters`를 제거한다. 정확한 21개
+  구현하고 startup motion-limit fallback 및 `startup_parameters`를 제거한다. 정확한 20개
   OD와 `linear_mm`/`rotary_deg` 값은 TD-023 기술 명세를 따른다.
+
+## DEC-024 Device OD 기반 단일 Axis Parameter Runtime Cache 사용
+
+- 상태: `accepted`
+- 결정일: 2026-08-25
+- 결정: Device OD를 최종 원본으로 두고 서버 제어에 필요한 CMMT 축 parameter는
+  `AxisParameterRuntimeCache` 한 곳에 보관한다. startup, 설정 변경과 reset lifecycle에서
+  OD readback이 성공한 뒤 cache를 갱신하며 주기 제어와 status API는 SDO를 반복 조회하지
+  않고 cache를 사용한다.
+- 이유: mutable server state와 MotionController 주변에 같은 값을 중복 보관하면 장치 reset
+  이후 서로 다른 값이 남는다. 반대로 실시간 cycle에서 SDO를 조회하는 것은 부적절하다.
+- 영향: TD-023은 필수 CMMT 축 parameter와 reset 동기화를 구현한다. 범용 validity,
+  refresh API, 일반 parameter write, PySOEM Axis restart 완료 후 refresh와 다른 장치
+  확장은 TD-025에서 처리한다. 실제 restart 완료 감지와 EtherCAT recovery는 RF-005가
+  책임진다.
 
 ## 새 결정 작성 양식
 
 ```text
+
 ## DEC-### 제목
 
 - 상태: proposed | accepted | superseded | deprecated

@@ -20,7 +20,6 @@ from configuration.models import (
     IoModuleConfig,
     LoggingConfig,
     MotionConfig,
-    MotionLimitConfig,
     MotionServerConfig,
     PositionFeedbackLagLogConfig,
     PreLoggingConfig,
@@ -31,6 +30,7 @@ from configuration.models import (
     VelocityAnomalyLogConfig,
 )
 from device.cmmt.pdo_configuration import get_pdo_configuration
+from device.cmmt.non_pdo_configuration import get_non_pdo_configuration
 
 
 @dataclass(frozen=True)
@@ -52,11 +52,7 @@ class CliOverrides:
     dc_phase_kp: float | None = None
     dc_phase_ki: float | None = None
     dc_phase_max_correction: float | None = None
-    max_velocity: float | None = None
-    acceleration: float | None = None
-    deceleration: float | None = None
-    jerk: float | None = None
-    pp_jerk: int | None = None
+    csp_jerk: float | None = None
     motion_mode: str | None = None
     csp_profile: CspProfile | None = None
     csp_interpolation_mode: CspInterpolationMode | None = None
@@ -111,18 +107,21 @@ def build_motion_server_config(
         dc=dc,
     )
     motion = MotionConfig(
-        default_limits=MotionLimitConfig(
-            max_velocity=choose(cli.max_velocity, number(values, "MOTION_SERVER_MAX_VELOCITY", 50.0)),
-            acceleration=choose(cli.acceleration, number(values, "MOTION_SERVER_ACCELERATION", 100.0)),
-            deceleration=choose(cli.deceleration, number(values, "MOTION_SERVER_DECELERATION", 100.0)),
-            jerk=choose(cli.jerk, number(values, "MOTION_SERVER_JERK", 1000.0)),
-            pp_jerk=choose(cli.pp_jerk, integer(values, "MOTION_SERVER_PP_JERK", 100000)),
-        ),
         initial_motion_mode=choose(cli.motion_mode, value(values, "MOTION_SERVER_MOTION_MODE", "pp")).lower(),
         csp_profile=cli.csp_profile or enum_value(
             CspProfile,
             value(values, "MOTION_SERVER_CSP_PROFILE", "quintic"),
         ),
+        csp_jerk=choose(cli.csp_jerk, number(values, "MOTION_SERVER_CSP_JERK", 100000.0)),
+        csp_interpolation_mode=cli.csp_interpolation_mode or enum_value(
+            CspInterpolationMode,
+            integer(values, "MOTION_SERVER_CSP_INTERPOLATION_MODE", 1),
+        ),
+        csp_velocity_offset=choose(cli.csp_velocity_offset, boolean(
+            values,
+            "MOTION_SERVER_CSP_VELOCITY_OFFSET",
+            False,
+        )),
     )
     logging = build_logging_config(values, cli)
     bus = source.bus if cli.bus is None else parse_bus_config(cli.bus)
@@ -181,11 +180,21 @@ def build_device_configs(source, bus=None, cli=None):
     values = source.values
     bus = bus or source.bus
     cli = cli or CliOverrides()
+    slave_non_pdo_selections = parse_unique_indexed_values(
+        value(values, "MOTION_SERVER_CMMT_SLAVE_NON_PDO_CONFIGURATIONS", ""),
+        "MOTION_SERVER_CMMT_SLAVE_NON_PDO_CONFIGURATIONS",
+    )
     devices = []
     axis_index = 0
     for bus_device in bus.devices:
         if bus_device.profile in {"cmmt_as", "cmmt_st"}:
-            device_config = build_cmmt_config(values, bus_device, axis_index, cli)
+            device_config = build_cmmt_config(
+                values,
+                bus_device,
+                axis_index,
+                cli,
+                slave_non_pdo_selections,
+            )
             axis_index += 1
         elif bus_device.profile == "cpx_ap_i_ec":
             device_config = build_cpx_config(values, bus_device)
@@ -203,7 +212,13 @@ def build_device_configs(source, bus=None, cli=None):
     return tuple(devices)
 
 
-def build_cmmt_config(values, bus_device, axis_index, cli=None):
+def build_cmmt_config(
+    values,
+    bus_device,
+    axis_index,
+    cli=None,
+    slave_non_pdo_selections=None,
+):
     cli = cli or CliOverrides()
     pdo_name = value(
         values,
@@ -229,20 +244,35 @@ def build_cmmt_config(values, bus_device, axis_index, cli=None):
             "motion_server_default",
         )
     configuration = get_pdo_configuration(pdo_name)
+    slave_non_pdo_selections = slave_non_pdo_selections or {}
+    selection_key = (
+        f"MOTION_SERVER_CMMT_SLAVE_{bus_device.slave_index}_"
+        "NON_PDO_CONFIGURATION"
+    )
+    selected_name = value(values, selection_key, "").lower()
+    if not selected_name:
+        selected_name = str(
+            slave_non_pdo_selections.get(bus_device.slave_index, "")
+        ).strip().lower()
+    selected = None
+    if selected_name:
+        selected = get_non_pdo_configuration(selected_name)
+
     return CmmtDeviceConfig(
         profile_name=bus_device.profile,
         axis_index=axis_index,
         pdo_configuration=configuration.name,
-        csp_interpolation_mode=cli.csp_interpolation_mode or enum_value(
-            CspInterpolationMode,
-            integer(values, "MOTION_SERVER_CSP_INTERPOLATION_MODE", 1),
-        ),
-        csp_velocity_offset=choose(cli.csp_velocity_offset, boolean(
-            values,
-            "MOTION_SERVER_CSP_VELOCITY_OFFSET",
-            False,
-        )),
+        non_pdo_configuration=selected,
     )
+
+
+def parse_unique_indexed_values(raw_value, setting_name):
+    result = {}
+    for index, item_value in split_indexed_config_list(raw_value, default_start=0):
+        if index in result:
+            raise ValueError(f"Duplicate slave {index} in {setting_name}")
+        result[index] = item_value
+    return result
 
 
 def build_cpx_config(values, bus_device):
@@ -295,9 +325,8 @@ def validate_motion_server_config(config):
         raise ValueError(
             "Initial motion mode must be one of: pp, pv, jog, csp"
         )
-    limits = config.motion.default_limits
-    if min(limits.max_velocity, limits.acceleration, limits.deceleration, limits.jerk) <= 0:
-        raise ValueError("Motion limits must be > 0")
+    if config.motion.csp_jerk <= 0:
+        raise ValueError("CSP jerk must be > 0")
     for log_config in (
         config.logging.status,
         config.logging.cycle_stats,
@@ -309,6 +338,18 @@ def validate_motion_server_config(config):
         raise ValueError("Enabled pre-logging requires length >= 1")
     if config.axis_count < 1:
         raise ValueError("Motion Server requires at least one axis")
+    if config.ethercat.backend is BackendType.MOCK:
+        missing = [
+            device.slave_index
+            for device in config.devices
+            if isinstance(device.device, CmmtDeviceConfig)
+            and device.device.non_pdo_configuration is None
+        ]
+        if missing:
+            raise ValueError(
+                "Mock CMMT slaves require a Non-PDO configuration: "
+                + ", ".join(str(index) for index in missing)
+            )
 
 
 def value(values, name, default=""):
