@@ -41,8 +41,12 @@ class CspInterpolationMode(IntEnum):
 
 
 @dataclass(frozen=True)
+class BootstrapServerConfig:
+    port: int
+
+
+@dataclass(frozen=True)
 class ServerConfig:
-    host: str
     port: int
     mode: ServerMode
     feedback_period: float

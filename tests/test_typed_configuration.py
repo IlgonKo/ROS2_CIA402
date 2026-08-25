@@ -9,7 +9,7 @@ from configuration import (
     build_motion_server_config,
     load_configuration,
 )
-from configuration.models import CmmtDeviceConfig, CpxApIEcDeviceConfig
+from configuration.models import CmmtDeviceConfig, CpxApIEcDeviceConfig, ServerConfig
 from configuration.builder import CliOverrides
 from motion_server.app.startup import get_device_profile_for_device
 from tests.configuration_fixtures import TEST_NON_PDO_SELECTION
@@ -40,6 +40,26 @@ class TypedConfigurationTest(unittest.TestCase):
             text = (project_root / relative_path).read_text(encoding="utf-8")
             for legacy_name in legacy_names:
                 self.assertNotIn(legacy_name, text, relative_path)
+
+    def test_motion_server_bind_host_is_fixed_outside_configuration(self):
+        project_root = Path(__file__).resolve().parents[1]
+        fields = CliOverrides.__dataclass_fields__
+        server_fields = ServerConfig.__dataclass_fields__
+        cli_text = (project_root / "configuration" / "cli.py").read_text(
+            encoding="utf-8"
+        )
+        launcher_text = (project_root / "motion_server" / "start_server.sh").read_text(
+            encoding="utf-8"
+        )
+        server_text = (project_root / "motion_server" / "server.py").read_text(
+            encoding="utf-8"
+        )
+
+        self.assertNotIn("host", fields)
+        self.assertNotIn("host", server_fields)
+        self.assertNotIn('add_argument("--host")', cli_text)
+        self.assertNotIn("--host", launcher_text)
+        self.assertIn('MOTION_SERVER_BIND_HOST = "0.0.0.0"', server_text)
 
     def test_motion_and_cmmt_settings_keep_their_owner_boundary(self):
         project_root = Path(__file__).resolve().parents[1]

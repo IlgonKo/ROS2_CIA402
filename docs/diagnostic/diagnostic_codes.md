@@ -20,9 +20,10 @@ Exception 문자열은 Diagnostic `detail/context`에 저장하지 않는다. �
 field는 현재 client 호환을 위해 유지하며 S08D의 Diagnostic 직렬화 계약과 S09 client migration에서
 표시 책임을 다시 검토한다.
 
-서버 reset과 bus reconnect는 같은 프로세스의 `DiagnosticManager`를 새 runtime에 전달한다. 따라서
-재초기화 성공은 이 Fault를 resolve하지만 acknowledge 없이 제거하지 않는다. 전체 프로세스 재시작을
-넘는 영속 저장은 현재 범위에 포함하지 않는다.
+서버 reset은 runtime과 `DiagnosticManager`를 함께 새로 생성하므로 기존 Diagnostic 상태와 history를
+폐기한다. process restart도 새 process에서 같은 초기 상태를 사용하며 process 간 영속 저장은 현재
+범위에 포함하지 않는다. bus reconnect는 기존 `DiagnosticManager`를 유지하고 재연결 성공 시 이
+Fault를 resolve까지만 처리한다. acknowledge와 clear는 RF-005의 공통 Fault API가 담당한다.
 
 ## Bus
 

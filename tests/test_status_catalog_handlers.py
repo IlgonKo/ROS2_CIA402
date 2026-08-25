@@ -19,6 +19,14 @@ from motion_server.handlers.status.registry import (
     handle_axis_status,
     handle_server_status,
 )
+from motion_server.app.initialization import (
+    INITIALIZATION_CAUSE_DEFINITIONS,
+    InitializationCause,
+    InitializationFailure,
+    InitializationStatus,
+)
+from motion_server.diagnostic import DiagnosticManager
+from datetime import datetime, timezone
 
 
 class Connection:
@@ -58,16 +66,31 @@ class StatusBoundaryTest(unittest.TestCase):
         runtime = SimpleNamespace(slaves=[object()], cycle_time=0.008)
         active_client = client()
 
+        cause = InitializationCause.BUS_CONNECTION_FAILED
+        definition = INITIALIZATION_CAUSE_DEFINITIONS[cause]
+        status = InitializationStatus.failed(InitializationFailure(
+            stage=definition.stage,
+            cause=cause,
+            message=definition.message,
+            occurred_at=datetime(2026, 8, 25, tzinfo=timezone.utc),
+        ))
         response = handle_server_status(
             "system/server/status",
             {"type": "system/server/status", "request_id": "r1"},
             runtime,
-            {"drive_initialized": False, "initialization_error": "startup"},
+            {
+                "initialization_status": status,
+                "diagnostic_manager": DiagnosticManager(),
+            },
             active_client,
         )
 
         self.assertNotIn("type", response)
-        self.assertFalse(response["drive_initialized"])
+        self.assertFalse(response["initialized"])
+        self.assertEqual(
+            response["initialization_failure"]["cause"],
+            "bus_connection_failed",
+        )
         self.assertEqual(active_client["conn"].messages, [])
 
     def test_axis_status_missing_selector_is_safe_invalid_request(self):

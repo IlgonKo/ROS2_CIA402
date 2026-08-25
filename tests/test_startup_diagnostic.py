@@ -17,6 +17,12 @@ from motion_server.diagnostic.startup import (
     resolve_initialization_fault,
 )
 from motion_server.failure import ServerNotReadyException
+from motion_server.app.initialization import (
+    INITIALIZATION_CAUSE_DEFINITIONS,
+    InitializationCause,
+    InitializationFailure,
+    InitializationStatus,
+)
 
 
 OCCURRED_AT = datetime(2026, 8, 21, 2, 0, tzinfo=timezone.utc)
@@ -58,6 +64,15 @@ class InitializationFaultTest(unittest.TestCase):
             ),
         )
 
+    def failed_status(self, cause=InitializationCause.BUS_CONNECTION_FAILED):
+        definition = INITIALIZATION_CAUSE_DEFINITIONS[cause]
+        return InitializationStatus.failed(InitializationFailure(
+            stage=definition.stage,
+            cause=cause,
+            message=definition.message,
+            occurred_at=OCCURRED_AT,
+        ))
+
     def test_definition_is_server_latching_fault(self):
         self.assertEqual(
             SERVER_INITIALIZATION_FAILED.code,
@@ -86,10 +101,7 @@ class InitializationFaultTest(unittest.TestCase):
     def test_degraded_command_rejection_does_not_clear_initialization_fault(self):
         runtime = self.runtime()
         fault = detect_initialization_fault(runtime)
-        state = {
-            "drive_initialized": False,
-            "initialization_error": "startup failed",
-        }
+        state = {"initialization_status": self.failed_status()}
 
         validation_error = validate_command(
             command_spec("system/axis/enable"),
@@ -107,7 +119,7 @@ class InitializationFaultTest(unittest.TestCase):
     def test_recovery_command_remains_allowed_while_fault_is_active(self):
         runtime = self.runtime()
         detect_initialization_fault(runtime)
-        state = {"drive_initialized": False}
+        state = {"initialization_status": self.failed_status()}
 
         validation_error = validate_command(
             command_spec("system/server/reset"),

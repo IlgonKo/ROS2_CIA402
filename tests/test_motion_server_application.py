@@ -1,8 +1,10 @@
 from pathlib import Path
 import tempfile
 import unittest
+from unittest.mock import patch
 
 from configuration import ConfigurationSource
+from motion_server.app.initialization import InitializationCause
 from motion_server.application import MotionServerApplication
 from tests.configuration_fixtures import TEST_NON_PDO_SELECTION
 
@@ -54,6 +56,82 @@ class MotionServerApplicationTest(unittest.TestCase):
         self.assertEqual(received["server_config"].port, 15003)
         self.assertNotIn("config", received)
         self.assertNotIn("application", received)
+
+    def test_invalid_full_configuration_keeps_bootstrap_port_and_failure(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            source = self.make_source(temp_dir, port=15123, period=0.01)
+            with (Path(temp_dir) / ".env").open("a", encoding="utf-8") as stream:
+                stream.write("MOTION_SERVER_CSP_VELOCITY_OFFSET=invalid\n")
+
+            application = MotionServerApplication.from_source(source, environ={})
+
+        self.assertEqual(application.bootstrap_config.port, 15123)
+        self.assertIsNone(application.config)
+        self.assertFalse(application.initialization_status.initialized)
+        self.assertIs(
+            application.initialization_status.failure.cause,
+            InitializationCause.CONFIGURATION_INVALID,
+        )
+        self.assertIsInstance(application.initialization_exception, ValueError)
+
+        received = {}
+
+        def degraded_runner(**dependencies):
+            received.update(dependencies)
+            return "degraded"
+
+        self.assertEqual(application.run(runner=degraded_runner), "degraded")
+        self.assertEqual(received["bootstrap_config"].port, 15123)
+        self.assertIs(
+            received["initialization_status"],
+            application.initialization_status,
+        )
+        self.assertNotIn("server_config", received)
+
+    def test_invalid_bootstrap_port_fails_before_application_is_created(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            source = self.make_source(temp_dir, port=70000, period=0.01)
+
+            with self.assertRaisesRegex(ValueError, "port must be in range"):
+                MotionServerApplication.from_source(source, environ={})
+
+    def test_application_reads_project_configuration_file_once(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            source = self.make_source(temp_dir, port=15004, period=0.01)
+            project_path = (Path(temp_dir) / ".env").resolve()
+            from configuration import loader
+
+            original = loader.read_key_value_config
+            project_reads = []
+
+            def tracked_read(path):
+                if Path(path).resolve() == project_path:
+                    project_reads.append(Path(path).resolve())
+                return original(path)
+
+            with patch(
+                "configuration.loader.read_key_value_config",
+                side_effect=tracked_read,
+            ):
+                application = MotionServerApplication.from_source(
+                    source,
+                    environ={},
+                )
+
+        self.assertIsNotNone(application.config)
+        self.assertEqual(project_reads, [project_path])
+
+    def test_bootstrap_and_full_config_use_same_port_snapshot(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            source = self.make_source(temp_dir, port=15005, period=0.01)
+            application = MotionServerApplication.from_source(
+                source,
+                argv=["--port", "16005"],
+                environ={},
+            )
+
+        self.assertEqual(application.bootstrap_config.port, 16005)
+        self.assertEqual(application.config.server.port, 16005)
 
 
 if __name__ == "__main__":

@@ -2,6 +2,7 @@ import json
 import select
 import socket
 import time
+from datetime import datetime, timezone
 
 from configuration.models import CmmtDeviceConfig
 from motion_server.handlers.command.homing import update_homing_state
@@ -25,9 +26,17 @@ from motion_server.diagnostic.startup import (
 )
 from motion_server.diagnostic.runtime import RuntimeDiagnosticMonitor
 from motion_server.app.startup import (
+    build_device_models,
+    close_initialization_resource,
+    connect_bus,
     create_axis_runtime,
     initialize_drive,
     read_startup_axis_sdo,
+)
+from motion_server.app.initialization import (
+    InitializationStage,
+    initialization_failure_from_exception,
+    log_initialization_failure,
 )
 from motion_server.handlers.command.trajectory import (
     update_active as update_active_trajectory,
@@ -36,13 +45,12 @@ from motion_server.control.axis_operations import (
     actual_positions,
     hold_faulted_axes,
 )
-from motion_server.api import (
-    require_uint32,
-)
 from motion_server.api.router import dispatch_message
 from motion_server.app.state import (
+    initial_degraded_state,
     initial_server_state,
 )
+from motion_server.app.session import ServerSession
 from motion_server.app.client_transport import (
     allocate_client_id,
     close_client,
@@ -64,6 +72,10 @@ class ServerResetRequested(Exception):
 
 
 class ServerRestartRequested(Exception):
+    pass
+
+
+class BusReconnectRequested(Exception):
     pass
 
 
@@ -233,6 +245,8 @@ def run_server_loop(server, runtime, state, server_config, ethercat_config):
 
         action = requested_server_action(state)
         if action is not None:
+            for client in clients:
+                close_client(client, runtime, state)
             return action
 
         last_status_log_time = log_status_if_due(
@@ -242,15 +256,12 @@ def run_server_loop(server, runtime, state, server_config, ethercat_config):
         )
 
 
-def run_degraded_server_loop(server, runtime, state, server_config):
+def run_degraded_server_loop(server, state):
     server.setblocking(False)
     clients = []
     next_client_id = 1
-    last_status_log_time = time.monotonic()
-
     print(
-        "Motion Server is running in initialization-error state: "
-        f"{state.get('initialization_error', '')}",
+        "Motion Server degraded server loop is active.",
         flush=True,
     )
 
@@ -268,41 +279,32 @@ def run_degraded_server_loop(server, runtime, state, server_config):
             }
             clients.append(client)
             next_client_id += 1
-            runtime.logger.status(
-                f"Client connected: id={client['id']} addr={addr}"
-            )
+            print(f"Client connected: id={client['id']} addr={addr}", flush=True)
 
         for client in list(clients):
             try:
-                if not service_client(client, runtime, state, dispatch_message):
-                    close_client(client, runtime, state)
+                if not service_client(client, None, state, dispatch_message):
+                    close_client(client, None, state)
                     clients.remove(client)
                     continue
-                send_feedback_if_due(
-                    client,
-                    runtime,
-                    state,
-                    server_config.feedback_period,
-                )
             except (ConnectionError, OSError, json.JSONDecodeError) as exc:
                 print(
                     f"Client error: id={client['id']} error={exc}",
                     flush=True,
                 )
-                close_client(client, runtime, state)
+                close_client(client, None, state)
                 clients.remove(client)
 
         action = requested_server_action(state)
         if action is not None:
+            for client in clients:
+                close_client(client, None, state)
             return action
 
-        last_status_log_time = log_status_if_due(
-            runtime,
-            state,
-            last_status_log_time,
-        )
 
 # Main Entry
+
+MOTION_SERVER_BIND_HOST = "0.0.0.0"
 
 def list_adapters():
     loader = PySOEMMaster(
@@ -320,8 +322,164 @@ def restart_current_process():
     os.execv(sys.executable, [sys.executable, *sys.argv])
 
 
+def initialize_runtime_session(
+    session,
+    *,
+    ethercat_config,
+    motion_config,
+    logging_config,
+    devices,
+):
+    runtime = None
+    stage = InitializationStage.DEVICE_MODEL_BUILD
+    try:
+        axis_count_value = sum(device.role.value == "axis" for device in devices)
+        device_profiles = build_device_models(devices)
+        cmmt_devices = [
+            device.device
+            for device in devices
+            if isinstance(device.device, CmmtDeviceConfig)
+        ]
+        if not cmmt_devices:
+            raise ValueError("Motion Server configuration contains no CMMT axis")
+
+        stage = InitializationStage.RUNTIME_CREATION
+        runtime = create_axis_runtime(
+            ethercat_config,
+            motion_config,
+            logging_config,
+            devices,
+            device_profiles=device_profiles,
+        )
+        session.attach_runtime(runtime)
+
+        stage = InitializationStage.BUS_CONNECTION
+        connect_bus(runtime)
+
+        stage = InitializationStage.DEVICE_INITIALIZATION
+        csp_interpolation_modes = tuple(
+            motion_config.csp_interpolation_mode for _device in cmmt_devices
+        )
+        startup_sdo = initialize_drive(
+            runtime,
+            motion_config.initial_motion_mode,
+            csp_interpolation_modes,
+            read_startup_axis_sdo,
+        )
+    except Exception as exc:
+        fail_runtime_initialization(session, runtime, stage, exc)
+        return None, None
+
+    return runtime, startup_sdo
+
+
+def fail_runtime_initialization(session, runtime, stage, exception):
+    failure = initialization_failure_from_exception(
+        stage,
+        exception,
+        occurred_at=datetime.now(timezone.utc),
+    )
+    session.mark_failed(failure)
+    detect_initialization_fault(session, at=failure.occurred_at)
+    if runtime is not None:
+        close_initialization_resource(runtime)
+        if session.runtime is runtime:
+            session.detach_runtime()
+    log_initialization_failure(failure, exception)
+    return failure
+
+
+def build_initialized_server_state(
+    session,
+    runtime,
+    startup_sdo,
+    *,
+    server_config,
+    ethercat_config,
+    motion_config,
+    axis_count_value,
+):
+    runtime.last_diagnostics = default_diagnostics(
+        axis_count_value,
+        "Panel SDO read pending",
+    )
+    default_software_position_limits = [
+        [-1000000, 1000000] for _ in range(axis_count_value)
+    ]
+    software_position_limits = startup_sdo.get(
+        "software_position_limits",
+        None,
+    ) or default_software_position_limits
+    profile_settings = startup_sdo.get("profile_settings")
+    read_motion_limits_state = startup_sdo.get("motion_limits")
+    user_position_units = startup_sdo.get("user_position_units")
+    converting_unit_exponents = startup_sdo.get(
+        "converting_unit_exponents"
+    )
+    unit_state = {"axis_devices": runtime.device_manager.axes}
+    runtime.device_manager.axes.configure_unit_conversion(
+        user_position_units,
+        converting_unit_exponents,
+    )
+    axis_metadata = runtime.device_manager.axes.unit_metadata()
+    for axis_index in range(axis_count_value):
+        runtime.axis_parameters.update_axis(
+            axis_index,
+            user_position_unit=user_position_units[axis_index],
+            converting_unit_exponents=converting_unit_exponents[axis_index],
+            software_position_limits=software_position_limits[axis_index],
+            profile_settings=profile_settings[axis_index],
+            motion_limits=read_motion_limits_state[axis_index],
+            axis_metadata=axis_metadata[axis_index],
+        )
+    unit_state["axis_metadata"] = axis_metadata
+    axis_position_scales = axis_position_counts_per_api_units(
+        unit_state,
+        axis_count_value,
+    )
+    for axis_index, scale in enumerate(axis_position_scales):
+        runtime.set_axis_position_counts_per_api_unit(axis_index, scale)
+    for axis_index, axis_limits in enumerate(read_motion_limits_state):
+        runtime.slaves[axis_index].motion_server_motion_limits = list(
+            axis_limits
+        )
+        api_axis_limits = motion_limits_drive_to_api(
+            unit_state,
+            axis_index,
+            axis_limits,
+        )
+        runtime.set_axis_motion_limits(
+            axis_index,
+            max(abs(api_axis_limits[0]), abs(api_axis_limits[1])),
+            api_axis_limits[2],
+            api_axis_limits[3],
+            motion_config.csp_jerk,
+        )
+    positions = actual_positions(runtime)
+    state = initial_server_state(
+        server_config,
+        motion_config,
+        ethercat_config.backend.value == "mock",
+        axis_count_value,
+        runtime.device_manager.axes,
+        positions,
+        software_position_limits,
+        profile_settings=profile_settings,
+        motion_limits=read_motion_limits_state,
+        user_position_units=user_position_units,
+        converting_unit_exponents=converting_unit_exponents,
+        axis_metadata=axis_metadata,
+        server_session=session,
+    )
+    state["axis_position_counts_per_unit"] = axis_position_scales
+    state["position_counts_per_unit"] = (
+        axis_position_scales[0] if axis_position_scales else 1.0
+    )
+    return state
+
+
 def run_main_once(
-    diagnostic_manager=None,
+    session,
     *,
     server_config,
     ethercat_config,
@@ -329,215 +487,110 @@ def run_main_once(
     logging_config,
     devices,
 ):
+    if not isinstance(session, ServerSession):
+        raise TypeError("run_main_once requires ServerSession")
     axis_count_value = sum(device.role.value == "axis" for device in devices)
-    if axis_count_value < 1:
-        raise ValueError("MOTION_SERVER_BUS must contain at least one motion axis")
-
-    runtime = create_axis_runtime(
-        ethercat_config,
-        motion_config,
-        logging_config,
-        devices,
-    )
-    if diagnostic_manager is not None:
-        runtime.diagnostic_manager = diagnostic_manager
-
-    cmmt_devices = [
-        device.device
-        for device in devices
-        if isinstance(device.device, CmmtDeviceConfig)
-    ]
-    if not cmmt_devices:
-        raise ValueError("Motion Server configuration contains no CMMT axis")
-    csp_interpolation_modes = tuple(
-        motion_config.csp_interpolation_mode
-        for _device in cmmt_devices
+    runtime, startup_sdo = initialize_runtime_session(
+        session,
+        ethercat_config=ethercat_config,
+        motion_config=motion_config,
+        logging_config=logging_config,
+        devices=devices,
     )
 
     try:
-        drive_initialized = False
-        try:
-            startup_sdo = initialize_drive(
-                runtime,
-                motion_config.initial_motion_mode,
-                csp_interpolation_modes,
-                read_startup_axis_sdo,
-            )
-            drive_initialized = True
-        except Exception as exc:
-            detect_initialization_fault(runtime)
-            initialization_error = str(exc)
-            print(
-                "Drive initialization failed; keeping Motion Server online: "
-                f"{initialization_error}",
-                flush=True,
-            )
-            runtime.close()
-            runtime.last_diagnostics = default_diagnostics(
-                axis_count_value,
-                initialization_error,
-            )
-            software_position_limits = [
-                [0.0, 0.0]
-                for _ in range(axis_count_value)
-            ]
-            profile_settings = None
-            read_motion_limits_state = None
-            user_position_units = None
-            converting_unit_exponents = None
-            positions = [0.0 for _ in range(axis_count_value)]
-            state = initial_server_state(
-                server_config,
-                motion_config,
-                ethercat_config.backend.value == "mock",
-                axis_count_value,
-                runtime.device_manager.axes,
-                positions,
-                software_position_limits,
-                profile_settings=profile_settings,
-                motion_limits=read_motion_limits_state,
-                user_position_units=user_position_units,
-                converting_unit_exponents=converting_unit_exponents,
-                initialized=False,
-                initialization_error=initialization_error,
+        if runtime is None:
+            state = initial_degraded_state(
+                session,
+                server_mode=server_config.mode.value,
             )
         else:
-            runtime.last_diagnostics = default_diagnostics(
-                axis_count_value,
-                "Panel SDO read pending",
-            )
-            default_software_position_limits = [
-                [-1000000, 1000000]
-                for _ in range(axis_count_value)
-            ]
-            software_position_limits = startup_sdo.get(
-                "software_position_limits",
-                None,
-            ) or default_software_position_limits
-            startup_profile_settings = startup_sdo.get("profile_settings", None)
-            startup_motion_limits = startup_sdo.get("motion_limits", None)
-            user_position_units = startup_sdo.get("user_position_units")
-            converting_unit_exponents = startup_sdo.get("converting_unit_exponents")
-            unit_state = {
-                "axis_devices": runtime.device_manager.axes,
-            }
-            runtime.device_manager.axes.configure_unit_conversion(
-                user_position_units,
-                converting_unit_exponents,
-            )
-            axis_metadata = runtime.device_manager.axes.unit_metadata()
-            for axis_index in range(axis_count_value):
-                runtime.axis_parameters.update_axis(
-                    axis_index,
-                    user_position_unit=user_position_units[axis_index],
-                    converting_unit_exponents=converting_unit_exponents[axis_index],
-                    software_position_limits=software_position_limits[axis_index],
-                    profile_settings=startup_profile_settings[axis_index],
-                    motion_limits=startup_motion_limits[axis_index],
-                    axis_metadata=axis_metadata[axis_index],
+            try:
+                state = build_initialized_server_state(
+                    session,
+                    runtime,
+                    startup_sdo,
+                    server_config=server_config,
+                    ethercat_config=ethercat_config,
+                    motion_config=motion_config,
+                    axis_count_value=axis_count_value,
                 )
-            unit_state["axis_metadata"] = axis_metadata
-            axis_position_scales = axis_position_counts_per_api_units(
-                unit_state,
-                axis_count_value,
-            )
-            for axis_index, scale in enumerate(axis_position_scales):
-                runtime.set_axis_position_counts_per_api_unit(
-                    axis_index,
-                    scale,
+            except Exception as exc:
+                fail_runtime_initialization(
+                    session,
+                    runtime,
+                    InitializationStage.DEVICE_INITIALIZATION,
+                    exc,
                 )
-            profile_settings = startup_profile_settings
-            read_motion_limits_state = startup_motion_limits
-            for axis_index, axis_profile_settings in enumerate(profile_settings):
-                slave = runtime.slaves[axis_index]
-                if slave.rxpdo.has_field("profile_velocity"):
-                    slave.rxpdo.profile_velocity = require_uint32(
-                        axis_profile_settings[0],
-                        f"axis {axis_index} profile_velocity",
+                runtime = None
+                state = initial_degraded_state(
+                    session,
+                    server_mode=server_config.mode.value,
+                )
+            else:
+                session.mark_ready()
+                resolve_initialization_fault(session)
+                state["initialization_status"] = session.initialization_status
+                dc_summary = f"dc_enabled={ethercat_config.dc.enabled}"
+                if ethercat_config.dc.enabled:
+                    dc_summary += (
+                        f" dc_phase_lock={ethercat_config.dc.phase_lock}"
+                        f" dc_absolute_shift={ethercat_config.dc.absolute_shift}"
                     )
-            for axis_index, axis_limits in enumerate(read_motion_limits_state):
-                runtime.slaves[axis_index].motion_server_motion_limits = list(axis_limits)
-                api_axis_limits = motion_limits_drive_to_api(
-                    unit_state,
-                    axis_index,
-                    axis_limits,
+                print(
+                    "Drive initialized. "
+                    f"backend={ethercat_config.backend.value} "
+                    f"axes={axis_count_value} "
+                    f"cycle_time={ethercat_config.cycle.period} "
+                    f"spin_wait_time={ethercat_config.cycle.spin_wait_time} "
+                    "axis_position_counts_per_api_unit="
+                    f"{state['axis_position_counts_per_unit']} "
+                    f"csp_profile={motion_config.csp_profile.value} "
+                    f"{dc_summary}",
+                    flush=True,
                 )
-                runtime.set_axis_motion_limits(
-                    axis_index,
-                    max(abs(api_axis_limits[0]), abs(api_axis_limits[1])),
-                    api_axis_limits[2],
-                    api_axis_limits[3],
-                    motion_config.csp_jerk,
-                )
-            positions = actual_positions(runtime)
-            dc_summary = f"dc_enabled={ethercat_config.dc.enabled}"
-            if ethercat_config.dc.enabled:
-                dc_summary += (
-                    f" dc_phase_lock={ethercat_config.dc.phase_lock}"
-                    f" dc_absolute_shift={ethercat_config.dc.absolute_shift}"
-                )
-            print(
-                "Drive initialized. "
-                f"backend={ethercat_config.backend.value} "
-                f"axes={axis_count_value} "
-                f"cycle_time={ethercat_config.cycle.period} "
-                f"spin_wait_time={ethercat_config.cycle.spin_wait_time} "
-                f"axis_position_counts_per_api_unit={axis_position_scales} "
-                f"csp_profile={motion_config.csp_profile.value} "
-                f"{dc_summary} "
-                f"csp_interpolation_modes={[int(value) for value in csp_interpolation_modes]}",
-                flush=True,
-            )
-            state = initial_server_state(
-                server_config,
-                motion_config,
-                ethercat_config.backend.value == "mock",
-                axis_count_value,
-                runtime.device_manager.axes,
-                positions,
-                software_position_limits,
-                profile_settings=profile_settings,
-                motion_limits=read_motion_limits_state,
-                user_position_units=user_position_units,
-                converting_unit_exponents=converting_unit_exponents,
-                axis_metadata=axis_metadata,
-                initialized=True,
-            )
-            state["axis_position_counts_per_unit"] = axis_position_scales
-            state["position_counts_per_unit"] = (
-                axis_position_scales[0]
-                if axis_position_scales
-                else 1.0
-            )
-            resolve_initialization_fault(runtime)
 
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as server:
             server.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-            server.bind((server_config.host, server_config.port))
+            server.bind((MOTION_SERVER_BIND_HOST, server_config.port))
             server.listen(1)
             print(
-                f"Motion Server listening on {server_config.host}:{server_config.port} "
+                f"Motion Server listening on {MOTION_SERVER_BIND_HOST}:{server_config.port} "
                 f"backend={ethercat_config.backend.value} axes={axis_count_value}",
                 flush=True,
             )
-            if drive_initialized:
-                action = run_server_loop(
+            action = (
+                run_server_loop(
                     server, runtime, state, server_config, ethercat_config
                 )
-            else:
-                action = run_degraded_server_loop(
-                    server,
-                    runtime,
-                    state,
-                    server_config,
-                )
-
-            if action == "restart":
-                raise ServerRestartRequested
-            if action == "reset":
-                raise ServerResetRequested
-            if action == "bus_reconnect":
-                raise ServerResetRequested
-
+                if runtime is not None
+                else run_degraded_server_loop(server, state)
+            )
+            raise_server_action(action)
     finally:
-        runtime.close()
+        owned_runtime = session.detach_runtime()
+        if owned_runtime is not None:
+            close_initialization_resource(owned_runtime)
+
+
+def run_configuration_degraded_once(session, bootstrap_config):
+    state = initial_degraded_state(session)
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as server:
+        server.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        server.bind((MOTION_SERVER_BIND_HOST, bootstrap_config.port))
+        server.listen(1)
+        print(
+            f"Motion Server listening on {MOTION_SERVER_BIND_HOST}:"
+            f"{bootstrap_config.port} in configuration-error state",
+            flush=True,
+        )
+        raise_server_action(run_degraded_server_loop(server, state))
+
+
+def raise_server_action(action):
+    if action == "restart":
+        raise ServerRestartRequested
+    if action == "reset":
+        raise ServerResetRequested
+    if action == "bus_reconnect":
+        raise BusReconnectRequested

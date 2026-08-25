@@ -8,6 +8,34 @@
 
 ### 완료
 
+- `TD-018` 완료 리뷰의 P1을 반영하여 cache/unit/MotionController projection과 server state
+  생성이 끝난 뒤에만 Initialization 성공과 Fault resolve를 확정하도록 수정했다. 후처리 실패는
+  runtime을 정리하고 `DEVICE_INITIALIZATION_FAILED` degraded 상태로 전환한다. `0x6081` OD
+  readback은 첫 cyclic exchange 전에 RxPDO command에 동기화하고 Axis restart와 공통 helper를
+  사용하도록 정리했다. 실패 주입과 실행 순서 검사를 포함한 전체 unittest 238개가 통과했다.
+- `TD-018-S05`에서 Initialization API와 server log가 Cause Definition Registry의 동일한
+  stage/cause/message를 사용하도록 통일했다. 단계별 오류 주입, 같은 시각의 Fault 생성,
+  reconnect의 latching Fault resolve-only 동작, reset/reconnect의 DiagnosticManager 소유권
+  차이와 CPX layout/PDO catalog mismatch를 자동 검증했다. 전체 unittest 236개와 source
+  compile 및 diff 검사가 통과하여 `TD-018`을 완료했다.
+- `TD-018-S04`에서 Diagnostic/InitializationStatus/optional runtime을 소유하는 ServerSession과
+  runtime 없는 degraded TCP server를 구현했다. 확정 allowlist와 recovery scope를 적용하고
+  server/bus status를 typed/nullable 계약으로 전환했으며 legacy initialization 문자열 상태를
+  제거했다. 실제 degraded listener 통합 검사를 포함한 전체 unittest 230개와 6축 정상 startup
+  smoke가 통과했다.
+- `TD-018-S03`에서 device model build, runtime creation, bus connection과 device initialization
+  경계를 분리하고 stage 우선 cause mapping을 구현했다. CPX layout/PDO catalog와 필수 parameter
+  readback은 typed cause로 전달하며 runtime factory의 부분 생성 cleanup과 원래 오류 보존 계약을
+  적용했다. 전체 unittest 224개와 source compile, diff 검사 및 6축 Mock staged startup smoke가
+  통과했다.
+- `TD-018-S02`에서 port 전용 Bootstrap configuration과 한 번만 읽는 immutable configuration
+  snapshot을 도입했다. 전체 typed configuration 실패도 bootstrap endpoint와 typed failure를
+  가진 Application으로 보존하고, Motion Server bind host 설정/CLI를 제거하여 `0.0.0.0` 상수로
+  고정했다. 관련 회귀 검사 40개와 전체 unittest 215개, source compile 및 diff 검사가 통과했다.
+- `TD-018-S01`에서 Initialization stage/cause/failure/status와 Cause Definition Registry를
+  구현했다. `DEVICE_MODEL_BUILD` 단계 명칭, 복구 범위 계층과 상태 불변 조건을 단일 typed
+  model로 확정했으며 S01 단위 테스트 10개를 포함한 전체 unittest 210개와 source compile,
+  diff 검사가 통과했다.
 - `TD-014` 후속 보완으로 Windows 환경변수의 대소문자 변형을 설정 파일의 canonical
   key로 병합하여 PowerShell JSON projection 충돌을 제거했다. PowerShell 5.1/7.x
   호환 변환과 실패 시 실행 중단을 적용하고 회귀 검사를 포함한 전체 unittest 194개가

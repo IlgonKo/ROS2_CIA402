@@ -7,7 +7,7 @@ class CommandSpec:
     kind: str
     authority_required: bool = False
     advanced_only: bool = False
-    initialization_error_allowed: bool = False
+    degraded_allowed: bool = False
 
     @property
     def is_command(self):
@@ -26,23 +26,28 @@ def command(
     name,
     authority_required=True,
     advanced_only=False,
-    initialization_error_allowed=False,
+    degraded_allowed=False,
 ):
     return CommandSpec(
         name,
         "command",
         authority_required=authority_required,
         advanced_only=advanced_only,
-        initialization_error_allowed=initialization_error_allowed,
+        degraded_allowed=degraded_allowed,
     )
 
 
-def status(name, advanced_only=False):
-    return CommandSpec(name, "status", advanced_only=advanced_only)
+def status(name, advanced_only=False, degraded_allowed=False):
+    return CommandSpec(
+        name,
+        "status",
+        advanced_only=advanced_only,
+        degraded_allowed=degraded_allowed,
+    )
 
 
 def authority(name):
-    return CommandSpec(name, "authority")
+    return CommandSpec(name, "authority", degraded_allowed=True)
 
 
 COMMAND_SPECS = {
@@ -51,8 +56,8 @@ COMMAND_SPECS = {
         authority("system/authority/request"),
         authority("system/authority/release"),
         authority("system/authority/status"),
-        status("system/server/status"),
-        status("system/bus/status"),
+        status("system/server/status", degraded_allowed=True),
+        status("system/bus/status", degraded_allowed=True),
         status("system/axis/status"),
         status("system/axes/status"),
         status("system/io/status"),
@@ -65,10 +70,10 @@ COMMAND_SPECS = {
         status("system/io/iol/param_catalog"),
         status("system/io/ap/param_read"),
         status("system/io/iol/param_read"),
-        command("system/server/reset", initialization_error_allowed=True),
-        command("system/server/restart", initialization_error_allowed=True),
-        command("system/bus/reconnect", initialization_error_allowed=True),
-        command("system/bus/rescan", initialization_error_allowed=True),
+        command("system/server/reset", degraded_allowed=True),
+        command("system/server/restart", degraded_allowed=True),
+        command("system/bus/reconnect", degraded_allowed=True),
+        command("system/bus/rescan"),
         command("system/axis/enable"),
         command("system/axis/disable"),
         command("system/axis/reset"),
@@ -155,9 +160,9 @@ def advanced_status_message_types():
     }
 
 
-def initialization_error_allowed_command_types():
+def degraded_allowed_message_types():
     return {
         name
         for name, spec in COMMAND_SPECS.items()
-        if spec.initialization_error_allowed
+        if spec.degraded_allowed
     }

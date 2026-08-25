@@ -4,6 +4,8 @@ from types import SimpleNamespace
 from unittest.mock import patch
 
 from motion_server.api.router import route_message
+from motion_server.app.initialization import InitializationStatus
+from motion_server.diagnostic import DiagnosticManager
 
 
 class Connection:
@@ -27,6 +29,14 @@ def runtime(**values):
     return SimpleNamespace(logger=logger, **values)
 
 
+def ready_state(**values):
+    return {
+        "initialization_status": InitializationStatus.ready(),
+        "diagnostic_manager": DiagnosticManager(),
+        **values,
+    }
+
+
 class LiveEnvelopeCutoverTest(unittest.TestCase):
     def test_status_sends_one_success_envelope_with_request_id(self):
         active_client = client()
@@ -38,7 +48,7 @@ class LiveEnvelopeCutoverTest(unittest.TestCase):
                 "request_id": "status-1",
             },
             runtime_value,
-            {},
+            ready_state(),
             active_client,
         )
 
@@ -73,7 +83,7 @@ class LiveEnvelopeCutoverTest(unittest.TestCase):
         response = route_message(
             {"cmd": "system/axis/enable", "axis": 0},
             runtime(),
-            {"command_authority_owner": "client-1"},
+            ready_state(command_authority_owner="client-1"),
             active_client,
         )
 
@@ -83,7 +93,7 @@ class LiveEnvelopeCutoverTest(unittest.TestCase):
 
     def test_command_without_legacy_payload_gets_empty_success(self):
         active_client = client()
-        state = {"command_authority_owner": "client-1"}
+        state = ready_state(command_authority_owner="client-1")
 
         with patch.dict(
             "motion_server.handlers.command.registry.COMMAND_HANDLERS",
@@ -111,7 +121,7 @@ class LiveEnvelopeCutoverTest(unittest.TestCase):
         response = route_message(
             {"cmd": "system/authority/status"},
             runtime(),
-            {"command_authority_owner": None},
+            ready_state(command_authority_owner=None),
             active_client,
         )
 
@@ -122,7 +132,7 @@ class LiveEnvelopeCutoverTest(unittest.TestCase):
 
     def test_unexpected_handler_error_is_hidden_in_fail_envelope(self):
         active_client = client()
-        state = {"command_authority_owner": "client-1"}
+        state = ready_state(command_authority_owner="client-1")
 
         def fail_handler(message, runtime, state, client):
             raise RuntimeError("private implementation detail")

@@ -8,6 +8,8 @@ from motion_server.diagnostic.models import (
 
 def diagnostic_status_snapshot(runtime, *, source=None, source_type=None):
     manager = getattr(runtime, "diagnostic_manager", None)
+    if manager is None and hasattr(runtime, "active_statuses"):
+        manager = runtime
     if manager is None:
         return {
             "level": DiagnosticLevel.NORMAL.value,

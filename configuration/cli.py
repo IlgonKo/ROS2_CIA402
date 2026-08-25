@@ -18,7 +18,6 @@ def parse_cli_overrides(argv=None):
     parser.add_argument("--backend", choices=[item.value for item in BackendType])
     parser.add_argument("--bus")
     parser.add_argument("--server-mode", choices=[item.value for item in ServerMode])
-    parser.add_argument("--host")
     parser.add_argument("--port", type=int)
     parser.add_argument("--cycle-time", type=float)
     parser.add_argument("--spin-wait-time", type=float)
@@ -49,7 +48,6 @@ def parse_cli_overrides(argv=None):
     parser.add_argument("--csp-command-step-error-threshold", type=float)
     args = parser.parse_args(argv)
     overrides = CliOverrides(
-        host=args.host,
         port=args.port,
         backend=None if args.backend is None else BackendType(args.backend),
         interface=args.interface,

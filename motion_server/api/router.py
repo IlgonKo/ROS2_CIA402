@@ -20,6 +20,7 @@ from motion_server.failure import (
     AuthorityRequiredException,
     MotionServerException,
     PartialFailure,
+    InvalidStateException,
     ServerNotReadyException,
     UnknownCommandException,
     UnsupportedOperationException,
@@ -74,7 +75,11 @@ def route_message(message, runtime, state, client):
 
 
 def _route_message_to_handler(message, runtime, state, client):
-    if runtime.logger.config.command.enabled:
+    if (
+        runtime is not None
+        and runtime.logger is not None
+        and runtime.logger.config.command.enabled
+    ):
         import json
 
         runtime.logger.command(
@@ -103,7 +108,13 @@ def _route_message_to_handler(message, runtime, state, client):
             raise AuthorityRequiredException()
         raise AuthorityBusyException(owner)
     if validation_error == "not_initialized":
-        raise ServerNotReadyException(state.get("initialization_error"))
+        failure = state["initialization_status"].failure
+        raise ServerNotReadyException(failure.message)
+    if validation_error == "invalid_recovery_scope":
+        raise InvalidStateException(
+            operation=message_type,
+            state=state["initialization_status"].failure.stage.value,
+        )
 
     if spec.is_authority:
         return handle_authority(message_type, client, state, runtime)

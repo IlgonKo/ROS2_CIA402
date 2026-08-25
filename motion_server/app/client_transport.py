@@ -41,14 +41,18 @@ def close_client(client, runtime, state):
     client_id = client["id"]
     if state.get("command_authority_owner") == client_id:
         state["command_authority_owner"] = None
-        runtime.logger.status(
-            f"Command authority released because client {client_id} disconnected",
-        )
+        logger = getattr(runtime, "logger", None)
+        if logger is not None:
+            logger.status(
+                f"Command authority released because client {client_id} disconnected",
+            )
     try:
         client["conn"].close()
     except OSError:
         pass
-    runtime.logger.status(f"Client disconnected: id={client_id}")
+    logger = getattr(runtime, "logger", None)
+    if logger is not None:
+        logger.status(f"Client disconnected: id={client_id}")
 
 
 def allocate_client_id(clients):

@@ -5,6 +5,7 @@ from configuration.loader import ConfigurationModel
 from configuration.bus import parse_bus_config
 from configuration.models import (
     BackendType,
+    BootstrapServerConfig,
     BusDeviceConfig,
     CmmtDeviceConfig,
     CommandLogConfig,
@@ -35,7 +36,6 @@ from device.cmmt.non_pdo_configuration import get_non_pdo_configuration
 
 @dataclass(frozen=True)
 class CliOverrides:
-    host: str | None = None
     port: int | None = None
     backend: BackendType | None = None
     interface: str | None = None
@@ -60,15 +60,31 @@ class CliOverrides:
     csp_command_step_threshold: float | None = None
     csp_command_step_error_threshold: float | None = None
 
+def build_bootstrap_server_config(source, cli=None):
+    values = source.values
+    cli = cli or CliOverrides()
+    config = BootstrapServerConfig(
+        port=(
+            cli.port
+            if cli.port is not None
+            else integer(values, "MOTION_SERVER_PORT", 15000)
+        ),
+    )
+    if not 1 <= config.port <= 65535:
+        raise ValueError("Motion Server port must be in range 1..65535")
+    return config
+
+
 def build_motion_server_config(
     source: ConfigurationModel,
     cli: CliOverrides | None = None,
+    bootstrap: BootstrapServerConfig | None = None,
 ):
     values = source.values
     cli = cli or CliOverrides()
+    bootstrap = bootstrap or build_bootstrap_server_config(source, cli)
     server = ServerConfig(
-        host=cli.host if cli.host is not None else value(values, "MOTION_SERVER_HOST", "0.0.0.0"),
-        port=cli.port if cli.port is not None else integer(values, "MOTION_SERVER_PORT", 15000),
+        port=bootstrap.port,
         mode=cli.server_mode or enum_value(ServerMode, value(values, "MOTION_SERVER_MODE", "basic")),
         feedback_period=number(values, "MOTION_SERVER_FEEDBACK_PERIOD", 0.05),
         axis_restart_disable_settle_time=number(
@@ -301,8 +317,6 @@ def build_cpx_config(values, bus_device):
 
 
 def validate_motion_server_config(config):
-    if not 1 <= config.server.port <= 65535:
-        raise ValueError("Motion Server port must be in range 1..65535")
     if config.server.feedback_period <= 0.0:
         raise ValueError("Motion Server feedback period must be > 0")
     if config.server.axis_restart_disable_settle_time < 0.0:

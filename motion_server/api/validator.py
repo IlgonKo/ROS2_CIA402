@@ -37,11 +37,25 @@ def command_allowed_by_mode(spec, state):
     return not spec.advanced_only or is_advanced_mode(state)
 
 
-def command_allowed_during_initialization_error(spec, state):
-    return (
-        state.get("drive_initialized", True)
-        or not spec.is_command
-        or spec.initialization_error_allowed
+def initialization_status(state):
+    status = state.get("initialization_status")
+    if not isinstance(status, InitializationStatus):
+        raise RuntimeError("Server state has no InitializationStatus")
+    return status
+
+
+def command_allowed_during_degraded_state(spec, state):
+    status = initialization_status(state)
+    return status.initialized or spec.degraded_allowed
+
+
+def recovery_scope_allowed(spec, state):
+    status = initialization_status(state)
+    if status.initialized or spec.name not in RECOVERY_COMMAND_SCOPES:
+        return True
+    return recovery_action_allowed(
+        status.failure.stage,
+        RECOVERY_COMMAND_SCOPES[spec.name],
     )
 
 
@@ -54,8 +68,22 @@ def validate_command(spec, client, state, has_authority):
         return "unknown"
     if not command_allowed_by_mode(spec, state):
         return "advanced_only"
+    if not command_allowed_during_degraded_state(spec, state):
+        return "not_initialized"
+    if not recovery_scope_allowed(spec, state):
+        return "invalid_recovery_scope"
     if command_requires_authority(spec) and not has_authority:
         return "authority_required"
-    if not command_allowed_during_initialization_error(spec, state):
-        return "not_initialized"
     return None
+from motion_server.app.initialization import (
+    InitializationRecoveryScope,
+    InitializationStatus,
+    recovery_action_allowed,
+)
+
+
+RECOVERY_COMMAND_SCOPES = {
+    "system/bus/reconnect": InitializationRecoveryScope.BUS_RECONNECT,
+    "system/server/reset": InitializationRecoveryScope.SERVER_RESET,
+    "system/server/restart": InitializationRecoveryScope.SERVER_RESTART,
+}

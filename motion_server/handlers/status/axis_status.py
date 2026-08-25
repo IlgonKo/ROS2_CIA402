@@ -35,8 +35,6 @@ def axis_status_message(runtime, state, axis_index, client_id=None):
     return {
         "type": "system/axis/status",
         "axis": axis_index,
-        "drive_initialized": bool(state.get("drive_initialized", True)),
-        "initialization_error": state.get("initialization_error", ""),
         "target_position": axis_position_drive_to_api(
             state,
             axis_index,
@@ -123,8 +121,6 @@ def axes_status_message(runtime, state, client_id=None):
     owner = state.get("command_authority_owner")
     return {
         "type": "system/axes/status",
-        "drive_initialized": bool(state.get("drive_initialized", True)),
-        "initialization_error": state.get("initialization_error", ""),
         "target_positions": [
             axis_position_drive_to_api(state, axis_index, value)
             for axis_index, value in enumerate(state["target_positions"])

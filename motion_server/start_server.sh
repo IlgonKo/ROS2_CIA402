@@ -57,7 +57,6 @@ SERVER_CMD=(
   --backend "${BACKEND}" \
   --server-mode "${SERVER_MODE}" \
   --bus "${BUS}" \
-  --host 0.0.0.0 \
   --port "${PORT}" \
   --cycle-time "${CYCLE_TIME}" \
   --spin-wait-time "${SPIN_WAIT_TIME}" \

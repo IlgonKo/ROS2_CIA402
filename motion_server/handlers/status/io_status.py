@@ -8,8 +8,6 @@ def io_status_message(runtime, state, include_raw=False):
     return {
         "type": "system/io/status",
         "ok": True,
-        "drive_initialized": bool(state.get("drive_initialized", True)),
-        "initialization_error": state.get("initialization_error", ""),
         "io_count": len(io_devices(runtime)),
         "devices": [
             io_device_snapshot(device, include_raw=include_raw)

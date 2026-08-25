@@ -331,14 +331,14 @@ Tech Debt 상태 값은 `open`, `in_progress`, `complete`를 사용한다.
 
 ### TD-018 Runtime 생성 단계 Initialization Error 처리
 
-- 상태: `open`
+- 상태: `complete`
 - 우선순위: 높음
 - 요약: runtime 생성 오류에서도 진단과 복구 API를 제공하는 degraded server를 유지한다.
 - 완료 조건:
   - configuration/profile/catalog 검증 실패가 initialization-error 상태로 표현된다.
   - runtime 생성 실패 후에도 TCP server와 진단·reset·reconnect API가 응답한다.
   - API와 server log가 동일한 원인 식별자와 오류 메시지를 제공한다.
-  - mock 오류 주입과 대표 CPX 설정 오류의 자동 복구 테스트가 통과한다.
+  - mock 단계별 오류 주입, reconnect/reset lifecycle과 대표 CPX 설정 오류 테스트가 통과한다.
 - 상세: [TD-018 기술 명세](tasks/td/TD-018-runtime-initialization-error.md)
 
 ### TD-019 프로젝트·저장소 및 설치 경로 변경

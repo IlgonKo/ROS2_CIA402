@@ -3,6 +3,12 @@ from motion_server.failure import AuthorityBusyException, AuthorityRequiredExcep
 from motion_server.handlers.authority.status import authority_status_payload
 
 
+def log_authority(runtime, message):
+    logger = getattr(runtime, "logger", None)
+    if logger is not None:
+        logger.status(message)
+
+
 def acquire_authority(client, state, runtime):
     owner = state.get("command_authority_owner")
     if owner is None or owner == client["id"]:
@@ -14,10 +20,11 @@ def acquire_authority(client, state, runtime):
             if owner is None
             else "This connection already owns command authority."
         )
-        runtime.logger.status(f"Command authority granted to client {client['id']}")
+        log_authority(runtime, f"Command authority granted to client {client['id']}")
         return _authority_data(payload)
 
-    runtime.logger.status(
+    log_authority(
+        runtime,
         f"Command authority denied to client {client['id']}; owner={owner}",
     )
     raise AuthorityBusyException(owner)
@@ -29,7 +36,7 @@ def release_authority(client, state, runtime):
         state["command_authority_owner"] = None
         reason = None
         message = "Command authority released."
-        runtime.logger.status(f"Command authority released by client {client['id']}")
+        log_authority(runtime, f"Command authority released by client {client['id']}")
     elif owner is None:
         reason = "authority_required"
         message = "This connection does not hold command authority."

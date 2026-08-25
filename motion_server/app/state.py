@@ -38,9 +38,10 @@ def initial_server_state(
     user_position_units=None,
     converting_unit_exponents=None,
     axis_metadata=None,
-    initialized=True,
-    initialization_error="",
+    server_session=None,
 ):
+    if server_session is None:
+        raise TypeError("Initial server state requires ServerSession")
     if motion_limits is None:
         motion_limits = [[0.0, 0.0, 0.0, 0.0] for _ in range(axis_count_value)]
     if profile_settings is None:
@@ -60,9 +61,10 @@ def initial_server_state(
         axis_count_value,
     )
     return {
+        "server_session": server_session,
+        "diagnostic_manager": server_session.diagnostic_manager,
+        "initialization_status": server_session.initialization_status,
         "axis_devices": axis_devices,
-        "drive_initialized": bool(initialized),
-        "initialization_error": initialization_error,
         "server_mode": server_config.mode.value,
         "axis_restart_disable_settle_time": (
             server_config.axis_restart_disable_settle_time
@@ -90,5 +92,15 @@ def initial_server_state(
         "last_trajectory_complete_time": None,
         "homing": inactive_homing_state(),
         "jog_previous_modes": [None for _ in range(axis_count_value)],
+        "command_authority_owner": None,
+    }
+
+
+def initial_degraded_state(server_session, server_mode="basic"):
+    return {
+        "server_session": server_session,
+        "diagnostic_manager": server_session.diagnostic_manager,
+        "initialization_status": server_session.initialization_status,
+        "server_mode": str(server_mode),
         "command_authority_owner": None,
     }

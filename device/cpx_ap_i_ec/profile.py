@@ -5,6 +5,10 @@ from device.cpx_ap_i_ec.io_link_variants import configure_io_link_variants
 from device.cpx_ap_i_ec.pdo import CPXRxPDO, CPXTxPDO
 from device.cpx_ap_i_ec.pdo_codec import CPXPdoCodec
 from device.cpx_ap_i_ec.pdo_configuration import cpx_pdo_configuration
+from device.exceptions import (
+    DeviceLayoutInvalidException,
+    PdoCatalogMismatchException,
+)
 
 
 class CPXApIEcDeviceProfile:
@@ -30,9 +34,15 @@ class CPXApIEcDeviceProfile:
             f"{port.selector}:{port.device_name}"
             for port in device_config.io_link_ports
         )
-        self.config = build_cpx_io_config(io_id, raw_modules, raw_ports)
+        try:
+            self.config = build_cpx_io_config(io_id, raw_modules, raw_ports)
+        except (TypeError, ValueError) as exc:
+            raise DeviceLayoutInvalidException() from exc
         self.pdo_configuration = cpx_pdo_configuration(self.config)
-        self.pdo_configuration.validate_catalog_support(self.esi_catalog)
+        try:
+            self.pdo_configuration.validate_catalog_support(self.esi_catalog)
+        except (KeyError, RuntimeError, TypeError, ValueError) as exc:
+            raise PdoCatalogMismatchException() from exc
 
     def create_rxpdo(self):
         return CPXRxPDO(self.config)

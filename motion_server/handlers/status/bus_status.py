@@ -3,13 +3,31 @@ from motion_server.diagnostic.serialization import diagnostic_status_snapshot
 
 
 def bus_status_message(runtime, state):
+    if runtime is None:
+        return {
+            "type": "system/bus/status",
+            "ok": True,
+            "available": False,
+            "connected": False,
+            "device_count": None,
+            "axis_count": None,
+            "wkc": None,
+            "expected_wkc": None,
+            "wkc_ok": None,
+            "statuswords": None,
+            "mode_displays": None,
+            "diagnostic_status": diagnostic_status_snapshot(
+                state["diagnostic_manager"],
+                source_type=DiagnosticSourceType.BUS,
+            ),
+        }
     expected_wkc = runtime.expected_wkc()
     actual_wkc = int(getattr(runtime, "wkc", 0))
     return {
         "type": "system/bus/status",
         "ok": True,
-        "drive_initialized": bool(state.get("drive_initialized", True)),
-        "initialization_error": state.get("initialization_error", ""),
+        "available": True,
+        "connected": True,
         "device_count": len(runtime.ethercat_devices),
         "axis_count": len(runtime.slaves),
         "wkc": actual_wkc,

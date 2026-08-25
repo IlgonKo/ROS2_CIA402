@@ -434,6 +434,69 @@ Device Profile + ESI
   확장은 TD-025에서 처리한다. 실제 restart 완료 감지와 EtherCAT recovery는 RF-005가
   책임진다.
 
+## DEC-025 Bootstrap 이후 초기화 실패에서 Degraded Server 유지
+
+- 상태: `accepted`
+- 결정일: 2026-08-25
+- 결정:
+  - Motion Server 설정은 같은 raw snapshot으로 bootstrap과 전체 typed configuration을
+    순서대로 구성한다.
+  - bootstrap 설정은 TCP port만 소유하고 bind host는 설정에서 제거하여 항상 `0.0.0.0`을
+    사용한다.
+  - bootstrap 또는 TCP bind/listen 실패는 process startup failure로 처리하고, 그 이후의
+    configuration/profile/catalog/runtime/drive 초기화 실패는 `runtime=None`을 허용하는
+    degraded server 상태로 표현한다.
+  - 초기화 실패는 stage와 안정적인 cause identifier를 사용하고
+    `SERVER_INITIALIZATION_FAILED` Diagnostic과 연결한다.
+  - 현재 상태는 `InitializationStatus`, 실패 내용은 `InitializationFailure`, 절차 위치는
+    `InitializationStage`, 안정적인 식별자는 `InitializationCause`로 모델링한다. 기존
+    `initialization_error` 문자열은 제거한다.
+  - device profile, ESI/PDO catalog, module layout과 device instance model 구성 절차의 stage는
+    객체 이름처럼 보이는 `DEVICE_PROFILE` 대신 `DEVICE_MODEL_BUILD`를 사용한다. 이 단계의
+    분류되지 않은 일반 실패 cause는 `DEVICE_MODEL_BUILD_FAILED`로 맞춘다.
+  - `InitializationCause`를 Definition Registry의 key로 사용하고 definition은 `stage`와
+    `message`만 소유한다. key와 중복되는 `cause` field 및 override 가능성을 암시하는
+    `default_stage`/`default_message` 명칭은 사용하지 않는다.
+  - degraded 상태에는 상태·Diagnostic·복구 API만 제공하며 장치 API는
+    `SERVER_NOT_READY`를 반환한다.
+  - degraded 허용 목록은 authority request/release/status, server/bus status, server
+    reset/restart와 bus reconnect로 제한한다. bus rescan과 모든 axis/axes/IO API는
+    제외한다.
+  - server status는 `initialized`와 typed `initialization_failure`를 사용하고 기존
+    `drive_initialized`, `initialization_error`와 `axis_count`를 제거한다. bus status는 runtime이
+    없을 때도 응답하되 `available=false`, `connected=false`와 측정 불가능한 field의 `null`을
+    사용한다.
+  - reset/reconnect는 기존 typed configuration으로 재초기화하고, 설정 재로딩은 process
+    restart만 수행한다. 재초기화 중 기존 TCP listener와 client connection은 유지하지 않는다.
+  - server reset과 process restart는 Diagnostic 저장소를 초기화한다. bus reconnect는 기존
+    `DiagnosticManager`를 유지하고 해결된 Initialization Fault를 resolve까지만 처리하며,
+    acknowledge/clear는 RF-005의 공통 Fault API가 담당한다.
+  - 초기화 복구는 `BUS_RECONNECT < SERVER_RESET < SERVER_RESTART` 범위 계층으로 정의한다.
+    configuration/device-profile은 restart, runtime-creation은 reset, bus-connection과
+    device-initialization은 reconnect를 최소 필요 범위로 갖는다. 더 넓은 범위의 명령도
+    허용하며 stage별 command 집합을 중복 관리하지 않는다.
+  - 생성 함수는 객체를 반환하기 전까지 외부 자원 정리도 소유하고, 반환 후에는 Server
+    Session이 AxisRuntime을 소유한다. 실패한 runtime은 idempotent `close()` 후 폐기하여 degraded
+    context에는 `runtime=None`만 남긴다.
+  - cleanup exception은 원래 Initialization Failure를 대체하지 않고 별도 내부 log로 남긴다.
+    `DiagnosticManager`는 Server Session이 소유하며 server reset에서는 교체하고 bus reconnect에서는
+    유지한다.
+  - exception-to-cause 변환은 전역 exception type이 아니라 명시적인 initialization stage
+    boundary를 우선한다. 구체 원인은 검출 지점의 typed `InitializationException(cause)`로
+    전달하고 문자열 분석은 사용하지 않는다. Registry message만 API에 노출하며 원본 exception과
+    traceback은 최상위 initialization boundary에서 한 번만 기록한다.
+- 이유: 전체 runtime 설정이 잘못되어도 사용자가 동일한 API로 실패 원인을 확인하고 복구를
+  요청할 수 있어야 하지만, 진단을 위해 불완전한 runtime을 꾸며내거나 설정 snapshot을
+  중복 파싱해서는 안 된다.
+- 검토한 대안:
+  - 모든 설정 실패를 process 종료로 처리하는 방식은 원격 진단과 복구 API를 제공하지 못한다.
+  - runtime 재초기화 중 TCP listener와 client connection을 유지하는 hot replacement는
+    lifecycle 및 동시성 복잡도를 증가시키므로 채택하지 않는다.
+  - bind host를 bootstrap 사용자 설정으로 유지하는 방식은 현재 배포 계약에 불필요하므로
+    채택하지 않는다.
+- 영향: TD-018에서 bootstrap config, initialization status, degraded context와 오류 주입
+  테스트를 구현한다. runtime fault와 연결 유지 복구 정책의 추가 확장은 RF-005가 담당한다.
+
 ## 새 결정 작성 양식
 
 ```text

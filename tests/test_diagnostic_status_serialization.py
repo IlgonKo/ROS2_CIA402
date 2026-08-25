@@ -13,6 +13,7 @@ from motion_server.diagnostic import (
     diagnostic_status_snapshot,
 )
 from motion_server.handlers.status.server_status import server_status_message
+from motion_server.app.initialization import InitializationStatus
 
 
 NOW = datetime(2026, 8, 21, 1, 2, 3, tzinfo=timezone.utc)
@@ -103,7 +104,13 @@ class DiagnosticStatusSerializationTest(unittest.TestCase):
             at=NOW,
         )
 
-        data = server_status_message(runtime(manager), {})
+        data = server_status_message(
+            runtime(manager),
+            {
+                "initialization_status": InitializationStatus.ready(),
+                "diagnostic_manager": manager,
+            },
+        )
 
         self.assertEqual(data["diagnostic_status"]["level"], "fault")
         self.assertEqual(

@@ -87,6 +87,8 @@ timeout/short payload는 후속 반복 이상 정책에서 Alarm 승격 여부�
 | `motion_server/handlers/parameter_access/*` | 3 | API Fail / Diagnostic 연계 | EtherCAT/AP/IOL validation, protocol, transport를 분리하고 handler 문자열 응답 제거 |
 | `motion_server/handlers/status/*` | 5 | API Fail / Partial Failure | selector/지원 여부는 typed Fail, 여러 field/device 조회는 partial 결과 정책 사용 |
 | `motion_server/server.py` | 1 | Fault / Internal only | initialization boundary는 Fault 생성, client socket boundary는 연결 정리, restart/reset control exception 유지 |
+| `motion_server/application.py` | 1 | Fault | bootstrap 이후 전체 configuration build의 최상위 boundary에서 예상·미예상 Exception을 typed Initialization Failure로 변환하고 degraded server에 전달 |
+| `motion_server/app/startup.py` runtime factory/cleanup | 2 | Fault / Internal only | factory 반환 전 부분 생성 자원을 정리하고 원래 Initialization Failure를 보존하며 cleanup 실패는 내부 traceback으로만 기록 |
 | `ros/*` | 2 | Internal only | ROS/UI 입력 오류와 reconnect boundary이며 server Fail/Diagnostic을 구조화 전달 |
 
 ## Broad Catch 85곳 판정

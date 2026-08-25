@@ -1,6 +1,11 @@
 import time
+import logging
 
 from device.capabilities import DeviceCapability
+from device.exceptions import (
+    DeviceLayoutInvalidException,
+    PdoCatalogMismatchException,
+)
 
 from motion_server.control.pdo_contract import (
     require_pdo_fields_for_mode,
@@ -24,15 +29,64 @@ from motion_server.control.motion_controller import MotionController
 from motion_server.control.axis_units import motion_limits_drive_to_api
 from motion_server.api import require_uint32
 from motion_server.runtime_logging import RuntimeLogger
+from motion_server.app.initialization import (
+    InitializationCause,
+    InitializationException,
+)
 
-def create_axis_runtime(ethercat, motion, logging, devices):
-    runtime_logger = RuntimeLogger(logging)
+
+LOGGER = logging.getLogger(__name__)
+
+
+def build_device_models(devices):
+    profiles = []
+    for device in devices:
+        try:
+            profiles.append(get_device_profile_for_device(device))
+        except DeviceLayoutInvalidException as exc:
+            raise InitializationException(
+                InitializationCause.DEVICE_LAYOUT_INVALID
+            ) from exc
+        except PdoCatalogMismatchException as exc:
+            raise InitializationException(
+                InitializationCause.PDO_CATALOG_MISMATCH
+            ) from exc
+    return tuple(profiles)
+
+
+def close_initialization_resource(resource, *, logger=None):
+    if resource is None:
+        return None
+    logger = logger or LOGGER
+    try:
+        resource.close()
+    except Exception as exc:
+        logger.exception(
+            "Initialization resource cleanup failed: resource=%s",
+            type(resource).__name__,
+        )
+        return exc
+    return None
+
+
+def create_axis_runtime(
+    ethercat,
+    motion,
+    logging_config,
+    devices,
+    *,
+    device_profiles=None,
+):
+    runtime_logger = RuntimeLogger(logging_config)
     sync_mode = ethercat.sync_mode
     device_profile_names = [device.profile_name for device in devices]
-    device_profiles = [
-        get_device_profile_for_device(device)
-        for device in devices
-    ]
+    device_profiles = list(
+        device_profiles
+        if device_profiles is not None
+        else build_device_models(devices)
+    )
+    if len(device_profiles) != len(devices):
+        raise ValueError("Device model count must match configured device count")
     axis_slave_indices = [
         device.slave_index
         for device in devices
@@ -53,69 +107,70 @@ def create_axis_runtime(ethercat, motion, logging, devices):
         for axis_index, slave_index in enumerate(axis_slave_indices)
     ]
 
-    if ethercat.backend.value == "mock":
-        if axis_slave_indices != list(range(axis_count_value)) or (
-            len(device_profile_names) != axis_count_value
-        ):
-            raise ValueError(
-                "mock backend supports only one-to-one axis/slave mapping"
-            )
-        slaves = []
-        for axis_index in range(axis_count_value):
-            device_profile = device_profiles[axis_index]
-            servo = VirtualCiA402Servo(
-                cycle_time=ethercat.cycle.period,
-                device_profile=device_profile,
-            )
-            slaves.append(MockSlave(
-                servo,
-                device_profile,
-            ))
+    master = None
+    device_manager = None
+    try:
+        if ethercat.backend.value == "mock":
+            if axis_slave_indices != list(range(axis_count_value)) or (
+                len(device_profile_names) != axis_count_value
+            ):
+                raise ValueError(
+                    "mock backend supports only one-to-one axis/slave mapping"
+                )
+            slaves = []
+            for axis_index in range(axis_count_value):
+                device_profile = device_profiles[axis_index]
+                servo = VirtualCiA402Servo(
+                    cycle_time=ethercat.cycle.period,
+                    device_profile=device_profile,
+                )
+                slaves.append(MockSlave(
+                    servo,
+                    device_profile,
+                ))
 
-        ethercat_master = MockMaster(
-            slaves,
-            cycle_time=ethercat.cycle.period,
-        )
+            master = MockMaster(
+                slaves,
+                cycle_time=ethercat.cycle.period,
+            )
+        else:
+            master = PySOEMMaster(
+                interface_name=ethercat.interface,
+                device_profiles=device_profiles,
+                cycle_time=ethercat.cycle.period,
+                sync_mode=sync_mode,
+                dc_enabled=ethercat.dc.enabled,
+                dc_sync0_shift_time=ethercat.dc.sync0_shift_time_ns,
+            )
         motion_controller = MotionController(
             axis_count_value,
             ethercat.cycle.period,
             csp_velocity_offset_enabled=motion.csp_velocity_offset,
-            csp_command_step_threshold=logging.csp_command_step.step_threshold,
-            csp_command_step_error_threshold=logging.csp_command_step.error_threshold,
+            csp_command_step_threshold=(
+                logging_config.csp_command_step.step_threshold
+            ),
+            csp_command_step_error_threshold=(
+                logging_config.csp_command_step.error_threshold
+            ),
             csp_profile=motion.csp_profile.value,
         )
-        device_manager = DeviceManager(ethercat_master, axis_bindings)
+        device_manager = DeviceManager(master, axis_bindings)
         runtime = AxisRuntime(
             device_manager,
             motion_controller,
             runtime_logger=runtime_logger,
         )
-        require_pdo_fields_for_mode(runtime, motion.initial_motion_mode)
-        require_txpdo_fields(runtime)
+        if ethercat.backend.value == "mock":
+            require_pdo_fields_for_mode(runtime, motion.initial_motion_mode)
+            require_txpdo_fields(runtime)
         return runtime
+    except Exception:
+        close_initialization_resource(device_manager or master)
+        raise
 
-    ethercat_master = PySOEMMaster(
-        interface_name=ethercat.interface,
-        device_profiles=device_profiles,
-        cycle_time=ethercat.cycle.period,
-        sync_mode=sync_mode,
-        dc_enabled=ethercat.dc.enabled,
-        dc_sync0_shift_time=ethercat.dc.sync0_shift_time_ns,
-    )
-    motion_controller = MotionController(
-        axis_count_value,
-        ethercat.cycle.period,
-        csp_velocity_offset_enabled=motion.csp_velocity_offset,
-        csp_command_step_threshold=logging.csp_command_step.step_threshold,
-        csp_command_step_error_threshold=logging.csp_command_step.error_threshold,
-        csp_profile=motion.csp_profile.value,
-    )
-    device_manager = DeviceManager(ethercat_master, axis_bindings)
-    return AxisRuntime(
-        device_manager,
-        motion_controller,
-        runtime_logger=runtime_logger,
-    )
+
+def connect_bus(runtime):
+    runtime.connect(target_state="preop")
 
 
 def get_device_profile_for_slave(
@@ -253,9 +308,13 @@ def read_startup_axis_sdo(runtime):
         "motion_limits": read_axis_motion_limits(runtime),
     }
     if any(item is None for item in values["user_position_units"]):
-        raise RuntimeError("Required axis user position unit readback failed")
+        raise InitializationException(
+            InitializationCause.REQUIRED_PARAMETER_READ_FAILED
+        )
     if any(item is None for item in values["converting_unit_exponents"]):
-        raise RuntimeError("Required axis converting unit readback failed")
+        raise InitializationException(
+            InitializationCause.REQUIRED_PARAMETER_READ_FAILED
+        )
     values["profile_settings"] = [
         item if item is not None else [0.0, 0.0, 0.0, 0.0]
         for item in values["profile_settings"]
@@ -357,20 +416,47 @@ def refresh_axis_parameter_cache(runtime, axis_index):
         current_jerk,
     )
     runtime.slaves[axis_index].motion_server_motion_limits = list(motion_limits)
-    if runtime.slaves[axis_index].rxpdo.has_field("profile_velocity"):
-        runtime.slaves[axis_index].rxpdo.profile_velocity = require_uint32(
-            profile_settings[0], f"axis {axis_index} profile_velocity"
-        )
+    synchronize_profile_velocity_command(
+        runtime,
+        axis_index,
+        profile_settings,
+    )
     return runtime.axis_parameters.axes[axis_index]
+
+
+def synchronize_profile_velocity_command(runtime, axis_index, profile_settings):
+    """Seed an outgoing PDO command from authoritative device readback."""
+    slave = runtime.slaves[axis_index]
+    if slave.rxpdo.has_field("profile_velocity"):
+        slave.rxpdo.profile_velocity = require_uint32(
+            profile_settings[0],
+            f"axis {axis_index} profile_velocity",
+        )
+
+
+def synchronize_startup_profile_velocity_commands(runtime, startup_sdo):
+    if startup_sdo is None:
+        return
+    for axis_index, profile_settings in enumerate(
+        startup_sdo["profile_settings"]
+    ):
+        synchronize_profile_velocity_command(
+            runtime,
+            axis_index,
+            profile_settings,
+        )
 
 
 def initialize_drive(runtime, motion_mode, csp_interpolation_modes, startup_sdo_reader=None):
     startup_sdo = None
-    runtime.connect(target_state="preop")
     require_txpdo_fields(runtime)
     clear_axis_restart_commands(runtime)
     if startup_sdo_reader is not None:
         startup_sdo = startup_sdo_reader(runtime)
+        # RxPDO is the outgoing process image. Seed mapped parameter commands
+        # before the first cyclic exchange so zero-filled buffers cannot
+        # overwrite authoritative device OD values.
+        synchronize_startup_profile_velocity_commands(runtime, startup_sdo)
     write_csp_interpolation_modes(runtime, csp_interpolation_modes)
     if motion_mode == "pv":
         user_position_units = (

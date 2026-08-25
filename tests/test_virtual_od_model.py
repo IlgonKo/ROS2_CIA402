@@ -26,6 +26,10 @@ from motion_server.app.startup import (
     read_startup_axis_sdo,
     refresh_axis_parameter_cache,
 )
+from motion_server.app.initialization import (
+    InitializationCause,
+    InitializationException,
+)
 from motion_server.handlers.command.axis_settings import (
     set_software_position_limits,
     update_axis_motion_limits,
@@ -391,7 +395,7 @@ class VirtualOdModelTest(unittest.TestCase):
             ("read_axis_user_position_units", [None], "user position unit"),
             ("read_axis_converting_unit_exponents", [None], "converting unit"),
         )
-        for function_name, failed_value, expected_message in cases:
+        for function_name, failed_value, _expected_message in cases:
             with self.subTest(function_name=function_name), patch.multiple(
                 "motion_server.app.startup",
                 read_axis_user_position_units=DEFAULT,
@@ -407,8 +411,12 @@ class VirtualOdModelTest(unittest.TestCase):
                 readers["read_axis_motion_limits"].return_value = [[1, -1, 2, 2]]
                 readers[function_name].return_value = failed_value
 
-                with self.assertRaisesRegex(RuntimeError, expected_message):
+                with self.assertRaises(InitializationException) as raised:
                     read_startup_axis_sdo(object())
+                self.assertIs(
+                    raised.exception.cause,
+                    InitializationCause.REQUIRED_PARAMETER_READ_FAILED,
+                )
 
     def test_invalid_configuration_is_a_startup_error(self):
         with self.assertRaisesRegex(ValueError, "Unsupported test configuration"):
