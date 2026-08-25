@@ -165,7 +165,7 @@ class AxisServerClient:
                 "system/axis/param_catalog",
                 "system/axis/param_save",
                 "system/axis/restart",
-                "system/server/reset",
+                "system/server/fault_reset",
                 "system/server/restart",
                 "system/bus/reconnect",
             }:
@@ -583,10 +583,10 @@ class AxisServerClient:
         for axis_index in axes:
             self.send_homing_start(axis_index)
 
-    def send_axis_reset(self, axis_index):
+    def send_axis_fault_reset(self, axis_index):
         self.send_json(
             {
-                "cmd": "system/axis/reset",
+                "cmd": "system/axis/fault_reset",
                 "axis": int(axis_index),
             }
         )
@@ -599,10 +599,10 @@ class AxisServerClient:
             }
         )
 
-    def send_axes_reset(self, axes):
+    def send_axes_fault_reset(self, axes):
         self.send_json(
             {
-                "cmd": "system/axes/reset",
+                "cmd": "system/axes/fault_reset",
                 "axes": [int(axis_index) for axis_index in axes],
             }
         )
@@ -655,8 +655,8 @@ class AxisServerClient:
             refresh_status=False,
         )
 
-    def send_server_reset(self):
-        self.send_json({"cmd": "system/server/reset"})
+    def send_server_fault_reset(self):
+        self.send_json({"cmd": "system/server/fault_reset"})
 
     def send_server_restart(self):
         self.send_json({"cmd": "system/server/restart"})

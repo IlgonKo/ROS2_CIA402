@@ -92,6 +92,16 @@ def build_motion_server_config(
             "MOTION_SERVER_AXIS_RESTART_DISABLE_SETTLE_TIME",
             1.0,
         ),
+        bus_reconnect_timeout=number(
+            values,
+            "MOTION_SERVER_BUS_RECONNECT_TIMEOUT",
+            10.0,
+        ),
+        axis_restart_timeout=number(
+            values,
+            "MOTION_SERVER_AXIS_RESTART_TIMEOUT",
+            30.0,
+        ),
     )
     cycle = CycleConfig(
         period=choose(cli.cycle_time, number(values, "PYSOEM_CYCLE_TIME", 0.01)),
@@ -321,6 +331,10 @@ def validate_motion_server_config(config):
         raise ValueError("Motion Server feedback period must be > 0")
     if config.server.axis_restart_disable_settle_time < 0.0:
         raise ValueError("Axis restart disable settle time must be >= 0")
+    if config.server.bus_reconnect_timeout <= 0.0:
+        raise ValueError("Bus reconnect timeout must be > 0")
+    if config.server.axis_restart_timeout <= 0.0:
+        raise ValueError("Axis restart timeout must be > 0")
     if config.ethercat.cycle.period <= 0.0:
         raise ValueError("EtherCAT cycle period must be > 0")
     if not 0.0 <= config.ethercat.cycle.spin_wait_time < config.ethercat.cycle.period:

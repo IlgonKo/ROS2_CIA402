@@ -106,6 +106,8 @@ class TypedConfigurationTest(unittest.TestCase):
         self.assertEqual(config.ethercat.backend, BackendType.MOCK)
         self.assertEqual(config.axis_count, 2)
         self.assertEqual(config.logging.pre_logging.length, 12)
+        self.assertEqual(config.server.bus_reconnect_timeout, 10.0)
+        self.assertEqual(config.server.axis_restart_timeout, 30.0)
         self.assertIsInstance(config.devices[0].device, CmmtDeviceConfig)
         self.assertIsInstance(config.devices[1].device, CpxApIEcDeviceConfig)
         self.assertEqual(
@@ -187,6 +189,19 @@ class TypedConfigurationTest(unittest.TestCase):
                 self.load_typed(
                     temp_dir,
                     "PYSOEM_CYCLE_TIME=0.001\nPYSOEM_SPIN_WAIT_TIME=0.001\n",
+                )
+
+    def test_rejects_non_positive_recovery_timeout(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            with self.assertRaisesRegex(ValueError, "Bus reconnect timeout"):
+                self.load_typed(
+                    temp_dir,
+                    "MOTION_SERVER_BUS_RECONNECT_TIMEOUT=0\n",
+                )
+            with self.assertRaisesRegex(ValueError, "Axis restart timeout"):
+                self.load_typed(
+                    temp_dir,
+                    "MOTION_SERVER_AXIS_RESTART_TIMEOUT=-1\n",
                 )
 
     def test_rejects_unknown_csp_interpolation_mode(self):

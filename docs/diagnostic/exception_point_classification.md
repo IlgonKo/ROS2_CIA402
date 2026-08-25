@@ -105,7 +105,8 @@ timeout/short payload는 후속 반복 이상 정책에서 Alarm 승격 여부�
 | diagnostic tool 3개 파일의 4곳 | 허용 tool boundary | 항목별 probe 또는 CLI 최상위 출력; 제품 FailureMapper 사용 금지 |
 | PySOEM 120 | 허용 cleanup boundary | connect 실패 원인을 그대로 re-raise하기 전 close 수행 |
 | PySOEM 123 | 허용 cleanup boundary | close 중 실패는 원래 connect 실패를 가리지 않도록 log 후 무시 |
-| PySOEM 161, 289, 423 | 구체화 | state/DC/identity에서 예상되는 backend 예외만 fallback 또는 partial 처리 |
+| PySOEM state/DC/identity | 구체화 | 예상되는 backend 예외만 fallback 또는 partial 처리 |
+| PySOEM transport availability probe | 허용 best-effort boundary | WKC mismatch 뒤 slave 상태 조회의 native 예외는 transport unavailable로 판정 |
 | SdoAccess 45, 82, 94, 109 | 구체화 | timeout, disconnect, abort와 short payload를 확정된 SDO Exception으로 변환 |
 | Startup 245, 268 | 별도 정책 | optional unit metadata만 typed catch 후 Alarm 후보; 허용 fallback 목록 명시 |
 | Startup 302, 318, 334 | 제거 | 필수 software/profile/motion limit readback 실패를 Initialization Fault로 상위 전달 |
@@ -175,7 +176,7 @@ Broad catch 허용 목록은 process, connection, thread, UI callback, CLI tool�
 | client `TimeoutError` | IO Panel response wait | client transport timeout으로 유지하고 UI에 Fail timeout 표시; 서버 Diagnostic 아님 |
 | JSON decode 실패 | server/client/ROS | server request이면 INVALID_REQUEST 후 연결 유지, client/ROS 수신이면 protocol log와 reconnect 정책 |
 | numeric conversion fallback catch | panels, catalog parser, unit conversion | 사용자 입력이면 로컬 validation, optional display parser면 narrow catch, invariant는 숨기지 않음 |
-| lifecycle control exception | server reset/restart | 정상 control flow 전용으로 유지하며 FailureMapper 대상에서 제외 |
+| lifecycle control exception | server restart | 정상 control flow 전용으로 유지하며 FailureMapper 대상에서 제외 |
 
 ## Diagnostic 판정 원칙
 

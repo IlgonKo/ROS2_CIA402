@@ -35,7 +35,7 @@ class MockMaster:
         for _ in self.slaves:
             self.working_counter.add_slave()
 
-    def connect(self, target_state=None):
+    def connect(self, target_state=None, timeout_s=None):
         normalized_state = str(target_state or "").strip().lower()
         if normalized_state not in {"preop", "pre_op"}:
             raise ValueError("MockMaster staged startup requires target_state='preop'")
@@ -43,7 +43,7 @@ class MockMaster:
         self._state = "preop"
         self.lifecycle_events.append("connect:preop")
 
-    def enter_operational(self):
+    def enter_operational(self, timeout_s=None):
         if self._state != "preop":
             raise RuntimeError("MockMaster must connect in PRE-OP before entering OP")
         self._connected = True
@@ -57,6 +57,9 @@ class MockMaster:
 
     def expected_wkc(self):
         return self.working_counter.get_expected()
+
+    def transport_available(self):
+        return self._connected
 
     def write_sdo(self, slave_index, index, subindex, payload):
         try:
@@ -94,8 +97,11 @@ class MockMaster:
         self._processdata_prepared = True
 
     def receive_processdata(self):
-        for slave in self.slaves:
-            slave.process()
+        try:
+            for slave in self.slaves:
+                slave.process()
+        except (ConnectionError, OSError) as exception:
+            raise CommunicationException("processdata_receive") from exception
         self.wkc = self.working_counter.get_expected() if self._outputs_sent else 0
         self._outputs_sent = False
         self.last_rx_dc_time_ns = self.dc_time_ns

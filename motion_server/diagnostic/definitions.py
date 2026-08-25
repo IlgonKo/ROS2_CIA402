@@ -29,11 +29,37 @@ BUS_PROCESS_DATA_INCOMPLETE = DiagnosticDefinition(
     latching=True,
 )
 
+BUS_CONNECTION_LOST = DiagnosticDefinition(
+    code="BUS_CONNECTION_LOST",
+    level=DiagnosticLevel.FAULT,
+    title="EtherCAT connection lost",
+    description="Cyclic EtherCAT transport communication was interrupted.",
+    latching=True,
+)
+
+BUS_RECONNECT_FAILED = DiagnosticDefinition(
+    code="BUS_RECONNECT_FAILED",
+    level=DiagnosticLevel.FAULT,
+    title="EtherCAT reconnect failed",
+    description="The EtherCAT transport could not complete reconnection.",
+    latching=True,
+)
+
 AXIS_DRIVE_FAULT = DiagnosticDefinition(
     code="AXIS_DRIVE_FAULT",
     level=DiagnosticLevel.FAULT,
     title="Axis drive fault",
     description="The axis statusword reports the CiA 402 fault bit.",
+    latching=True,
+)
+
+AXIS_RESTART_FAILED = DiagnosticDefinition(
+    code="AXIS_RESTART_FAILED",
+    level=DiagnosticLevel.FAULT,
+    title="Axis restart failed",
+    description=(
+        "The Axis device did not complete restart and process image recovery."
+    ),
     latching=True,
 )
 

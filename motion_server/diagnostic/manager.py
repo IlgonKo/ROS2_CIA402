@@ -6,6 +6,7 @@ from motion_server.diagnostic.models import (
     DiagnosticHistory,
     DiagnosticLevel,
     DiagnosticSource,
+    DiagnosticSourceType,
     DiagnosticStatus,
     cleared_at,
 )
@@ -60,6 +61,38 @@ class DiagnosticManager:
         if status.history.acknowledged_at is None:
             status.history.acknowledged_at = at or self._clock()
         return self._clear_if_ready(status)
+
+    def acknowledge_faults(self, *, source=None, source_type=None, at=None):
+        if source is not None and source_type is not None:
+            raise ValueError("Diagnostic Fault selection is ambiguous")
+        if source is not None and not isinstance(source, DiagnosticSource):
+            raise TypeError("Diagnostic Fault source must be DiagnosticSource")
+        if source_type is not None:
+            if not isinstance(source_type, DiagnosticSourceType):
+                raise TypeError(
+                    "Diagnostic Fault source type must be DiagnosticSourceType"
+                )
+
+        selected = tuple(
+            status
+            for status in self.active_statuses()
+            if status.definition.level is DiagnosticLevel.FAULT
+            and (source is None or status.source == source)
+            and (source_type is None or status.source.type is source_type)
+        )
+        for status in selected:
+            self.acknowledge(status.diagnostic_id, at=at)
+        return selected
+
+    def has_active_fault(self, *, source=None, source_type=None):
+        if source is not None and source_type is not None:
+            raise ValueError("Diagnostic Fault selection is ambiguous")
+        return any(
+            status.definition.level is DiagnosticLevel.FAULT
+            and (source is None or status.source == source)
+            and (source_type is None or status.source.type is source_type)
+            for status in self.active_statuses()
+        )
 
     def resolve(self, code, source: DiagnosticSource, *, at=None):
         key = self._key(code, source)

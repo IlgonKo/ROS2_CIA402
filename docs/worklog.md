@@ -8,6 +8,39 @@
 
 ### 완료
 
+- `RF-005` 완료 리뷰 보완으로 Axis restart 전에 전체 Axis homing/trajectory 중단, 위치 hold 및
+  disable을 강제하고 자동 motion 재개를 금지했다. 정상 상태 Bus reconnect를 거부하고 연속 WKC
+  mismatch 뒤 slave 상태 확인으로 cable disconnect fallback을 추가했다. recovery worker 없이
+  TCP/authority는 유지하되 동기 recovery 동안 다른 API 처리가 일시 정지하는 계약과 best-effort
+  timeout 한계를 문서·Control Panel에 명시했다. 전체 unittest 258개가 통과했다.
+- `RF-005-S05`에서 typed `RecoveryType`과
+  `refresh_after_recovery(runtime, recovery_type, affected_axes)` TD-025 연결 경계를 추가하고
+  Bus reconnect 전체 Axis/Axis restart 단일 Axis 계약을 검증했다. startup/operational
+  reconnect Diagnostic 처리를 통합하고 recovery 전체 timeout 및 OP 전후 실패 상태를
+  보완했으며 API·시험·TD-025 문서의 폐기된 reset 계약을 정리했다. 전체 unittest 255개와
+  source compile 및 diff 검사가 통과했다. RF-005는 실축 검증 전까지 `in_progress`로 유지한다.
+- `RF-005-S04`에서 Axis restart를 요청 전송 즉시 성공하던 방식에서 대상 slave 재발견,
+  PySOEM process image 재구성, 전체 Axis mode/CSP 설정 복원, OP 진입과 대상 Axis parameter
+  refresh까지 완료한 뒤 응답하는 동기 recovery로 전환했다. 진행 중에는 전체 Bus motion을
+  제한하며 Mock/PySOEM이 같은 coordinator를 사용한다. timeout과 단계 실패는
+  `AXIS_RESTART_FAILED`로 유지하고 이후 Bus reconnect와 Axis fault-reset으로 clear 가능한
+  경로를 연결했다. 전체 unittest 251개가 통과했다.
+- `RF-005-S03`에서 PySOEM/Mock cyclic transport 오류를 `BUS_DISCONNECTED`와
+  `BUS_CONNECTION_LOST` Fault로 전환하고 runtime, DeviceManager, cache/controller/topology,
+  TCP client 및 authority를 유지하는 disconnected service loop를 구현했다. Bus reconnect를
+  같은 runtime의 PRE-OP/process image/Axis mode/OP/전체 parameter refresh가 끝난 뒤 응답하는
+  동기 coordinator로 변경했으며 startup 실패 reconnect도 기존 TCP 연결에서 새 runtime으로
+  전환한다. 실패는 `BUS_RECONNECT_FAILED`로 유지한다. 전체 unittest 248개가 통과했다.
+- `RF-005-S02`에서 Diagnostic source/source type별 활성 Fault 조회와 일괄 acknowledge를
+  구현하고 Server/Bus/Axis/Axes fault-reset을 실제 Diagnostic 수명 주기와 Axis CiA 402
+  복구에 연결했다. WKC Fault의 전역 runtime `FAULT` 전환 및 latching 제한, Axis Fault의
+  해당 축 한정 제한과 상태별 안전/recovery API 허용 행렬을 적용했다. 전체 unittest 246개가
+  통과했다.
+- `RF-005-S01`에서 `ServerSession` 소유의 `ServerRuntimeState`를 추가하고 server/bus status에
+  노출했다. Bus reconnect 및 Axis restart timeout 설정을 추가하고 Initialization recovery
+  scope를 `BUS_RECONNECT < SERVER_RESTART`로 단순화했다. 배포 전 호환성 원칙에 따라
+  server/axis/axes reset API와 Server reset lifecycle을 제거하고 fault-reset 명칭으로 API,
+  Control Panel 및 테스트를 전환했다. 전체 unittest 239개가 통과했다.
 - `TD-018` 완료 리뷰의 P1을 반영하여 cache/unit/MotionController projection과 server state
   생성이 끝난 뒤에만 Initialization 성공과 Fault resolve를 확정하도록 수정했다. 후처리 실패는
   runtime을 정리하고 `DEVICE_INITIALIZATION_FAILED` degraded 상태로 전환한다. `0x6081` OD

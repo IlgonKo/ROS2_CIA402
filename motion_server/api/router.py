@@ -97,6 +97,7 @@ def _route_message_to_handler(message, runtime, state, client):
         client,
         state,
         client_has_command_authority(client, state),
+        message=message,
     )
     if validation_error == "unknown":
         raise UnknownCommandException(raw_message_type)
@@ -114,6 +115,12 @@ def _route_message_to_handler(message, runtime, state, client):
         raise InvalidStateException(
             operation=message_type,
             state=state["initialization_status"].failure.stage.value,
+        )
+    if validation_error == "runtime_fault":
+        runtime_state = state["server_session"].runtime_state.value
+        raise InvalidStateException(
+            operation=message_type,
+            state=runtime_state,
         )
 
     if spec.is_authority:

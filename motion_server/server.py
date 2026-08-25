@@ -51,6 +51,13 @@ from motion_server.app.state import (
     initial_server_state,
 )
 from motion_server.app.session import ServerSession
+from motion_server.app.session import ServerRuntimeState
+from motion_server.app.recovery import (
+    complete_bus_reconnect_diagnostics,
+    mark_bus_disconnected,
+    record_bus_reconnect_failure,
+)
+from motion_server.failure import CommunicationException
 from motion_server.app.client_transport import (
     allocate_client_id,
     close_client,
@@ -67,33 +74,25 @@ from ethercat.pysoem_master import PySOEMMaster
 # Server Loops
 
 
-class ServerResetRequested(Exception):
-    pass
-
-
 class ServerRestartRequested(Exception):
-    pass
-
-
-class BusReconnectRequested(Exception):
     pass
 
 
 def requested_server_action(state):
     if state.get("server_restart_requested"):
         return "restart"
-    if state.get("bus_reconnect_requested"):
-        requested_at = state.get("bus_reconnect_requested_at", None)
-        if requested_at is not None and time.monotonic() < float(requested_at):
-            return None
-        return "bus_reconnect"
-    if state.get("server_reset_requested"):
-        return "reset"
     return None
 
-def run_server_loop(server, runtime, state, server_config, ethercat_config):
+def run_server_loop(
+    server,
+    runtime,
+    state,
+    server_config,
+    ethercat_config,
+    clients=None,
+):
     server.setblocking(False)
-    clients = []
+    clients = [] if clients is None else clients
     last_status_log_time = 0.0
     cycle_stats = CycleStats()
     last_cycle_start_time = None
@@ -116,13 +115,27 @@ def run_server_loop(server, runtime, state, server_config, ethercat_config):
         ethercat_config.dc.phase_max_correction,
     )
     dc_cycle_scheduler = DcCycleScheduler(dc_phase_lock)
-    diagnostic_monitor = RuntimeDiagnosticMonitor(runtime.diagnostic_manager)
+    diagnostic_monitor = RuntimeDiagnosticMonitor(
+        runtime.diagnostic_manager,
+        server_session=state["server_session"],
+    )
 
     while True:
         if dc_absolute_shift:
-            hold_faulted_axes(runtime, state)
-            update_active_trajectory(runtime, state)
-            runtime.prepare_processdata()
+            try:
+                hold_faulted_axes(runtime, state)
+                update_active_trajectory(runtime, state)
+                runtime.prepare_processdata()
+            except CommunicationException as exception:
+                mark_bus_disconnected(state, exception)
+                action = run_bus_disconnected_loop(
+                    server, runtime, state, clients
+                )
+                if action is not None:
+                    return action
+                next_cycle_time = time.monotonic()
+                last_cycle_start_time = None
+                continue
 
             next_cycle_time, dc_schedule_wait = (
                 dc_cycle_scheduler.absolute_cycle_deadline(runtime)
@@ -139,28 +152,46 @@ def run_server_loop(server, runtime, state, server_config, ethercat_config):
         if deadline_late > 0.0:
             cycle_stats.add("deadline_late", deadline_late)
 
-        if dc_absolute_shift:
-            exchange_start = time.monotonic()
-            cycle_stats.add_tx_time(exchange_start)
-            runtime.send_processdata()
-            runtime.last_tx_dc_time_ns = (
-                dc_cycle_scheduler.estimate_transmit_dc_time_ns(runtime)
-            )
-            runtime.receive_processdata()
-            exchange_done = time.monotonic()
-            cycle_stats.add("pdo_io", exchange_done - exchange_start)
-            cycle_stats.add("exchange", exchange_done - exchange_start)
-        else:
-            hold_faulted_axes(runtime, state)
-            update_active_trajectory(runtime, state)
-            exchange(
-                runtime,
-                cycle_stats=cycle_stats,
-                sleep_after=False,
-                dc_cycle_scheduler=dc_cycle_scheduler,
-            )
+        try:
+            if dc_absolute_shift:
+                exchange_start = time.monotonic()
+                cycle_stats.add_tx_time(exchange_start)
+                runtime.send_processdata()
+                runtime.last_tx_dc_time_ns = (
+                    dc_cycle_scheduler.estimate_transmit_dc_time_ns(runtime)
+                )
+                runtime.receive_processdata()
+                exchange_done = time.monotonic()
+                cycle_stats.add("pdo_io", exchange_done - exchange_start)
+                cycle_stats.add("exchange", exchange_done - exchange_start)
+            else:
+                hold_faulted_axes(runtime, state)
+                update_active_trajectory(runtime, state)
+                exchange(
+                    runtime,
+                    cycle_stats=cycle_stats,
+                    sleep_after=False,
+                    dc_cycle_scheduler=dc_cycle_scheduler,
+                )
+        except CommunicationException as exception:
+            mark_bus_disconnected(state, exception)
+            action = run_bus_disconnected_loop(server, runtime, state, clients)
+            if action is not None:
+                return action
+            next_cycle_time = time.monotonic()
+            last_cycle_start_time = None
+            continue
 
-        diagnostic_monitor.update(runtime)
+        try:
+            diagnostic_monitor.update(runtime)
+        except CommunicationException as exception:
+            mark_bus_disconnected(state, exception)
+            action = run_bus_disconnected_loop(server, runtime, state, clients)
+            if action is not None:
+                return action
+            next_cycle_time = time.monotonic()
+            last_cycle_start_time = None
+            continue
 
         direct_tx_dc_time_ns = getattr(runtime, "last_direct_tx_dc_time_ns", None)
         estimated_tx_dc_time_ns = getattr(runtime, "last_tx_dc_time_ns", None)
@@ -256,7 +287,46 @@ def run_server_loop(server, runtime, state, server_config, ethercat_config):
         )
 
 
-def run_degraded_server_loop(server, state):
+def run_bus_disconnected_loop(server, runtime, state, clients):
+    while state["server_session"].runtime_state is ServerRuntimeState.BUS_DISCONNECTED:
+        try:
+            conn, addr = server.accept()
+            conn.setblocking(False)
+            client_id = allocate_client_id(clients)
+            clients.append(
+                {
+                    "id": client_id,
+                    "addr": addr,
+                    "conn": conn,
+                    "buffer": "",
+                    "last_feedback_time": 0.0,
+                }
+            )
+        except BlockingIOError:
+            pass
+
+        for client in list(clients):
+            try:
+                if not service_client(client, runtime, state, dispatch_message):
+                    close_client(client, runtime, state)
+                    clients.remove(client)
+            except OSError:
+                close_client(client, runtime, state)
+                clients.remove(client)
+
+        action = requested_server_action(state)
+        if action == "restart":
+            return action
+        time.sleep(0.01)
+    return None
+
+
+def run_degraded_server_loop(
+    server,
+    state,
+    server_config=None,
+    ethercat_config=None,
+):
     server.setblocking(False)
     clients = []
     next_client_id = 1
@@ -294,6 +364,24 @@ def run_degraded_server_loop(server, state):
                 )
                 close_client(client, None, state)
                 clients.remove(client)
+
+        session = state["server_session"]
+        if (
+            session.runtime is not None
+            and session.runtime_state is ServerRuntimeState.NORMAL
+        ):
+            if server_config is None or ethercat_config is None:
+                raise RuntimeError(
+                    "Recovered runtime requires full server configuration"
+                )
+            return run_server_loop(
+                server,
+                session.runtime,
+                state,
+                server_config,
+                ethercat_config,
+                clients=clients,
+            )
 
         action = requested_server_action(state)
         if action is not None:
@@ -504,6 +592,74 @@ def run_main_once(
                 session,
                 server_mode=server_config.mode.value,
             )
+            def reconnect_failed_initialization():
+                authority_owner = state.get("command_authority_owner")
+                reconnect_started_at = time.monotonic()
+                recovered_runtime, recovered_sdo = initialize_runtime_session(
+                    session,
+                    ethercat_config=ethercat_config,
+                    motion_config=motion_config,
+                    logging_config=logging_config,
+                    devices=devices,
+                )
+                if recovered_runtime is None:
+                    exception = CommunicationException("bus_reconnect")
+                    record_bus_reconnect_failure(session, exception)
+                    raise exception
+                if (
+                    time.monotonic() - reconnect_started_at
+                    > server_config.bus_reconnect_timeout
+                ):
+                    exception = TimeoutError(
+                        "Initialization reconnect exceeded "
+                        f"{server_config.bus_reconnect_timeout:.3f} seconds"
+                    )
+                    fail_runtime_initialization(
+                        session,
+                        recovered_runtime,
+                        InitializationStage.BUS_CONNECTION,
+                        exception,
+                    )
+                    record_bus_reconnect_failure(session, exception)
+                    raise CommunicationException("bus_reconnect") from exception
+                try:
+                    recovered_state = build_initialized_server_state(
+                        session,
+                        recovered_runtime,
+                        recovered_sdo,
+                        server_config=server_config,
+                        ethercat_config=ethercat_config,
+                        motion_config=motion_config,
+                        axis_count_value=axis_count_value,
+                    )
+                except Exception as exception:
+                    fail_runtime_initialization(
+                        session,
+                        recovered_runtime,
+                        InitializationStage.DEVICE_INITIALIZATION,
+                        exception,
+                    )
+                    record_bus_reconnect_failure(session, exception)
+                    raise CommunicationException("bus_reconnect") from exception
+                session.mark_ready()
+                initialization_fault = resolve_initialization_fault(session)
+                if initialization_fault is not None:
+                    session.diagnostic_manager.acknowledge(
+                        initialization_fault.diagnostic_id
+                    )
+                complete_bus_reconnect_diagnostics(session)
+                recovered_state["initialization_status"] = (
+                    session.initialization_status
+                )
+                recovered_state["command_authority_owner"] = authority_owner
+                state.clear()
+                state.update(recovered_state)
+                return {
+                    "connected": True,
+                    "message": "EtherCAT Bus reconnect completed.",
+                }
+
+            state["bus_reconnect_operation"] = reconnect_failed_initialization
         else:
             try:
                 state = build_initialized_server_state(
@@ -564,7 +720,12 @@ def run_main_once(
                     server, runtime, state, server_config, ethercat_config
                 )
                 if runtime is not None
-                else run_degraded_server_loop(server, state)
+                else run_degraded_server_loop(
+                    server,
+                    state,
+                    server_config,
+                    ethercat_config,
+                )
             )
             raise_server_action(action)
     finally:
@@ -590,7 +751,3 @@ def run_configuration_degraded_once(session, bootstrap_config):
 def raise_server_action(action):
     if action == "restart":
         raise ServerRestartRequested
-    if action == "reset":
-        raise ServerResetRequested
-    if action == "bus_reconnect":
-        raise BusReconnectRequested

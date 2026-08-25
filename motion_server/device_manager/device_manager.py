@@ -41,11 +41,20 @@ class DeviceManager:
     def devices(self):
         return self.ethercat_devices
 
-    def connect(self, target_state=None):
-        self.ethercat_master.connect(target_state=target_state)
+    def connect(self, target_state=None, timeout_s=None):
+        if timeout_s is None:
+            self.ethercat_master.connect(target_state=target_state)
+            return
+        self.ethercat_master.connect(
+            target_state=target_state,
+            timeout_s=timeout_s,
+        )
 
-    def enter_operational(self):
-        self.ethercat_master.enter_operational()
+    def enter_operational(self, timeout_s=None):
+        if timeout_s is None:
+            self.ethercat_master.enter_operational()
+            return
+        self.ethercat_master.enter_operational(timeout_s=timeout_s)
 
     def close(self):
         self.ethercat_master.close()
@@ -61,6 +70,9 @@ class DeviceManager:
 
     def expected_wkc(self):
         return self.ethercat_master.expected_wkc()
+
+    def transport_available(self):
+        return self.ethercat_master.transport_available()
 
     def get_slave_input_bytes(self, slave_index=0):
         return self.ethercat_master.get_slave_input_bytes(slave_index)

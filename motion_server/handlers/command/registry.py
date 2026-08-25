@@ -20,7 +20,8 @@ from motion_server.handlers.command.io_ethercat_parameter_write import (
     write_io_parameter,
 )
 from motion_server.handlers.command.server import (
-    request_server_reset,
+    fault_reset_bus,
+    fault_reset_server,
     request_server_restart,
 )
 from motion_server.api.specification import (
@@ -36,7 +37,7 @@ from motion_server.handlers.command.axis_settings import (
 from motion_server.handlers.command.axis_state import (
     disable,
     enable,
-    reset_axes,
+    fault_reset_axes,
     reset_faults,
     restart_axis,
     set_controlword,
@@ -83,7 +84,7 @@ COMMAND_HANDLERS = {
     "system/axes/stop": require_axes(stop_axes),
     "system/axis/enable": require_single_axis(enable),
     "system/axis/disable": require_single_axis(disable),
-    "system/axis/reset": require_single_axis(reset_axes),
+    "system/axis/fault_reset": require_single_axis(fault_reset_axes),
     "system/axis/restart": require_single_axis(restart_axis),
     "system/axis/home": require_single_axis(start_homing),
     "system/axis/stop": require_single_axis(stop_axes),
@@ -107,12 +108,13 @@ COMMAND_HANDLERS = {
     ),
     "system/axes/enable": require_axes(enable),
     "system/axes/disable": require_axes(disable),
-    "system/axes/reset": require_axes(reset_axes),
+    "system/axes/fault_reset": require_axes(fault_reset_axes),
     "system/axes/move_abs": require_axes(move_absolute),
     "system/axes/move_rel": require_axes(move_relative),
     "system/axes/move_vel": require_axes(move_velocity),
-    "system/server/reset": request_server_reset,
+    "system/server/fault_reset": fault_reset_server,
     "system/server/restart": request_server_restart,
+    "system/bus/fault_reset": fault_reset_bus,
     "system/bus/reconnect": request_bus_reconnect,
     "system/bus/rescan": reject_not_implemented,
     "system/io/output_write": output_write,

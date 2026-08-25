@@ -436,7 +436,7 @@ Device Profile + ESI
 
 ## DEC-025 Bootstrap 이후 초기화 실패에서 Degraded Server 유지
 
-- 상태: `accepted`
+- 상태: `superseded` — runtime recovery 부분은 DEC-026~DEC-029로 대체
 - 결정일: 2026-08-25
 - 결정:
   - Motion Server 설정은 같은 raw snapshot으로 bootstrap과 전체 typed configuration을
@@ -496,6 +496,149 @@ Device Profile + ESI
     채택하지 않는다.
 - 영향: TD-018에서 bootstrap config, initialization status, degraded context와 오류 주입
   테스트를 구현한다. runtime fault와 연결 유지 복구 정책의 추가 확장은 RF-005가 담당한다.
+
+## DEC-026 공통 Server Runtime 상태와 Initialization 상세 분리
+
+- 상태: `accepted`
+- 결정일: 2026-08-25
+- 결정:
+  - Motion Server의 현재 운전·복구 상태는 `ServerRuntimeState`로 표현한다.
+  - 상태 값은 `NORMAL`, `INITIALIZATION_ERROR`, `BUS_DISCONNECTED`, `FAULT` 네 가지로
+    고정한다.
+  - `ServerSession`이 `ServerRuntimeState`를 소유하고 API 허용 여부와 recovery 경로는 이
+    상태를 기준으로 결정한다.
+  - `InitializationStatus`는 제거하지 않고 initialization 절차의 성공 여부와
+    `InitializationFailure` 상세를 담당한다. 공통 runtime 상태 판정에는 사용하지 않는다.
+  - `NORMAL`은 유효한 runtime으로 정상 운전 가능한 상태다.
+  - `INITIALIZATION_ERROR`는 초기화 실패로 runtime을 제공하지 않는 degraded 상태다.
+  - `BUS_DISCONNECTED`는 운전 중 Bus 연결이 유실되어 cyclic I/O를 중단하고 기존 runtime과
+    cache/topology를 유지한 채 reconnect를 기다리는 상태다. runtime 객체의 존재와 EtherCAT
+    연결 활성 여부를 동일시하지 않는다.
+  - `FAULT`는 runtime은 유지되지만 하나 이상의 Fault 때문에 정상 motion command를
+    제한하고 명시적인 recovery가 필요한 상태다.
+  - `DiagnosticLevel.FAULT`는 개별 Diagnostic의 심각도이고 `ServerRuntimeState.FAULT`는
+    Fault로 운전이 제한된 집계 상태다.
+- 이유: `InitializationStatus.initialized`만으로 운전 중 Bus 단절을 표현하면 연결이 끊긴
+  runtime에 축 API가 허용될 수 있다. 초기화 결과 상세와 현재 운전 상태를 분리해야 API
+  gating, status와 recovery scope를 일관되게 적용할 수 있다. Bus 연결 유실만으로
+  cache/topology를 포함한 runtime 객체까지 즉시 폐기할 이유는 없다.
+- 검토한 대안:
+  - 운전 중 Bus 단절을 `BUS_CONNECTION_FAILED` Initialization Failure로 재사용하는 방식은
+    startup 실패와 runtime 장애를 혼합하므로 채택하지 않는다.
+  - Bus 단절 즉시 runtime을 `None`으로 만드는 방식은 연결 상태와 runtime 객체 수명을
+    불필요하게 결합하고 마지막 topology/cache를 진단에 사용할 수 없으므로 채택하지 않는다.
+  - runtime 존재 여부만으로 상태를 추론하는 방식은 recoverable Fault와 정상 상태를 구분하지
+    못하므로 채택하지 않는다.
+- 영향: RF-005에서 `ServerRuntimeState`와 상태 전이를 구현하고 validator, server/bus status와
+  recovery handler가 이를 사용한다. Initialization stage/cause와 TD-018 복구 범위는 그대로
+  유지한다.
+
+## DEC-027 WKC Fault와 Bus Transport Disconnect 복구 경계
+
+- 상태: `accepted`
+- 결정일: 2026-08-25
+- 결정:
+  - 연속 WKC mismatch는 EtherCAT cyclic exchange가 가능한 `FAULT`로 분류한다.
+    cyclic exchange는 유지하되 정상 motion command를 제한한다. WKC 조건이 정상화되면
+    Diagnostic을 resolve하지만 `fault_reset`으로 내부 acknowledge되어 clear되기 전까지
+    runtime 상태는 `FAULT`를 유지한다.
+  - transport exception 또는 연결 유실로 cyclic exchange가 불가능하면
+    `BUS_DISCONNECTED`로 전환한다. AxisRuntime, DeviceManager, parameter cache와
+    MotionController는 유지하고 EtherCAT transport 연결만 닫는다.
+  - `system/bus/reconnect`는 같은 AxisRuntime에서 transport 연결, device initialization과
+    process data를 다시 구성한다. AxisRuntime 전체와 `DiagnosticManager`를 다시 만드는
+    복구는 `system/server/restart`만 사용한다.
+  - Bus reconnect는 자동 재시도하지 않고 사용자 명령으로 시작하며 `NORMAL` 상태에서는
+    거부한다.
+  - 연속 WKC mismatch에서는 slave transport 상태를 추가 확인한다. slave가 존재하면 WKC
+    Fault, slave가 사라졌으면 `BUS_DISCONNECTED`로 분류한다.
+  - Bus 상태 변화는 EtherCAT lifecycle이며 TCP listener/client lifecycle과 연동하지 않는다.
+    Bus disconnect와 reconnect 동안 기존 TCP 연결을 유지한다. Server process restart에서만
+    TCP 연결이 종료된다.
+- 이유: WKC 불일치와 transport 단절은 복구 가능 범위가 다르다. 연결 유실만으로 서버의
+  topology/cache/control 객체까지 폐기할 필요가 없으며, 같은 runtime에서 transport만
+  복구해야 reconnect와 server restart의 의미가 구분된다. Bus와 TCP는 독립 transport다.
+- 검토한 대안:
+  - WKC mismatch마다 Bus를 재생성하는 방식은 일시적인 process data 불일치에 비해 복구
+    범위가 지나치게 크므로 채택하지 않는다.
+  - Bus disconnect에서 AxisRuntime을 즉시 폐기하는 방식은 reconnect를 사실상 server reset과
+    같게 만들므로 채택하지 않는다.
+  - 무제한 자동 reconnect는 반복 장애와 commissioning 중 상태를 숨길 수 있어 채택하지 않는다.
+- 영향: RF-005에서 cyclic boundary가 두 오류를 분류하고 runtime state/API gating을 변경한다.
+  reconnect 성공 후 OD parameter refresh와 projection은 TD-025 계약으로 연결한다.
+
+## DEC-028 공개 Fault Reset과 내부 Diagnostic Acknowledge 분리
+
+- 상태: `accepted`
+- 결정일: 2026-08-25
+- 결정:
+  - 공개 API에는 `acknowledge` 명령을 만들지 않고 source별 `fault_reset`을 사용한다.
+  - `system/server/reset`은 제거하고 Server 전체 복구는 `system/server/restart`만 사용한다.
+  - `system/axis/fault_reset`과 `system/axes/fault_reset`은 선택된 Axis Fault를 내부적으로
+    acknowledge하고 CiA 402 Fault Reset을 수행한다.
+  - `system/bus/reconnect`는 Bus Fault acknowledge와 transport reconnect를 함께 수행한다.
+  - `system/server/restart`는 process와 Diagnostic 저장소를 새로 만들므로 별도 acknowledge를
+    수행하지 않는다.
+  - recovery 동작 없이 자동 resolve될 수 있는 Fault를 위해 `system/server/fault_reset`과
+    `system/bus/fault_reset`을 제공한다. 이 명령은 해당 source의 모든 활성 Fault를 내부적으로
+    acknowledge한다.
+  - 향후 `system/io/fault_reset`은 IO source Fault acknowledge를 기본으로 하고 실제 장치 복구
+    동작은 RF-003에서 확장한다.
+  - API는 `diagnostic_id`를 요구하지 않는다. 명령으로 지정한 대상의 모든 활성 `FAULT`가
+    대상이며 `ALARM`은 제외한다. 예를 들어 axis 2를 지정하면 axis 2에서 활성화된 여러 Fault
+    code를 함께 처리하며 다른 Axis의 Fault는 건드리지 않는다.
+  - 내부 Diagnostic 모델의 `acknowledged_at`, resolve와 latching clear 계약은 그대로 유지한다.
+- 이유: 사용자가 opaque Diagnostic 발생 ID를 선택해 acknowledge하는 방식은 복잡하다. 산업용
+  장치에서 Fault Reset은 사용자의 확인과 복구 요청을 함께 나타내므로 source/device를 지정하는
+  API가 더 직관적이다.
+- 검토한 대안:
+  - `system/diagnostic/acknowledge`와 `diagnostic_id` 단건 계약은 내부 모델을 사용자에게 과도하게
+    노출하므로 채택하지 않는다.
+  - `reset`과 `acknowledge`를 별도 명령으로 두는 방식은 동일 Fault에 두 번의 사용자 동작을
+    요구하므로 채택하지 않는다.
+- 영향: RF-005에서 기존 `system/axis/reset`, `system/axes/reset`을 `fault_reset`으로 변경하고
+  Server/Bus fault-reset handler와 source 단위 DiagnosticManager 연산을 구현한다. backward
+  compatibility는 제공하지 않는다. Initialization recovery scope는 `BUS_RECONNECT <
+  SERVER_RESTART` 두 단계로 단순화한다.
+
+## DEC-029 Recovery 실행·완료와 Parameter Refresh 경계
+
+- 상태: `accepted`
+- 결정일: 2026-08-25
+- 결정:
+  - `system/bus/reconnect`와 `system/axis/restart`는 recovery와 후속 검증이 완료된 뒤
+    Success/Fail을 반환하는 동기 명령으로 구현한다. `system/server/restart`만 응답 후 process가
+    종료되는 비동기 명령으로 유지한다.
+  - latching Fault가 실제 조건 해제로 resolve되어도 `fault_reset`을 통해 내부 acknowledge되어
+    clear되기 전에는 관련 runtime/device를 정상 운전 상태로 복귀시키지 않는다.
+  - recovery 실패는 `BUS_CONNECTION_LOST`, `BUS_RECONNECT_FAILED`, `AXIS_RESTART_FAILED`로
+    구분한다. `PARAMETER_REFRESH_FAILED`의 정의와 발생은 TD-025가 소유한다.
+  - recovery 후 parameter 동기화는 범용 event bus 없이 명시적인 동기
+    `refresh_after_recovery(runtime, recovery_type, affected_axes)` 경계로 연결한다. refresh 성공
+    후에만 recovery를 완료하고 실패하면 `FAULT`를 유지한다.
+  - Bus reconnect는 모든 Axis, Axis restart는 해당 Axis를 refresh 대상으로 한다.
+  - timeout은 공통 설정의 양수 초 단위 값으로 두며 기본값은 Bus reconnect 10초, Axis restart
+    30초로 한다.
+  - startup Bus 연결 실패에서는 runtime을 새로 구성하고, 운전 중 Bus 단절에서는 기존
+    AxisRuntime을 유지한 채 transport만 reconnect한다.
+  - 별도 recovery worker는 두지 않는다. 동기 recovery 동안 같은 server loop의 다른 API 처리는
+    일시 정지하되 기존 TCP socket과 command authority는 유지한다.
+  - Axis restart 전에 전체 Axis의 homing/trajectory를 중단하고 실제 위치 hold와 disable을
+    완료한다. recovery 후 자동 enable 또는 이전 motion 재개는 하지 않는다.
+  - timeout의 남은 시간은 connect와 OP 전이에 전달한다. worker 없이 이미 실행 중인 native/SDO
+    호출을 강제로 중단하는 hard timeout은 보장하지 않는다.
+- 이유: recovery 완료 전 Success를 반환하면 별도 진행 상태와 notification이 필요하고 client가
+  실제 복구 결과를 알기 어렵다. 또한 연결 복구 후 장치 OD와 cache가 다르면 즉시 정상 운전을
+  허용할 수 없다. latching Fault는 사용자 Fault Reset까지 운전을 막아야 한다.
+- 검토한 대안:
+  - 조건이 resolve되면 Fault Reset 없이 자동 `NORMAL`로 복귀하는 방식은 latching 안전 계약과
+    맞지 않아 채택하지 않는다.
+  - 범용 recovery event bus는 현재 단일 process의 명시적 순차 복구에 비해 복잡하므로 채택하지
+    않는다.
+  - 별도 recovery worker는 recovery 중 status/안전 명령 동시 처리에 유리하지만 lifecycle과
+    동기화 복잡도를 늘리므로 현재 범위에서는 채택하지 않는다.
+- 영향: RF-005 recovery coordinator와 설정 모델, Diagnostic definition 및 상태 전이 테스트에
+  적용한다. TD-025는 동기 refresh 구현과 cache invalid Diagnostic을 제공한다.
 
 ## 새 결정 작성 양식
 

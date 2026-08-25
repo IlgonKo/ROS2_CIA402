@@ -105,15 +105,15 @@ class MotionMixin:
         if axes is not None:
             self.try_send(lambda: self.client.send_axes_homing_start(axes))
 
-    def multi_axis_reset(self):
+    def multi_axis_fault_reset(self):
         self.stop_multi_repeat()
         axes = self.selected_multi_axes()
         if axes is not None:
-            self.try_send(lambda: self.client.send_axes_reset(axes))
+            self.try_send(lambda: self.client.send_axes_fault_reset(axes))
 
-    def axis_reset(self):
+    def axis_fault_reset(self):
         axis_index = self.selected_axis()
-        self.try_send(lambda: self.client.send_axis_reset(axis_index))
+        self.try_send(lambda: self.client.send_axis_fault_reset(axis_index))
 
     def axis_stop(self):
         self.stop_repeat()

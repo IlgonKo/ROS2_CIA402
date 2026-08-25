@@ -51,6 +51,8 @@ class ServerConfig:
     mode: ServerMode
     feedback_period: float
     axis_restart_disable_settle_time: float
+    bus_reconnect_timeout: float
+    axis_restart_timeout: float
 
 
 @dataclass(frozen=True)

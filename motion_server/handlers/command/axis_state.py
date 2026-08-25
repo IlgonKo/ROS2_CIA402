@@ -1,7 +1,6 @@
 import time
 
-from ethercat.mock_master import MockMaster
-from motion_server.app.startup import refresh_axis_parameter_cache
+from motion_server.app.recovery import restart_axis_runtime
 
 from device.capabilities import DeviceCapability
 
@@ -32,6 +31,7 @@ from motion_server.failure import (
     PartialFailure,
     collect_target_results,
 )
+from motion_server.diagnostic.models import DiagnosticSource, DiagnosticSourceType
 
 HALT_BIT = 1 << 8
 OPERATION_ENABLED_MASK = 0x006F
@@ -168,7 +168,7 @@ def reset_faults(runtime, state, axis_indices=None):
     )
 
 
-def reset_axes(message, runtime, state, client):
+def fault_reset_axes(message, runtime, state, client):
     command = public_command_name(message)
     try:
         axes = selected_axes(message, runtime, command)
@@ -176,6 +176,19 @@ def reset_axes(message, runtime, state, client):
         raise_operation_rejected(client, command, str(exc))
         return
     reset_faults(runtime, state, axes)
+    manager = state["diagnostic_manager"]
+    acknowledged = []
+    for axis_index in axes:
+        acknowledged.extend(
+            manager.acknowledge_faults(
+                source=DiagnosticSource(DiagnosticSourceType.AXIS, axis_index),
+            )
+        )
+    return {
+        "axes": axes,
+        "fault_count": len(acknowledged),
+        "message": "Axis Fault Reset completed.",
+    }
 
 
 def wait_axis_not_operation_enabled(runtime, axis_index, max_cycles=50):
@@ -215,41 +228,57 @@ def restart_axis(message, runtime, state, client):
         return
     try:
         homing = state.get("homing", {})
-        if homing.get("active") and axis_index in homing.get("axes", []):
+        if homing.get("active"):
             finish_homing(
                 runtime,
                 state,
                 "stopped",
-                "Homing stopped by axis/restart.",
+                "All homing stopped by axis/restart recovery.",
             )
 
         trajectory = state.get("trajectory", {})
-        if trajectory.get("active") and axis_index in trajectory.get("axes", []):
+        if trajectory.get("active"):
             state["trajectory"] = inactive_trajectory_state("axis_restart")
 
-        hold_axis_at_actual_position(runtime, state, axis_index)
+        for held_axis_index in range(axis_count(runtime)):
+            hold_axis_at_actual_position(runtime, state, held_axis_index)
         runtime.set_target_positions(state["target_positions"])
-        runtime.slaves[axis_index].rxpdo.controlword = 0x0007
-        disabled = wait_axis_not_operation_enabled(runtime, axis_index)
-        disabled_statusword = int(runtime.slaves[axis_index].txpdo.statusword)
-        if not disabled:
+        runtime.sync_trajectory_to_actual_positions()
+        runtime.set_controlword_all(0x0007)
+        axes_not_disabled = [
+            disabled_axis_index
+            for disabled_axis_index in range(axis_count(runtime))
+            if not wait_axis_not_operation_enabled(
+                runtime,
+                disabled_axis_index,
+            )
+        ]
+        if axes_not_disabled:
             raise RuntimeError(
-                "Axis did not leave Operation Enabled before restart. "
-                f"statusword=0x{disabled_statusword:04X}"
+                "All Axes must leave Operation Enabled before restart. "
+                f"axes={axes_not_disabled}"
             )
         disable_settle_time = max(
             0.0,
             float(state.get("axis_restart_disable_settle_time", 1.0)),
         )
         keep_pdo_alive_for_seconds(runtime, disable_settle_time)
-        disabled_controlword = int(runtime.slaves[axis_index].rxpdo.controlword)
-        disabled_statusword = int(runtime.slaves[axis_index].txpdo.statusword)
+        disabled_controlwords = [
+            int(slave.rxpdo.controlword) for slave in runtime.slaves
+        ]
+        disabled_statuswords = [
+            int(slave.txpdo.statusword) for slave in runtime.slaves
+        ]
         result = profile.request_axis_restart(runtime, axis_index)
-        if isinstance(runtime.ethercat_master, MockMaster):
-            refresh_axis_parameter_cache(runtime, axis_index)
-        result["disabled_controlword"] = f"0x{disabled_controlword:04X}"
-        result["disabled_statusword"] = f"0x{disabled_statusword:04X}"
+        recovery_result = restart_axis_runtime(runtime, state, axis_index)
+        result["disabled_controlwords"] = [
+            f"0x{value:04X}" for value in disabled_controlwords
+        ]
+        result["disabled_statuswords"] = [
+            f"0x{value:04X}" for value in disabled_statuswords
+        ]
         result["disable_settle_time"] = disable_settle_time
+        result["recovery"] = recovery_result
     except Exception as exc:
         raise DeviceAccessException("axis_restart") from exc
     runtime.logger.status(
@@ -259,7 +288,7 @@ def restart_axis(message, runtime, state, client):
     return {
         "axis": axis_index,
         "result": result,
-        "message": "Axis restart command sent.",
+        "message": "Axis restart completed.",
     }
 
 

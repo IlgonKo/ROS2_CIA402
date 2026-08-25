@@ -16,23 +16,39 @@ from motion_server.diagnostic.runtime import (
     BUS_SOURCE,
     RuntimeDiagnosticMonitor,
 )
-from motion_server.failure import CommunicationTimeoutException
+from motion_server.failure import (
+    CommunicationException,
+    CommunicationTimeoutException,
+)
+from motion_server.app.initialization import InitializationStatus
+from motion_server.app.session import ServerRuntimeState, ServerSession
 
 
 NOW = datetime(2026, 8, 21, 3, 0, tzinfo=timezone.utc)
 
 
 class Runtime:
-    def __init__(self, statuswords=(0x0027,), *, wkc=2, expected_wkc=2):
+    def __init__(
+        self,
+        statuswords=(0x0027,),
+        *,
+        wkc=2,
+        expected_wkc=2,
+        transport_available=True,
+    ):
         self.slaves = [
             SimpleNamespace(txpdo=SimpleNamespace(statusword=statusword))
             for statusword in statuswords
         ]
         self.wkc = wkc
         self._expected_wkc = expected_wkc
+        self._transport_available = transport_available
 
     def expected_wkc(self):
         return self._expected_wkc
+
+    def transport_available(self):
+        return self._transport_available
 
 
 def manager(*ids):
@@ -65,6 +81,49 @@ class BusDiagnosticTest(unittest.TestCase):
         self.assertIsNotNone(fault)
         self.assertIs(fault.definition.level, DiagnosticLevel.FAULT)
         self.assertTrue(fault.definition.latching)
+
+    def test_wkc_mismatch_reports_transport_loss_when_bus_is_unavailable(self):
+        diagnostics = manager()
+        monitor = RuntimeDiagnosticMonitor(diagnostics)
+        runtime = Runtime(
+            wkc=0,
+            expected_wkc=2,
+            transport_available=False,
+        )
+
+        monitor.update(runtime, at=NOW)
+        monitor.update(runtime, at=NOW)
+        with self.assertRaises(CommunicationException):
+            monitor.update(runtime, at=NOW)
+
+        self.assertIsNone(
+            diagnostics.status_for(
+                BUS_PROCESS_DATA_INCOMPLETE.code,
+                BUS_SOURCE,
+            )
+        )
+
+    def test_wkc_fault_sets_server_runtime_fault_state(self):
+        diagnostics = manager("bus-fault")
+        runtime = Runtime(wkc=1, expected_wkc=2)
+        runtime.diagnostic_manager = diagnostics
+        session = ServerSession(
+            InitializationStatus.ready(),
+            diagnostic_manager=diagnostics,
+            runtime=runtime,
+        )
+        monitor = RuntimeDiagnosticMonitor(
+            diagnostics,
+            server_session=session,
+        )
+
+        for _ in range(3):
+            monitor.update(runtime, at=NOW)
+
+        self.assertIs(session.runtime_state, ServerRuntimeState.FAULT)
+        runtime.wkc = 2
+        monitor.update(runtime, at=NOW)
+        self.assertIs(session.runtime_state, ServerRuntimeState.FAULT)
 
     def test_good_cycle_breaks_wkc_mismatch_sequence(self):
         diagnostics = manager()

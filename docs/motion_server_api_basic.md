@@ -249,7 +249,7 @@ EtherCAT bus 상태 요약을 요청한다. 응답에는 device count, axis coun
 system/axis/status
 system/axis/enable
 system/axis/disable
-system/axis/reset
+system/axis/fault_reset
 system/axis/restart
 system/axis/home
 system/axis/stop
@@ -273,7 +273,7 @@ Examples:
 ```json
 {"cmd": "system/axis/enable", "axis": 0}
 {"cmd": "system/axis/disable", "axis": 0}
-{"cmd": "system/axis/reset", "axis": 0}
+{"cmd": "system/axis/fault_reset", "axis": 0}
 {"cmd": "system/axis/home", "axis": 0}
 {"cmd": "system/axis/stop", "axis": 0}
 {"cmd": "system/axis/mode", "axis": 0, "mode": "pp"}
@@ -368,7 +368,11 @@ Parameter read/write/save:
 {"cmd": "system/axis/param_save", "axis": 0}
 ```
 
-`system/axis/restart`는 API 이름만 예약되어 있으며, 현재 구현은 `not implemented` 응답을 반환한다.
+`system/axis/restart`는 대상 장치 재발견, process image 재구성 및 parameter refresh가 완료된
+뒤에 응답한다. 시작 전에 모든 Axis를 현재 위치에 hold하고 disable하며 진행 중에는 전체 Bus
+motion이 제한된다. 완료 후에도 이전 motion을 재개하거나 Axis를 자동 enable하지 않는다.
+별도 recovery worker를 사용하지 않으므로 이 요청이 끝날 때까지 같은 서버의 다른 API 응답도
+일시 정지한다. 기존 TCP 연결과 command authority는 유지된다.
 `system/axis/manualCW`는 Advanced mode에서만 사용하는 수동 Control Word 명령이다.
 
 ## Axes Commands
@@ -379,7 +383,7 @@ Parameter read/write/save:
 system/axes/status
 system/axes/enable
 system/axes/disable
-system/axes/reset
+system/axes/fault_reset
 system/axes/stop
 system/axes/move_abs
 system/axes/move_rel
@@ -393,7 +397,7 @@ Examples:
 ```json
 {"cmd": "system/axes/enable", "axes": [0, 1, 2]}
 {"cmd": "system/axes/disable", "axes": [0, 1, 2]}
-{"cmd": "system/axes/reset", "axes": [0, 1, 2]}
+{"cmd": "system/axes/fault_reset", "axes": [0, 1, 2]}
 {"cmd": "system/axes/stop", "axes": [0, 1, 2]}
 ```
 
@@ -555,14 +559,22 @@ system/io/iol/param_write
 
 ## Server and Bus Management
 
-다음 명령은 namespace로 예약되어 있다. 현재 구현은 안전하게 `not implemented` 응답을 반환한다.
+Server와 Bus의 Fault 처리 및 recovery 명령은 다음과 같다.
 
 ```text
-system/server/reset
+system/server/fault_reset
 system/server/restart
+system/bus/fault_reset
 system/bus/reconnect
 system/bus/rescan
 ```
+
+`system/bus/rescan`은 아직 구현되지 않았다. Bus reconnect는 현재 runtime과 TCP client를
+유지하며 transport/process image/parameter refresh를 동기 수행한다. Server restart만 새
+process와 Diagnostic 저장소를 만든다. Bus reconnect는 `initialization_error`,
+`bus_disconnected`, `fault` 상태에서만 허용되고 `normal` 상태에서는 거부된다. 별도 recovery
+worker가 없으므로 reconnect가 완료될 때까지 status/stop을 포함한 다른 API 요청 처리는
+일시 정지하지만 기존 TCP socket과 command authority는 유지된다.
 
 ## Rejection Response
 
@@ -598,7 +610,7 @@ authority_busy       다른 client가 authority를 갖고 있음
 1. TCP connect
 2. system/axes/status 확인
 3. system/authority/request
-4. system/axis/reset 필요 시 수행
+4. system/axis/fault_reset 필요 시 수행
 5. system/axis/enable
 6. system/axis/home
 7. system/axis/mode -> pp

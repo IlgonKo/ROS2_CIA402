@@ -163,7 +163,7 @@ class SingleAxisViewBuilderMixin:
             side="left",
             padx=4,
         )
-        ttk.Button(buttons, text="Alarm Ack", command=self.axis_reset).pack(
+        ttk.Button(buttons, text="Fault Reset", command=self.axis_fault_reset).pack(
             side="left",
             padx=4,
         )

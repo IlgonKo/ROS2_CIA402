@@ -185,6 +185,33 @@ class DiagnosticManagerTest(unittest.TestCase):
                 source(),
             )
 
+    def test_acknowledge_faults_selects_source_and_excludes_alarm(self):
+        manager = self.manager("axis-fault", "axis-alarm", "other-fault")
+        axis_zero = source(DiagnosticSourceType.AXIS, 0)
+        axis_one = source(DiagnosticSourceType.AXIS, 1)
+        fault = manager.detect(definition(), axis_zero, at=T0)
+        alarm = manager.detect(
+            definition(
+                "AXIS_WARNING",
+                level=DiagnosticLevel.ALARM,
+                latching=False,
+            ),
+            axis_zero,
+            at=T0,
+        )
+        other = manager.detect(definition(), axis_one, at=T0)
+
+        acknowledged = manager.acknowledge_faults(source=axis_zero, at=T1)
+
+        self.assertEqual(acknowledged, (fault,))
+        self.assertEqual(fault.history.acknowledged_at, T1)
+        self.assertIsNone(alarm.history.acknowledged_at)
+        self.assertIsNone(other.history.acknowledged_at)
+        self.assertTrue(manager.has_active_fault(source=axis_zero))
+        self.assertTrue(
+            manager.has_active_fault(source_type=DiagnosticSourceType.AXIS)
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

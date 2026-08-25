@@ -162,17 +162,21 @@ class DiagnosisMixin:
         if not confirmed:
             return
         self.stop_tab_motion()
-        self.diagnosis_result_var.set("Waiting for axis restart response...")
+        self.diagnosis_result_var.set(
+            "Axis recovery in progress; other API requests are paused..."
+        )
         self.try_send(lambda: self.client.send_axis_restart(axis_index))
 
-    def server_reset(self):
+    def server_fault_reset(self):
         self.stop_tab_motion()
-        self.diagnosis_result_var.set("Waiting for server reset response...")
-        self.try_send(self.client.send_server_reset)
+        self.diagnosis_result_var.set("Waiting for server fault reset response...")
+        self.try_send(self.client.send_server_fault_reset)
 
     def bus_reconnect(self):
         self.stop_tab_motion()
-        self.diagnosis_result_var.set("Waiting for bus reconnect response...")
+        self.diagnosis_result_var.set(
+            "Bus recovery in progress; other API requests are paused..."
+        )
         self.try_send(self.client.send_bus_reconnect)
 
     def server_restart(self):

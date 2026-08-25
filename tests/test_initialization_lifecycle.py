@@ -243,6 +243,7 @@ class InitializationLifecycleTest(unittest.TestCase):
             self.initialize(session)
         failure = session.initialization_status.failure
         state = {
+            "server_session": session,
             "initialization_status": session.initialization_status,
             "diagnostic_manager": session.diagnostic_manager,
         }
@@ -303,41 +304,6 @@ class ApplicationRecoveryOwnershipTest(unittest.TestCase):
         )
         return MotionServerApplication(SimpleNamespace(port=15000), config)
 
-    def test_server_reset_replaces_session_and_diagnostic_manager(self):
-        from motion_server import server
-
-        sessions = []
-
-        def run_once(session, **_dependencies):
-            sessions.append(session)
-            if len(sessions) == 1:
-                raise server.ServerResetRequested()
-
-        with patch.object(server, "run_main_once", side_effect=run_once):
-            self.application().run()
-
-        self.assertEqual(len(sessions), 2)
-        self.assertIsNot(sessions[0], sessions[1])
-        self.assertIsNot(
-            sessions[0].diagnostic_manager,
-            sessions[1].diagnostic_manager,
-        )
-
-    def test_bus_reconnect_preserves_session_and_diagnostic_manager(self):
-        from motion_server import server
-
-        sessions = []
-
-        def run_once(session, **_dependencies):
-            sessions.append(session)
-            if len(sessions) == 1:
-                raise server.BusReconnectRequested()
-
-        with patch.object(server, "run_main_once", side_effect=run_once):
-            self.application().run()
-
-        self.assertEqual(len(sessions), 2)
-        self.assertIs(sessions[0], sessions[1])
         self.assertIs(
             sessions[0].diagnostic_manager,
             sessions[1].diagnostic_manager,

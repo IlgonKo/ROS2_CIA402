@@ -1,5 +1,9 @@
 # TD-018 Runtime 생성 단계 Initialization Error 처리
 
+> 후속 변경: 이 문서의 server reset, reconnect 시 TCP 종료 및 runtime 재생성 계약은
+> RF-005의 DEC-026~DEC-029로 대체되었다. 현재 계약은
+> [RF-005](../rf/RF-005-runtime-recovery.md)를 따른다.
+
 ## 배경 및 현재 구조
 
 - `motion_server/server.py`는 `initialize_drive()` 실패만 degraded server loop로 전환한다.

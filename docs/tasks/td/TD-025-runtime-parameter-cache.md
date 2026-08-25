@@ -3,7 +3,7 @@
 ## 배경
 
 TD-023은 CMMT 축 제어에 즉시 필요한 OD readback을 단일
-`AxisParameterRuntimeCache`에 보관하고 startup, 설정 변경과 reset lifecycle에서
+`AxisParameterRuntimeCache`에 보관하고 startup, 설정 변경과 recovery lifecycle에서
 동기화한다. 범용 parameter refresh와 다른 장치 유형까지 포함하면 TD-023의 Virtual OD
 초기화 범위를 벗어나므로 후속 작업으로 분리한다.
 
@@ -15,7 +15,7 @@ TD-023은 CMMT 축 제어에 즉시 필요한 OD readback을 단일
 - Motion Server 외부 commissioning 변경의 refresh 정책
 - readback 실패 시 이전 값 유지 또는 invalid 처리 정책
 - 다중 항목의 atomic update와 Diagnostic 연동
-- RF-005가 통지한 PySOEM Axis restart/recovery 완료 후 해당 축 OD refresh
+- RF-005가 동기 호출한 PySOEM Axis restart/recovery 완료 전 해당 축 OD refresh
 - restart 후 readback 실패 항목의 invalid 처리와 MotionController 사용 차단
 - IO와 향후 device profile별 cache provider 확장 경계
 
@@ -27,5 +27,7 @@ TD-023은 CMMT 축 제어에 즉시 필요한 OD readback을 단일
 ## RF-005와의 경계
 
 - RF-005는 실축 restart 완료 감지, EtherCAT 연결 복구와 상태 전이를 책임진다.
-- TD-025는 복구 완료 이벤트 이후 OD readback, cache 갱신/invalid 처리와 제어 projection
-  재동기화를 책임진다.
+- RF-005는 `refresh_after_recovery(runtime, recovery_type, affected_axes)`를 복구 완료 전에
+  동기 호출한다. 현재 adapter는 TD-023의 Axis cache refresh를 사용한다.
+- TD-025는 이 호출 경계 안에서 OD readback, cache 갱신/invalid 처리와 제어 projection
+  재동기화를 확장하며 공개 event bus는 만들지 않는다.

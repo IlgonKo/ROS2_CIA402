@@ -1,8 +1,8 @@
+from motion_server.app.recovery import reconnect_runtime
+
+
 def request_bus_reconnect(message, runtime, state, client):
-    state["bus_reconnect_requested"] = True
-    return {
-        "message": (
-            "EtherCAT bus reconnect accepted. "
-            "Runtime will be reinitialized with the current configuration."
-        ),
-    }
+    recovery = state.get("bus_reconnect_operation")
+    if recovery is not None:
+        return recovery()
+    return reconnect_runtime(runtime, state)

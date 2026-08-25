@@ -152,7 +152,7 @@ namespace, feedback 형식, 단위 정책을 변경한 경우에는 이후 ROS B
 
    - fault 상태가 아니어야 한다.
    - Shutdown, Switch on, Enable operation 순서로 statusword가 이동한다.
-   - `system/axis/reset`으로 fault reset이 동작하는지 확인한다.
+   - `system/axis/fault_reset`으로 fault reset이 동작하는지 확인한다.
    - alarm이 해제되지 않으면 drive alarm code와 STO/motor power 상태를 먼저 확인한다.
 
 5. Unit conversion 확인
@@ -178,10 +178,15 @@ namespace, feedback 형식, 단위 정책을 변경한 경우에는 이후 ROS B
 
 7. Axis restart 확인
 
-   - `system/axis/restart`는 먼저 disable을 수행한다.
+   - `system/axis/restart`는 모든 Axis의 homing/trajectory를 중단하고 현재 위치를 hold한 뒤
+     전체 Axis를 disable한다.
    - disable 후 지정된 대기 시간이 적용된다.
    - CMMT restart command가 전송된다.
-   - axis restart 이후 bus/server reset은 자동 수행하지 않는다.
+   - Axis restart 응답 전에 slave 재발견, process image 재구성 및 해당 축 parameter refresh가
+     완료되는지 확인한다.
+   - 완료 후 모든 Axis가 자동 enable되지 않고 이전 trajectory도 재개되지 않는지 확인한다.
+   - restart 처리 중 기존 TCP 연결은 유지되지만 다른 status/stop 요청 응답은 완료 시점까지
+     대기하는지 확인한다.
 
 ## CPX-AP-I-EC Remote I/O Test
 
@@ -321,14 +326,15 @@ namespace, feedback 형식, 단위 정책을 변경한 경우에는 이후 ROS B
 - `system/authority/request`
 - `system/authority/release`
 - `system/server/status`
-- `system/server/reset`
+- `system/server/fault_reset`
 - `system/server/restart`
 - `system/bus/status`
+- `system/bus/fault_reset`
 - `system/bus/reconnect`
 - `system/axis/status`
 - `system/axis/enable`
 - `system/axis/disable`
-- `system/axis/reset`
+- `system/axis/fault_reset`
 - `system/axis/restart`
 - `system/axis/home`
 - `system/axis/stop`
@@ -360,6 +366,14 @@ namespace, feedback 형식, 단위 정책을 변경한 경우에는 이후 ROS B
 
 현재 reserved 상태인 API는 배포 blocking 항목으로 보지 않는다. 단, 문서에 reserved 또는
 not implemented 상태가 명확히 표시되어야 한다.
+
+Bus recovery 회귀에서는 다음을 추가 확인한다.
+
+- `normal` 상태의 `system/bus/reconnect`는 거부된다.
+- cable 분리 시 transport exception이 발생하는 경로와 WKC가 0으로 반복되는 경로 모두
+  `bus_disconnected`로 전환된다.
+- reconnect 중 TCP socket과 authority는 유지되지만 동기 recovery가 반환되기 전에는 같은
+  server loop의 다른 API 응답이 일시 정지한다.
 
 ## 배포 승인 기준
 

@@ -5,6 +5,7 @@ from unittest.mock import patch
 
 from motion_server.api.router import route_message
 from motion_server.app.initialization import InitializationStatus
+from motion_server.app.session import ServerSession
 from motion_server.diagnostic import DiagnosticManager
 
 
@@ -30,9 +31,15 @@ def runtime(**values):
 
 
 def ready_state(**values):
+    manager = DiagnosticManager()
+    session = ServerSession(
+        InitializationStatus.ready(),
+        diagnostic_manager=manager,
+    )
     return {
-        "initialization_status": InitializationStatus.ready(),
-        "diagnostic_manager": DiagnosticManager(),
+        "server_session": session,
+        "initialization_status": session.initialization_status,
+        "diagnostic_manager": manager,
         **values,
     }
 

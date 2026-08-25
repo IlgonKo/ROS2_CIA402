@@ -106,18 +106,13 @@ class InitializationRecoveryScopeTest(unittest.TestCase):
             InitializationStage.CONFIGURATION,
             InitializationStage.DEVICE_MODEL_BUILD,
         ):
-            self.assertFalse(
-                recovery_action_allowed(
-                    stage, InitializationRecoveryScope.SERVER_RESET
-                )
-            )
             self.assertTrue(
                 recovery_action_allowed(
                     stage, InitializationRecoveryScope.SERVER_RESTART
                 )
             )
 
-    def test_runtime_creation_allows_reset_or_restart(self):
+    def test_runtime_creation_requires_restart(self):
         stage = InitializationStage.RUNTIME_CREATION
 
         self.assertFalse(
@@ -126,15 +121,12 @@ class InitializationRecoveryScopeTest(unittest.TestCase):
             )
         )
         self.assertTrue(
-            recovery_action_allowed(stage, InitializationRecoveryScope.SERVER_RESET)
-        )
-        self.assertTrue(
             recovery_action_allowed(
                 stage, InitializationRecoveryScope.SERVER_RESTART
             )
         )
 
-    def test_bus_and_device_initialization_allow_all_scopes(self):
+    def test_bus_and_device_initialization_allow_reconnect_or_restart(self):
         for stage in (
             InitializationStage.BUS_CONNECTION,
             InitializationStage.DEVICE_INITIALIZATION,

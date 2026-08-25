@@ -13,7 +13,7 @@ from motion_server.app.initialization import (
     InitializationFailure,
     InitializationStatus,
 )
-from motion_server.app.session import ServerSession
+from motion_server.app.session import ServerRuntimeState, ServerSession
 from motion_server.app.state import initial_degraded_state
 from motion_server.diagnostic.startup import detect_initialization_fault
 from motion_server.server import (
@@ -54,12 +54,12 @@ class DegradedApiContractTest(unittest.TestCase):
     def test_server_and_bus_status_need_no_runtime(self):
         session = failed_session(InitializationCause.BUS_CONNECTION_FAILED)
         state = initial_degraded_state(session)
-
         server_response = self.route(state, {"cmd": "system/server/status"})
         bus_response = self.route(state, {"cmd": "system/bus/status"})
 
         server_data = server_response["data"]
         self.assertFalse(server_data["initialized"])
+        self.assertEqual(server_data["runtime_state"], "initialization_error")
         self.assertEqual(
             server_data["initialization_failure"]["cause"],
             "bus_connection_failed",
@@ -75,6 +75,7 @@ class DegradedApiContractTest(unittest.TestCase):
         bus_data = bus_response["data"]
         self.assertFalse(bus_data["available"])
         self.assertFalse(bus_data["connected"])
+        self.assertEqual(bus_data["runtime_state"], "initialization_error")
         for field in (
             "device_count",
             "axis_count",
@@ -87,6 +88,10 @@ class DegradedApiContractTest(unittest.TestCase):
     def test_authority_and_matching_recovery_work_without_runtime(self):
         session = failed_session(InitializationCause.BUS_CONNECTION_FAILED)
         state = initial_degraded_state(session)
+        state["bus_reconnect_operation"] = lambda: {
+            "connected": True,
+            "message": "EtherCAT Bus reconnect completed.",
+        }
         client = {"id": 7, "conn": Connection()}
 
         authority = self.route(
@@ -102,7 +107,6 @@ class DegradedApiContractTest(unittest.TestCase):
 
         self.assertEqual(authority["result"], "success")
         self.assertEqual(reconnect["result"], "success")
-        self.assertTrue(state["bus_reconnect_requested"])
 
     def test_device_api_and_bus_rescan_are_not_available(self):
         session = failed_session(InitializationCause.BUS_CONNECTION_FAILED)
@@ -124,11 +128,9 @@ class DegradedApiContractTest(unittest.TestCase):
         state["command_authority_owner"] = 1
 
         reconnect = self.route(state, {"cmd": "system/bus/reconnect"})
-        reset = self.route(state, {"cmd": "system/server/reset"})
         restart = self.route(state, {"cmd": "system/server/restart"})
 
         self.assertEqual(reconnect["failure"]["code"], "INVALID_STATE")
-        self.assertEqual(reset["failure"]["code"], "INVALID_STATE")
         self.assertEqual(restart["result"], "success")
 
 
@@ -143,6 +145,24 @@ class ServerSessionTest(unittest.TestCase):
         self.assertIs(runtime.diagnostic_manager, session.diagnostic_manager)
         self.assertIs(detached, runtime)
         self.assertIsNone(session.runtime)
+
+    def test_runtime_state_is_typed_and_requires_runtime_when_connected(self):
+        session = failed_session(InitializationCause.RUNTIME_CREATION_FAILED)
+        self.assertIs(
+            session.runtime_state,
+            ServerRuntimeState.INITIALIZATION_ERROR,
+        )
+        with self.assertRaises(RuntimeError):
+            session.set_runtime_state(ServerRuntimeState.BUS_DISCONNECTED)
+
+        runtime = SimpleNamespace(diagnostic_manager=None)
+        session.attach_runtime(runtime)
+        session.mark_ready()
+        session.set_runtime_state(ServerRuntimeState.FAULT)
+        self.assertIs(session.runtime_state, ServerRuntimeState.FAULT)
+
+        with self.assertRaises(TypeError):
+            session.set_runtime_state("normal")
 
 
 class ConfigurationDegradedListenerTest(unittest.TestCase):

@@ -152,11 +152,8 @@ class MotionServerApplication:
                 **dependencies,
             )
 
-        # S03 replaces the Namespace adapter with typed projections. Runtime
-        # reset/reconnect lifecycle already belongs to this composition root.
+        # Runtime recovery lifecycle belongs to this composition root.
         from motion_server.server import (
-            BusReconnectRequested,
-            ServerResetRequested,
             ServerRestartRequested,
             restart_current_process,
             run_main_once,
@@ -175,21 +172,6 @@ class MotionServerApplication:
             try:
                 run_main_once(session, **dependencies)
                 return
-            except ServerResetRequested:
-                print(
-                    "Motion Server runtime reinitialization requested; "
-                    "reinitializing runtime and bus.",
-                    flush=True,
-                )
-                session = ServerSession(InitializationStatus.ready())
-                continue
-            except BusReconnectRequested:
-                print(
-                    "Motion Server bus reconnect requested; "
-                    "reinitializing runtime with the current Diagnostic state.",
-                    flush=True,
-                )
-                continue
             except ServerRestartRequested:
                 print(
                     "Motion Server restart requested; restarting process.",

@@ -26,6 +26,7 @@ from motion_server.app.initialization import (
     InitializationStatus,
 )
 from motion_server.diagnostic import DiagnosticManager
+from motion_server.app.session import ServerSession
 from datetime import datetime, timezone
 
 
@@ -74,6 +75,7 @@ class StatusBoundaryTest(unittest.TestCase):
             message=definition.message,
             occurred_at=datetime(2026, 8, 25, tzinfo=timezone.utc),
         ))
+        session = ServerSession(status)
         response = handle_server_status(
             "system/server/status",
             {"type": "system/server/status", "request_id": "r1"},
@@ -81,12 +83,14 @@ class StatusBoundaryTest(unittest.TestCase):
             {
                 "initialization_status": status,
                 "diagnostic_manager": DiagnosticManager(),
+                "server_session": session,
             },
             active_client,
         )
 
         self.assertNotIn("type", response)
         self.assertFalse(response["initialized"])
+        self.assertEqual(response["runtime_state"], "initialization_error")
         self.assertEqual(
             response["initialization_failure"]["cause"],
             "bus_connection_failed",

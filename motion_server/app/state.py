@@ -69,6 +69,13 @@ def initial_server_state(
         "axis_restart_disable_settle_time": (
             server_config.axis_restart_disable_settle_time
         ),
+        "bus_reconnect_timeout": server_config.bus_reconnect_timeout,
+        "axis_restart_timeout": server_config.axis_restart_timeout,
+        "csp_interpolation_modes": [
+            int(motion_config.csp_interpolation_mode)
+            for _ in range(axis_count_value)
+        ],
+        "recovery_in_progress": None,
         "target_positions": positions,
         "motion_mode": motion_config.initial_motion_mode,
         "motion_modes": [

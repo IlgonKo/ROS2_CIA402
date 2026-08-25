@@ -91,17 +91,23 @@ class AxisRuntime:
             return getattr(self.ethercat_master, name)
         raise AttributeError(name)
 
-    def connect(self, target_state=None):
-        self.device_manager.connect(target_state=target_state)
+    def connect(self, target_state=None, timeout_s=None):
+        self.device_manager.connect(
+            target_state=target_state,
+            timeout_s=timeout_s,
+        )
 
-    def enter_operational(self):
-        self.device_manager.enter_operational()
+    def enter_operational(self, timeout_s=None):
+        self.device_manager.enter_operational(timeout_s=timeout_s)
 
     def close(self):
         self.device_manager.close()
 
     def expected_wkc(self):
         return self.device_manager.expected_wkc()
+
+    def transport_available(self):
+        return self.device_manager.transport_available()
 
     def get_dc_time_ns(self):
         return self.ethercat_master.get_dc_time_ns()

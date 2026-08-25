@@ -154,8 +154,7 @@ class InitializationStatus:
 
 class InitializationRecoveryScope(IntEnum):
     BUS_RECONNECT = 1
-    SERVER_RESET = 2
-    SERVER_RESTART = 3
+    SERVER_RESTART = 2
 
 
 INITIALIZATION_RECOVERY_SCOPE = {
@@ -166,7 +165,7 @@ INITIALIZATION_RECOVERY_SCOPE = {
         InitializationRecoveryScope.SERVER_RESTART
     ),
     InitializationStage.RUNTIME_CREATION: (
-        InitializationRecoveryScope.SERVER_RESET
+        InitializationRecoveryScope.SERVER_RESTART
     ),
     InitializationStage.BUS_CONNECTION: (
         InitializationRecoveryScope.BUS_RECONNECT

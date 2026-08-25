@@ -14,6 +14,7 @@ from motion_server.diagnostic import (
 )
 from motion_server.handlers.status.server_status import server_status_message
 from motion_server.app.initialization import InitializationStatus
+from motion_server.app.session import ServerSession
 
 
 NOW = datetime(2026, 8, 21, 1, 2, 3, tzinfo=timezone.utc)
@@ -104,10 +105,15 @@ class DiagnosticStatusSerializationTest(unittest.TestCase):
             at=NOW,
         )
 
+        session = ServerSession(
+            InitializationStatus.ready(),
+            diagnostic_manager=manager,
+        )
         data = server_status_message(
             runtime(manager),
             {
-                "initialization_status": InitializationStatus.ready(),
+                "server_session": session,
+                "initialization_status": session.initialization_status,
                 "diagnostic_manager": manager,
             },
         )

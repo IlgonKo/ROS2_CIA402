@@ -7,6 +7,7 @@ from motion_server.diagnostic.models import (
     DiagnosticSource,
     DiagnosticSourceType,
 )
+from motion_server.failure import CommunicationException
 
 
 BUS_WKC_MISMATCH_DETECTION_CYCLES = 3
@@ -20,12 +21,14 @@ class RuntimeDiagnosticMonitor:
         self,
         diagnostic_manager,
         *,
+        server_session=None,
         bus_wkc_mismatch_detection_cycles=BUS_WKC_MISMATCH_DETECTION_CYCLES,
     ):
         threshold = int(bus_wkc_mismatch_detection_cycles)
         if threshold < 1:
             raise ValueError("Bus WKC mismatch detection cycles must be positive")
         self.diagnostic_manager = diagnostic_manager
+        self.server_session = server_session
         self.bus_wkc_mismatch_detection_cycles = threshold
         self._bus_wkc_mismatch_cycles = 0
 
@@ -42,11 +45,22 @@ class RuntimeDiagnosticMonitor:
                 self._bus_wkc_mismatch_cycles
                 >= self.bus_wkc_mismatch_detection_cycles
             ):
+                transport_available = getattr(
+                    runtime,
+                    "transport_available",
+                    lambda: True,
+                )
+                if not transport_available():
+                    raise CommunicationException("bus_transport_state")
                 self.diagnostic_manager.detect(
                     BUS_PROCESS_DATA_INCOMPLETE,
                     BUS_SOURCE,
                     at=at,
                 )
+                if self.server_session is not None:
+                    from motion_server.app.session import ServerRuntimeState
+
+                    self.server_session.set_runtime_state(ServerRuntimeState.FAULT)
             return
 
         self._bus_wkc_mismatch_cycles = 0

@@ -43,8 +43,8 @@ class PanelLayoutMixin:
         ).pack(side="left", padx=(8, 4))
         ttk.Button(
             header,
-            text="Server Reset",
-            command=self.server_reset,
+            text="Server Fault Reset",
+            command=self.server_fault_reset,
         ).pack(side="left", padx=4)
         ttk.Button(
             header,

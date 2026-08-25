@@ -75,14 +75,14 @@ Tech Debt 상태 값은 `open`, `in_progress`, `complete`를 사용한다.
 
 ### RF-005 Runtime Fault 및 Recovery 모델 완성
 
-- 상태: `planned`
+- 상태: `in_progress`
 - 우선순위: 보통
-- 요약: runtime fault state와 reset/reconnect/restart 복구 모델을 완성한다.
+- 요약: runtime Fault 상태와 fault-reset/reconnect/restart 복구 모델을 완성한다.
 - 완료 조건:
-  - 정상, initialization-error, bus-disconnected와 recoverable-fault 상태 및 전이가 명세된다.
-  - server reset, bus reconnect와 process restart의 책임 및 허용 조건이 구현된다.
-  - runtime 재구성 시 authority와 client notification 정책이 일관되게 적용된다.
-  - PySOEM Axis restart 완료·timeout·재연결 결과가 TD-025 cache refresh 경계에 전달된다.
+  - normal, initialization-error, bus-disconnected와 fault 상태 및 전이가 명세된다.
+  - source별 fault-reset, bus reconnect와 process restart의 책임 및 허용 조건이 구현된다.
+  - Bus disconnect/reconnect 중 기존 runtime, TCP client와 authority 유지 정책이 일관되게 적용된다.
+  - PySOEM Axis restart 완료·timeout·재연결 결과가 TD-025 cache refresh 호출 경계에 전달된다.
   - mock 오류 주입과 대표 실장치 복구 시나리오가 모두 통과한다.
 - 상세: [RF-005 기능 명세](tasks/rf/RF-005-runtime-recovery.md)
 

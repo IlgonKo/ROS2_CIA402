@@ -81,9 +81,14 @@ class PySOEMMaster:
         for _ in self.slaves:
             self.working_counter.add_slave()
 
-    def connect(self, target_state=None, timeout_us=50000):
+    def connect(self, target_state=None, timeout_us=50000, timeout_s=None):
         pysoem = self._load_pysoem()
         self._reset_processdata_state()
+        if timeout_s is not None:
+            timeout_s = float(timeout_s)
+            if timeout_s <= 0.0:
+                raise TimeoutError("EtherCAT connect deadline expired")
+            timeout_us = max(1000, min(int(timeout_s * 1_000_000), timeout_us))
 
         try:
             self._master = pysoem.Master()
@@ -133,8 +138,13 @@ class PySOEMMaster:
                 pass
             raise
 
-    def enter_operational(self, timeout_us=50000):
+    def enter_operational(self, timeout_us=50000, timeout_s=None):
         self._require_connected()
+        if timeout_s is not None:
+            timeout_s = float(timeout_s)
+            if timeout_s <= 0.0:
+                raise TimeoutError("EtherCAT operational deadline expired")
+            timeout_us = max(1000, min(int(timeout_s * 1_000_000), timeout_us))
         pysoem = self._load_pysoem()
         self._configure_sync_parameters()
         self._configure_dc_sync0()
@@ -299,7 +309,10 @@ class PySOEMMaster:
         self._require_connected()
 
         prepare_start_ns = time.monotonic_ns()
-        self._write_outputs()
+        try:
+            self._write_outputs()
+        except Exception as exception:
+            self._raise_processdata_exception(exception, "processdata_prepare")
         self.last_tx_prepare_duration_ns = (
             time.monotonic_ns() - prepare_start_ns
         )
@@ -318,20 +331,49 @@ class PySOEMMaster:
         self.last_tx_dc_time_ns = self.last_direct_tx_dc_time_ns
         self.dc_time_ns = self.last_tx_dc_time_ns
         send_start_ns = time.monotonic_ns()
-        self._master.send_processdata()
+        try:
+            self._master.send_processdata()
+        except Exception as exception:
+            self._raise_processdata_exception(exception, "processdata_send")
         self.last_send_call_duration_ns = time.monotonic_ns() - send_start_ns
         self._processdata_prepared = False
 
     def receive_processdata(self, timeout_us=2000):
         self._require_connected()
 
-        self.wkc = self._master.receive_processdata(timeout_us)
+        try:
+            self.wkc = self._master.receive_processdata(timeout_us)
+        except Exception as exception:
+            self._raise_processdata_exception(exception, "processdata_receive")
         receive_monotonic_ns = time.monotonic_ns()
         self.dc_time_ns = self.get_dc_time_ns()
         self.last_rx_dc_time_ns = self.dc_time_ns
         self.last_rx_monotonic_ns = receive_monotonic_ns
         self._read_inputs()
         return self.wkc
+
+    def _raise_processdata_exception(self, exception, operation):
+        if isinstance(exception, MotionServerException):
+            raise exception
+        communication_types = tuple(
+            exception_type
+            for name in (
+                "MailboxError",
+                "PacketError",
+                "WkcError",
+                "NetworkInterfaceNotOpenError",
+            )
+            if isinstance(
+                exception_type := getattr(self._pysoem, name, None),
+                type,
+            )
+        )
+        if isinstance(
+            exception,
+            communication_types + (ConnectionError, OSError),
+        ):
+            raise CommunicationException(operation) from exception
+        raise exception
 
     def get_dc_time_ns(self):
         if self._master is None:
@@ -347,6 +389,22 @@ class PySOEMMaster:
             return self._master.expected_wkc
 
         return self.working_counter.get_expected()
+
+    def transport_available(self):
+        if self._master is None:
+            return False
+        try:
+            self._master.read_state()
+        except Exception:
+            return False
+        slaves = tuple(self._master.slaves)
+        if len(slaves) < self.slave_count:
+            return False
+        none_state = int(self._load_pysoem().NONE_STATE)
+        return all(
+            (int(getattr(slave, "state", none_state)) & 0x0F) != none_state
+            for slave in slaves[: self.slave_count]
+        )
 
     def _write_outputs(self):
         for index, slave in enumerate(self.slaves):

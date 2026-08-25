@@ -122,7 +122,7 @@ class InitializationFaultTest(unittest.TestCase):
         state = {"initialization_status": self.failed_status()}
 
         validation_error = validate_command(
-            command_spec("system/server/reset"),
+            command_spec("system/server/fault_reset"),
             {"id": "client"},
             state,
             has_authority=True,
