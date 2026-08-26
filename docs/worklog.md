@@ -16,6 +16,9 @@
 
 ### 완료
 
+- `TD-022`에서 Motion Server startup INFO를 server/runtime field 계약으로 분리했다. DC와 phase
+  lock, CSP startup mode의 실제 활성 조건에 따라 detail을 포함하고 축별 scale/status/position
+  배열을 제거했다. formatter는 typed configuration만 사용하며 조합별 자동 테스트 6개를 추가했다.
 - `TD-020`에서 Motion Server image/container를 `motion-server:dev`/`motion-server`, Axis/IO
   Panel 공용 image를 `motion-server-control-panel:dev`, Compose project를 `motion-server`,
   systemd unit을 `motion-server.service`로 직접 전환했다. 운영 script의 legacy fallback을

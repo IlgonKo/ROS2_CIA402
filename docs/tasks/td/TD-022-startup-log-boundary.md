@@ -36,6 +36,25 @@ Motion Server 초기화 완료 로그가 server/runtime 설정과 축별 device 
 - CSP 관련 parameter는 실제 startup motion mode 또는 활성 capability 기준으로 필요한 경우에만 출력한다.
 - statusword, software position limits와 actual position은 초기화 요약에서 제거한다.
 
+## 확정 Field 계약
+
+- 항상 출력: `backend`, `server_mode`, `axes`, `cycle_time`, `spin_wait_time`,
+  `motion_mode`, `dc_enabled`
+- DC disabled: `dc_enabled=False` 외 DC field 생략
+- DC enabled: `dc_phase_lock` 추가
+- DC phase lock enabled: `dc_absolute_shift`, `dc_phase_offset_ns`, `dc_phase_kp`,
+  `dc_phase_ki`, `dc_phase_max_correction` 추가
+- startup motion mode가 CSP일 때만 `csp_profile`, `csp_jerk`,
+  `csp_interpolation_mode`, `csp_velocity_offset` 추가
+- `csp_interpolation_mode`는 typed enum 이름을 소문자로 출력한다.
+- `axis_position_counts_per_api_unit`을 포함한 축별 scale/readback 배열은 출력하지 않는다.
+
+대표 PP/DC off 출력:
+
+```text
+Motion Server initialized. backend=pysoem server_mode=basic axes=4 cycle_time=0.008 spin_wait_time=0.00015 motion_mode=pp dc_enabled=False
+```
+
 ## Device 정보 제공 경계
 
 - 정상 축 상태와 위치는 feedback/status API에서 제공한다.
@@ -52,4 +71,8 @@ Motion Server 초기화 완료 로그가 server/runtime 설정과 축별 device 
 
 ## 완료 증거
 
-완료 시 startup log field contract, 조합별 자동 테스트와 대표 출력 예제를 기록한다.
+- `motion_server/app/startup_logging.py`에 ordered field builder와 formatter를 분리했다.
+- Mock/PySOEM에 공통 적용되는 typed configuration projection만 사용하며 device/runtime object를
+  formatter에 전달하지 않는다.
+- DC off/on, phase lock off/on, absolute shift, PP/PV/Jog/CSP 조합과 device field 부재를
+  6개 자동 테스트로 검증했다.

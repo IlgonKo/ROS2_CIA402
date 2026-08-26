@@ -379,7 +379,7 @@ Tech Debt 상태 값은 `open`, `in_progress`, `complete`를 사용한다.
 
 ### TD-022 Motion Server 초기화 로그의 책임 및 조건부 출력 정리
 
-- 상태: `open`
+- 상태: `complete`
 - 우선순위: 낮음
 - 요약: 서버 초기화 로그에는 실제 적용된 server/runtime 설정만 출력하고 축별 device 상태는 분리한다.
 - 완료 조건:

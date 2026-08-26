@@ -41,6 +41,7 @@ from motion_server.app.initialization import (
     initialization_failure_from_exception,
     log_initialization_failure,
 )
+from motion_server.app.startup_logging import format_startup_summary
 from motion_server.handlers.command.trajectory import (
     update_active as update_active_trajectory,
 )
@@ -694,22 +695,13 @@ def run_main_once(
                 session.mark_ready()
                 resolve_initialization_fault(session)
                 state["initialization_status"] = session.initialization_status
-                dc_summary = f"dc_enabled={ethercat_config.dc.enabled}"
-                if ethercat_config.dc.enabled:
-                    dc_summary += (
-                        f" dc_phase_lock={ethercat_config.dc.phase_lock}"
-                        f" dc_absolute_shift={ethercat_config.dc.absolute_shift}"
-                    )
                 print(
-                    "Drive initialized. "
-                    f"backend={ethercat_config.backend.value} "
-                    f"axes={axis_count_value} "
-                    f"cycle_time={ethercat_config.cycle.period} "
-                    f"spin_wait_time={ethercat_config.cycle.spin_wait_time} "
-                    "axis_position_counts_per_api_unit="
-                    f"{state['axis_position_counts_per_unit']} "
-                    f"csp_profile={motion_config.csp_profile.value} "
-                    f"{dc_summary}",
+                    format_startup_summary(
+                        server_config,
+                        ethercat_config,
+                        motion_config,
+                        axis_count_value,
+                    ),
                     flush=True,
                 )
 

@@ -682,6 +682,22 @@ Device Profile + ESI
 - 영향: TD-020은 Compose, host script, systemd installer, 문서와 legacy naming 검사를 직접
   전환한다. 기존 설치는 문서화된 일회성 cleanup 후 신규 service를 설치해야 한다.
 
+## DEC-032 Startup INFO 로그는 적용 중인 Server Runtime 요약만 제공
+
+- 상태: `accepted`
+- 결정일: 2026-08-26
+- 결정:
+  - 초기화 성공 로그는 `Motion Server initialized`와 server/runtime 공통 field만 출력한다.
+  - DC detail은 DC와 phase lock의 실제 활성 조건에 따라 단계적으로 포함한다.
+  - CSP detail은 startup motion mode가 CSP일 때만 포함한다.
+  - 축별 scale, OD readback, statusword, software limit와 actual position은 초기화 요약에서 제외한다.
+  - startup summary formatter는 typed configuration과 axis count만 입력받고 device/runtime 객체에
+    의존하지 않는다.
+- 이유: 비활성 설정 원본과 장치 상태 배열을 server lifecycle 로그에 함께 표시하면 실제 적용
+  상태를 오인하고 핵심 startup 결과를 찾기 어렵다.
+- 영향: 상세 축 상태는 feedback/status API, startup validation 실패는 기존 warning/error,
+  실행 중 상세 진단은 명시적인 diagnostics/debug log가 계속 담당한다.
+
 ## 새 결정 작성 양식
 
 ```text
