@@ -648,10 +648,6 @@ Device Profile + ESI
 - 영향: RF-005 recovery coordinator와 설정 모델, Diagnostic definition 및 상태 전이 테스트에
   적용한다. TD-025는 동기 refresh 구현과 cache invalid Diagnostic을 제공한다.
 
-## 새 결정 작성 양식
-
-```text
-
 ## DEC-030 프로젝트 저장소와 설치 경로를 Motion Server 명칭으로 직접 전환
 
 - 상태: `accepted`
@@ -661,12 +657,18 @@ Device Profile + ESI
   - Windows repository root는 `C:\Users\Festo\Documents\motion-server`, Linux repository
     root는 `/home/festo/Documents/motion-server`를 사용한다.
   - 이전 경로 alias나 fallback은 제공하지 않고 script·문서·checkout을 새 경로로 직접 전환한다.
+  - Linux checkout은 GitHub clone과 fast-forward pull로 갱신하고 host별 `.env`는 Git에서 제외한다.
+    대상 checkout을 삭제하는 Windows archive sync는 사용하지 않는다.
   - Docker/systemd 실행 식별자는 TD-020, ROS 전용 식별자는 RF-008에서 변경한다.
 - 이유: 외부 배포 전이므로 두 경로를 병행 지원하는 것보다 프로젝트명과 실제 checkout 경계를
   일치시키는 편이 설치·동기화·장애 대응을 단순하게 유지한다.
 - 영향: TD-019는 GitHub rename, remote 갱신, Windows/Linux 경로 migration과 rollback을 함께
   검증한다. rollback은 compatibility layer가 아니라 directory와 repository 이름을 이전 상태로
   되돌리는 절차다.
+
+## 새 결정 작성 양식
+
+```text
 
 ## DEC-### 제목
 

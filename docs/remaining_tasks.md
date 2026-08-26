@@ -100,7 +100,7 @@ Tech Debt 상태 값은 `open`, `in_progress`, `complete`를 사용한다.
 
 ### RF-007 CMMT ESI/PDO 실장치 검증 확대
 
-- 상태: `in_progress`
+- 상태: `complete`
 - 우선순위: 높음
 - 요약: CMMT-AS/ST ESI catalog와 PDO configuration을 다양한 실장치 구성에서 검증한다.
 - 완료 조건:
@@ -343,14 +343,14 @@ Tech Debt 상태 값은 `open`, `in_progress`, `complete`를 사용한다.
 
 ### TD-019 프로젝트·저장소 및 설치 경로 변경
 
-- 상태: `in_progress`
+- 상태: `complete`
 - 우선순위: 보통
 - 요약: `ROS2_CIA402/virtual_ethercat` 기반 프로젝트·저장소·설치 경로를 Motion Server 명칭으로 이관한다.
 - 완료 조건:
   - GitHub repository, 로컬 workspace와 Linux 설치 경로의 목표 명칭이 결정 문서에 확정된다.
   - Windows/Linux script와 문서가 새 경로를 기본값으로 사용한다.
   - 기존 경로에서 새 경로로 이전하는 절차와 rollback 방법이 제공된다.
-  - clean checkout, Windows-to-Linux sync와 Basic mode startup 검증이 새 경로에서 통과한다.
+  - Windows와 Linux clean checkout 및 Linux Basic mode startup 검증이 새 경로에서 통과한다.
 - 상세: [TD-019 기술 명세](tasks/td/TD-019-project-path-migration.md)
 
 ### TD-020 Legacy 실행 식별자 Migration

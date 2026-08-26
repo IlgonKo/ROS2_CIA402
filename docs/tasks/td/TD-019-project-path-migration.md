@@ -12,7 +12,7 @@
 ## 문제와 위험
 
 - 사용자에게 보이는 프로젝트명과 checkout/install 경로가 일치하지 않는다.
-- 경로를 즉시 변경하면 기존 shortcut, sync script, service working directory와 문서가 중단될 수 있다.
+- 경로를 즉시 변경하면 기존 shortcut, service working directory와 문서가 중단될 수 있다.
 - Git repository 자체 이름 변경과 로컬 directory 이동을 동시에 수행하면 rollback과 원인 분석이 어렵다.
 
 ## 확정 결정
@@ -24,13 +24,15 @@
   이전 checkout은 rollback을 위한 임시 보관본으로만 취급한다.
 - 적용 순서는 script·문서의 고정 경로 제거, GitHub repository rename, remote URL 변경,
   로컬 directory 이동 순서로 한다.
+- Windows-to-Linux archive sync는 대상 Git checkout과 `.env`를 삭제할 수 있으므로 제거한다.
+  Linux source update는 GitHub clone과 `git pull --ff-only`로 통일하고 `.env`는 host에 유지한다.
 - Docker/systemd 실행 식별자는 TD-020, ROS 전용 식별자는 RF-008에서 별도로 변경한다.
 
 ## 구현 범위
 
 - GitHub repository와 clone URL 변경 절차를 정의한다.
-- Windows/Linux local path 및 sync destination을 새 기본 경로로 변경한다.
-- script가 repository directory 이름을 고정 비교하지 않고 명시적인 project root를 사용하게 한다.
+- Windows/Linux local path를 새 기본 경로로 변경한다.
+- destructive Windows-to-Linux sync script와 관련 안내를 제거한다.
 - 문서, 설정 예제와 service working directory를 새 경로에 맞춘다.
 - 기존 checkout을 이동하고 remote URL을 갱신하는 migration 및 rollback 절차를 제공한다.
 
@@ -40,12 +42,12 @@
 2. GitHub repository를 `IlgonKo/motion-server`로 rename한다.
 3. `origin`을 `https://github.com/IlgonKo/motion-server.git`로 변경한다.
 4. Windows repository를 `C:\Users\Festo\Documents\motion-server`로 이동한다.
-5. Linux checkout 또는 sync target을 `/home/festo/Documents/motion-server`로 이동한다.
+5. Linux checkout을 `/home/festo/Documents/motion-server`에 clone하고 기존 `.env`를 보존한다.
 6. 새 경로에서 test, Windows launcher, Linux Basic mode startup을 검증한다.
 
 ## Rollback
 
-1. 실행 중인 Motion Server와 sync watcher를 중지한다.
+1. 실행 중인 Motion Server를 중지한다.
 2. 로컬 directory를 이전 경로로 되돌린다.
 3. `origin`을 이전 repository URL로 되돌린다.
 4. 필요할 때 GitHub repository 이름을 `ROS2_CIA402`로 되돌린다.
@@ -63,7 +65,7 @@ Rollback은 이전 이름을 코드에서 동시에 지원하는 호환 계층�
 ## 검증 계획
 
 - 새 GitHub URL에서 clean clone하고 repository 내부 link와 script를 검사한다.
-- Windows에서 새 경로를 사용해 Linux 새 경로로 one-shot/watch sync를 수행한다.
+- Linux에서 새 GitHub URL을 clone하고 `git pull --ff-only`로 갱신한다.
 - 새 Linux 경로에서 Docker Basic mode startup과 service working directory를 확인한다.
 - 기존 경로에서 migration과 rollback 절차를 각각 한 번 재현한다.
 
@@ -81,9 +83,6 @@ Rollback은 이전 이름을 코드에서 동시에 지원하는 호환 계층�
 - 기존 checkout은 Codex desktop process가 directory를 사용 중이라 이동할 수 없으므로
   현재 작업 종료 후 제거 가능한 rollback 사본으로 보존했다.
 
-### 남은 검증
-
-- 기본 Linux host `192.168.0.12:22`가 연결되지 않아 Windows-to-Linux sync와 새 Linux
-  경로의 Docker Basic mode startup은 아직 검증하지 못했다.
-- Linux host가 연결되면 `sync_motion_server_to_ubuntu.ps1` one-shot/watch, 새 경로 startup,
-  migration/rollback을 확인한 뒤 TD-019를 완료한다.
+- 2026-08-26: Linux host에서 새 GitHub repository의 최신 코드를 받아
+  `/home/festo/Documents/motion-server` 경로의 Motion Server 구동에 성공했다.
+- destructive sync script를 제거하고 Linux 갱신 계약을 Git clone/pull로 단일화했다.

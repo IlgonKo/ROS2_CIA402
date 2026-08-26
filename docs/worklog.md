@@ -6,20 +6,18 @@
 
 ## 2026-08-26
 
-### 진행 중
-
-- `TD-019`에서 GitHub repository를 `IlgonKo/motion-server`로 rename하고 Windows 목표 경로
-  `C:\Users\Festo\Documents\motion-server`에 clean clone했다. 동기화 스크립트의
-  `virtual_ethercat` 폴더명 가정과 이전 Linux 경로를 제거하고 새 경로 migration/rollback을
-  문서화했다. clean checkout에서 선택적 `.env`가 없으면 실패하던 테스트도 수정하여 전체
-  unittest 265개를 통과했다. Linux host가 연결되지 않아 원격 sync와 Basic mode 검증은 남아 있다.
-
 ### 등록
 
 - `TD-027`을 등록하여 Axis/IO Control Panel의 Motion Server runtime·Diagnostic 상태 모니터링과
   Axis Panel Motion Tab의 선택 축 Fault/Alarm 및 Drive 오류 상세 표시 누락을 함께 추적한다.
 
 ### 완료
+
+- `TD-019`에서 GitHub repository를 `IlgonKo/motion-server`로 rename하고 Windows/Linux
+  repository root를 각각 `C:\Users\Festo\Documents\motion-server`와
+  `/home/festo/Documents/motion-server`로 전환했다. 대상 Git checkout과 `.env`를 삭제할 수 있는
+  Windows archive sync를 제거하고 Linux update를 Git clone/pull로 통일했다. Windows clean clone의
+  전체 unittest 265개와 Linux 새 경로의 실제 Motion Server 구동을 확인했다.
 
 - `RF-005` 실축 cable reconnect에서 OP 진입 후 동기 SDO parameter refresh가 cyclic PDO를
   중단하여 WKC가 `5/15`로 유지되고 Axis Fault Reset RxPDO가 전달되지 않는 문제를 확인했다.

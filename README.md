@@ -474,34 +474,23 @@ Core ROS feedback topics:
 /command_rejected
 ```
 
-## Sync to Ubuntu EtherCAT host
+## Update the Ubuntu EtherCAT host
 
-From Windows PowerShell, push this project to the Ubuntu PC:
-
-```powershell
-.\scripts\windows\sync_motion_server_to_ubuntu.ps1 -User ubuntu
-```
-
-To keep syncing while editing:
-
-```powershell
-.\scripts\windows\sync_motion_server_to_ubuntu.ps1 -User ubuntu -Watch
-```
-
-Replace `ubuntu` with the Ubuntu login user. The default target is
-`ubuntu@192.168.0.12:/home/festo/Documents/motion-server`. Override it with
-`-RemotePath` when the Linux account uses a different home directory.
-
-If sync fails because Docker created root-owned `__pycache__` files on Ubuntu,
-fix ownership once:
+The Linux checkout is maintained directly from GitHub. Clone it once:
 
 ```bash
-sudo systemctl stop ros-cia402-axis-server.service
-sudo chown -R festo:festo /home/festo/Documents/motion-server
+cd /home/festo/Documents
+git clone https://github.com/IlgonKo/motion-server.git motion-server
 ```
 
-The PySOEM Docker image runs Python with bytecode generation disabled so new
-`__pycache__` files are not created in the bind-mounted project folder.
+Update an existing checkout with a fast-forward pull:
+
+```bash
+cd /home/festo/Documents/motion-server
+git pull --ff-only
+```
+
+Runtime `.env` files remain local to the Linux host and are not tracked by Git.
 
 ## Folder guide
 
