@@ -21,7 +21,9 @@
   systemd unit을 `motion-server.service`로 직접 전환했다. 운영 script의 legacy fallback을
   제거하고 일회성 cleanup 절차와 legacy identifier 검사를 추가했다. 전체 unittest 265개와
   Compose render 검사는 통과했지만 생성 unit의 `${COMPOSE_ENV_FILE}`을 systemd가 먼저 빈 값으로
-  확장하여 service 기동이 실패했으므로 TD-020을 다시 진행 상태로 전환했다.
+  확장하여 service 기동이 실패했다. 중간 변수를 제거하고 Bash command substitution을 직접
+  사용하도록 수정한 뒤 회귀 테스트를 266개로 늘렸으며 Linux에서 신규 service와 container의
+  정상 기동을 재확인하여 TD-020을 완료했다.
 - `TD-019`에서 GitHub repository를 `IlgonKo/motion-server`로 rename하고 Windows/Linux
   repository root를 각각 `C:\Users\Festo\Documents\motion-server`와
   `/home/festo/Documents/motion-server`로 전환했다. 대상 Git checkout과 `.env`를 삭제할 수 있는

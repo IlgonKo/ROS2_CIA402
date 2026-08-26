@@ -72,4 +72,5 @@ sudo bash scripts/host/service.sh install
   systemd가 Bash보다 먼저 빈 문자열로 확장하여 `motion-server.service`가 실패했다.
 - 생성 unit에서 중간 environment variable을 제거하고 Bash command substitution 결과를
   `--env-file`에 직접 전달하도록 수정했다.
-- 수정 unit의 `motion-server.service`와 `motion-server` container 정상 기동을 다시 확인해야 한다.
+- 2026-08-26: 수정 unit을 Linux에 재설치하여 `motion-server.service`와 `motion-server`
+  container가 정상 기동됨을 확인했다.
