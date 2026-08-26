@@ -413,7 +413,7 @@ Tech Debt 상태 값은 `open`, `in_progress`, `complete`를 사용한다.
 ### TD-024 Axis Control Panel 초기 임시 연결 제거
 
 - 상태: `open`
-- 우선순위: 낮음
+- 우선순위: 높음
 - 요약: Axis Control Panel이 축 수 확인을 위해 만드는 일회성 연결을 제거하고 상시 연결의 첫 status로 초기화한다.
 - 완료 조건:
   - Control Panel 시작 시 `system/axes/status`를 위한 별도 임시 TCP 연결을 만들지 않는다.
@@ -421,6 +421,7 @@ Tech Debt 상태 값은 `open`, `in_progress`, `complete`를 사용한다.
   - 시작 과정에서 동일 status 요청과 client 연결이 중복되지 않는다.
   - 정상적인 Control Panel 시작·종료가 서버에서 connection reset 오류로 기록되지 않는다.
   - 연결 실패, 지연 응답과 재접속 이후에도 UI가 올바른 축 수로 복구되는 자동 테스트가 통과한다.
+  - endpoint 변경 후 서버 축 수가 달라지면 Client buffer와 Panel UI가 새 status 기준으로 재구성된다.
 - 상세: [TD-024 기술 명세](tasks/td/TD-024-axis-panel-bootstrap-connection.md)
 
 ### TD-025 Runtime Parameter Cache 관리 체계 확장

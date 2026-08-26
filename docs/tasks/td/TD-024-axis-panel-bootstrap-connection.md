@@ -16,6 +16,18 @@ status 응답을 받은 뒤 이 연결을 닫고, `AxisServerClient`가 실제 �
   표시되어 실제 재접속 장애로 오인하기 쉽다.
 - 축 수를 UI 생성 전에 반드시 알아야 하는 현재 구조가 연결 lifecycle과 UI lifecycle을
   불필요하게 결합한다.
+- 시작 시 status 조회가 실패하면 `axis_count = 1` fallback으로 Panel 전체 UI와 Client buffer가
+  즉시 생성된다. 이후 화면에서 다른 endpoint에 연결하여 다축 status를 받아도 축 수와 UI를
+  재구성하는 경로가 없어 1축 Panel로 고정된다.
+
+## 확인된 재현 사례
+
+- 2026-08-26: Linux Motion Server는 `system/axes/status`에서 `axis_metadata`와
+  `statuswords`를 각각 4개 반환했고 Windows의 독립 초기 status 요청도 4축으로 판별했다.
+- Windows Panel을 기본 endpoint로 먼저 실행한 뒤 화면에서 Linux endpoint에 연결하면 시작 시
+  실패 fallback으로 만든 1축 UI가 유지됐다.
+- 따라서 서버 축 구성이나 status schema 문제가 아니라 endpoint 연결 성공 전 축 수를 확정하고
+  재접속 status에서 UI를 재구성하지 않는 Panel lifecycle 문제로 확인됐다.
 
 ## 목표 구조
 
@@ -24,6 +36,7 @@ status 응답을 받은 뒤 이 연결을 닫고, `AxisServerClient`가 실제 �
 - 축 수와 축 metadata가 확인된 후 UI를 생성하거나, UI가 먼저 필요한 경우 동적으로 축 view를
   구성할 수 있는 명시적인 초기화 경계를 둔다.
 - 재접속 후 축 구성이 변경되었으면 동일한 status 적용 경로로 UI 상태를 안전하게 재구성한다.
+- 연결 실패 상태에서는 임의의 1축 구성을 정상 구성처럼 확정하지 않는다.
 - 서버는 정상 EOF와 명시적인 client 종료를 오류가 아닌 disconnect lifecycle로 처리한다.
 
 ## 관련 위치

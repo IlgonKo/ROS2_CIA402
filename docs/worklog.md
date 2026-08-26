@@ -8,6 +8,9 @@
 
 ### 등록
 
+- Linux 4축 Motion Server에 Windows Axis Control Panel을 연결해도 시작 시 1축 fallback UI가
+  유지되는 사례를 확인했다. 기존 TD-024 범위와 동일하므로 중복 TD를 만들지 않고 재현 증거,
+  endpoint 변경 시 동적 재구성 완료 조건과 높은 우선순위를 추가했다.
 - `TD-027`을 등록하여 Axis/IO Control Panel의 Motion Server runtime·Diagnostic 상태 모니터링과
   Axis Panel Motion Tab의 선택 축 Fault/Alarm 및 Drive 오류 상세 표시 누락을 함께 추적한다.
 
