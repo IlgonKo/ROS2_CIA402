@@ -68,7 +68,8 @@ sudo bash scripts/host/service.sh install
 
 ### 실환경 검증
 
-- 2026-08-26: Linux에서 TD-020 branch를 적용하고 신규 `motion-server.service`와
-  `motion-server` container가 정상 기동됨을 확인했다.
-- 신규 service/container 이름으로 Motion Server가 실제 구동되므로 Docker Compose와 systemd
-  identifier 직접 전환이 완료됐다.
+- 2026-08-26: Linux에서 image build는 성공했지만 최초 생성한 unit의 `${COMPOSE_ENV_FILE}`을
+  systemd가 Bash보다 먼저 빈 문자열로 확장하여 `motion-server.service`가 실패했다.
+- 생성 unit에서 중간 environment variable을 제거하고 Bash command substitution 결과를
+  `--env-file`에 직접 전달하도록 수정했다.
+- 수정 unit의 `motion-server.service`와 `motion-server` container 정상 기동을 다시 확인해야 한다.

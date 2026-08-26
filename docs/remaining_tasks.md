@@ -355,7 +355,7 @@ Tech Debt 상태 값은 `open`, `in_progress`, `complete`를 사용한다.
 
 ### TD-020 Legacy 실행 식별자 Migration
 
-- 상태: `complete`
+- 상태: `in_progress`
 - 우선순위: 보통
 - 요약: 과거 프로젝트명을 포함한 container, image와 service 식별자를 직접 변경한다.
 - 완료 조건:

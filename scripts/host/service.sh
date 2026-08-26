@@ -42,8 +42,8 @@ Type=oneshot
 RemainAfterExit=yes
 WorkingDirectory=${PROJECT_ROOT}
 ExecStartPre=-/usr/bin/docker rm -f motion-server
-ExecStart=/usr/bin/bash -lc 'source ${PROJECT_ROOT}/scripts/env.sh; COMPOSE_ENV_FILE="\$(prepare_compose_env_file ${PROJECT_ROOT})"; exec /usr/bin/docker compose -f ${COMPOSE_FILE} --env-file "\${COMPOSE_ENV_FILE}" up -d motion_server'
-ExecStop=/usr/bin/bash -lc 'source ${PROJECT_ROOT}/scripts/env.sh; COMPOSE_ENV_FILE="\$(prepare_compose_env_file ${PROJECT_ROOT})"; exec /usr/bin/docker compose -f ${COMPOSE_FILE} --env-file "\${COMPOSE_ENV_FILE}" down'
+ExecStart=/usr/bin/bash -lc 'source ${PROJECT_ROOT}/scripts/env.sh; exec /usr/bin/docker compose -f ${COMPOSE_FILE} --env-file "\$(prepare_compose_env_file ${PROJECT_ROOT})" up -d motion_server'
+ExecStop=/usr/bin/bash -lc 'source ${PROJECT_ROOT}/scripts/env.sh; exec /usr/bin/docker compose -f ${COMPOSE_FILE} --env-file "\$(prepare_compose_env_file ${PROJECT_ROOT})" down'
 TimeoutStartSec=0
 
 [Install]
