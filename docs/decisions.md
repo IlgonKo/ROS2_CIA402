@@ -629,6 +629,10 @@ Device Profile + ESI
     일시 정지하되 기존 TCP socket과 command authority는 유지한다.
   - Axis restart 전에 전체 Axis의 homing/trajectory를 중단하고 실제 위치 hold와 disable을
     완료한다. recovery 후 자동 enable 또는 이전 motion 재개는 하지 않는다.
+  - Axis restart가 의도적으로 발생시키는 transport 단절은 성공 경로에서 Bus Fault로 생성하지
+    않는다. Axis restart coordinator가 slave 재발견, process image 재구성, OP 및 WKC 검증까지
+    같은 요청 안에서 수행하므로 별도 Bus reconnect도 요구하지 않는다. 이 내부 복구가 실패해
+    `BUS_DISCONNECTED`가 된 경우에만 후속 `system/bus/reconnect`를 사용한다.
   - timeout의 남은 시간은 connect와 OP 전이에 전달한다. worker 없이 이미 실행 중인 native/SDO
     호출을 강제로 중단하는 hard timeout은 보장하지 않는다.
 - 이유: recovery 완료 전 Success를 반환하면 별도 진행 상태와 notification이 필요하고 client가

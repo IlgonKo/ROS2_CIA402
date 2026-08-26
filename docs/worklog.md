@@ -17,6 +17,10 @@
 - 같은 실축 구성에서 Axis 0 restart를 실행하여 restart command 전 전체 축 Controlword `0x0007`,
   Statusword state `0x0023`을 확인했다. 13.27초 후 WKC `15/15`로 recovery가 완료됐고 자동 enable
   및 motion 재개 없이 다른 Axis의 CiA 402 Fault가 별도 fault-reset 대상으로 유지됐다.
+- 전 축 Operation Enabled 상태에서 Axis 1 restart를 추가 검증했다. restart 명령이 전 축을
+  Controlword `0x0007` 및 Statusword state `0x0023`으로 전환한 뒤 장치를 재시작했고 11.649초
+  후 WKC `15/15`로 내부 Bus recovery를 완료했다. 성공한 restart의 예상 transport 단절은 Bus
+  Fault를 만들거나 별도 Bus reconnect를 요구하지 않는 계약으로 확정하고 RF-005를 완료했다.
 - Windows launcher가 이전 실행에서 process environment에 투영한 Motion Server 설정을 다음 실행에
   재사용하지 않고 현재 `.env`를 다시 읽도록 정리했다. project root `PYTHONPATH` 중복을 제거하고
   전체 경로 대신 resolved project root만 출력하도록 TD-021을 완료했다.

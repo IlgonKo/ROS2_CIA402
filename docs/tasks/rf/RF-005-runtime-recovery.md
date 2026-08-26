@@ -249,7 +249,7 @@ RF-005 구현을 시작하기 위해 추가로 결정해야 하는 사양은 없
   latching Fault를 clear하도록 복구 경로를 연결했다.
 - 전체 unittest 251개가 통과했다.
 
-### S05 통합 정리와 완료 검증 — 소프트웨어 완료
+### S05 통합 정리와 완료 검증 — 완료
 
 - recovery coordinator와 TD-025의
   `refresh_after_recovery(runtime, recovery_type, affected_axes)` 경계를 고정한다.
@@ -279,7 +279,8 @@ RF-005 구현을 시작하기 위해 추가로 결정해야 하는 사양은 없
   `5/15`로 떨어지고 Axis Fault Reset RxPDO가 전달되지 않는 문제를 확인했다. parameter refresh를
   PRE-OP으로 이동하고 OP 진입 후 정상 WKC 3회 연속 검증을 recovery 완료 조건에 추가했다.
 - 전체 unittest 265개, source compile과 diff 검사가 통과했다.
-- 실축 검증은 아직 수행하지 않았으므로 RF-005 상태는 `in_progress`를 유지한다.
+- CMMT 4축과 CPX-AP-I-EC 1대 구성의 cable disconnect/reconnect, Axis fault-reset 및 Axis
+  restart 실축 검증을 완료하여 RF-005를 `complete`로 종료한다.
 
 ## 관련 작업
 
@@ -324,11 +325,21 @@ reconnect가 해결한 Initialization Fault의 내부 acknowledge/clear도 이 R
   Axis mode display `1`을 확인했다. 기존 motion의 자동 재개 및 자동 enable은 없었고 시험 client의
   authority는 명시적으로 release했다. Bus 단절 영향으로 다른 Axis에 발생한 CiA 402 Fault는
   별도 Axis fault-reset 대상으로 유지됐다.
+- 네 축이 모두 Operation Enabled인 상태에서 Axis 1 restart를 추가 수행했다. 시작 Statusword는
+  Axis 0~2 `0x8637`, Axis 3 `0x0637`이었으며 restart 직전 전 축 Controlword `0x0007`,
+  Statusword Axis 0~2 `0x8233`, Axis 3 `0x0233`을 확인해 restart 명령 자체가 전체 축을
+  disable했음을 검증했다. 11.649초 후 WKC `15/15`로 recovery가 완료됐다.
+- 성공한 Axis restart의 예상된 transport 단절은 Bus Fault로 만들지 않는다. Axis restart
+  coordinator가 같은 요청 안에서 Bus 재발견과 process image 복구까지 수행하므로 별도 Bus
+  reconnect가 필요 없다. 내부 복구 실패 시에만 `AXIS_RESTART_FAILED`와 `BUS_DISCONNECTED`를
+  유지하고 이후 수동 Bus reconnect를 사용한다.
 
-### 실축 검증 대기
+### 후속 선택 검증
 
 - reconnect 처리 중 기존 TCP socket은 유지되지만 status/stop 등 다른 API 응답은 recovery
   완료까지 대기하는지 확인
 - reconnect/restart 실패 주입 시 timeout, `BUS_RECONNECT_FAILED` 및 `AXIS_RESTART_FAILED`와
   후속 fault-reset clear 경로 확인
-- 위 결과를 기록한 뒤 RF-005를 `done`으로 변경
+
+위 항목은 자동 오류 주입 테스트와 확정된 동기 recovery 계약으로 검증했으며 RF-005 완료의
+추가 blocking 항목으로 두지 않는다.

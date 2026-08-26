@@ -75,7 +75,7 @@ Tech Debt 상태 값은 `open`, `in_progress`, `complete`를 사용한다.
 
 ### RF-005 Runtime Fault 및 Recovery 모델 완성
 
-- 상태: `in_progress`
+- 상태: `complete`
 - 우선순위: 보통
 - 요약: runtime Fault 상태와 fault-reset/reconnect/restart 복구 모델을 완성한다.
 - 완료 조건:
