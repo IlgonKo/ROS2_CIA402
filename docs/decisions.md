@@ -729,17 +729,50 @@ Device Profile + ESI
 - 결정일: 2026-08-26
 - 결정:
   - Virtual OD Model은 profile/ESI 기반 definition과 runtime value를 소유한다.
-  - Virtual OD Bridge는 SDO encode/decode, access 검증과 OD/PDO 값 연결만 담당한다.
+  - Virtual OD Bridge는 공통 Virtual Device 영역에서 SDO의 index/sub-index와
+    `PDO_Configuration`의 RxPDO/TxPDO mapping을 raw PDO payload와 OD Model 사이에 연결한다.
+  - SDO encode/decode와 access 검증, raw RxPDO payload-to-OD 및 OD-to-raw TxPDO payload 변환을
+    담당하고 PdoCodec이나 장치별 PDO 객체를 참조하지 않는다.
+  - MockSlave는 실제 slave 경로와 동일하게 `DeviceProfile.pdo_codec`을 사용해 PDO 객체와 raw
+    payload를 변환한다.
+  - OD 값 codec은 실축 CMMT PDO와 Virtual SDO adapter가 공통으로 사용한다.
   - reset, parameter save, AP parameter와 IO-Link ISDU 같은 command role을 Bridge에서 해석하지 않는다.
   - Motion Server와 DeviceProfile이 Mock/PySOEM 공통 command sequence를 소유한다.
-  - Virtual Device는 실제 장치가 command OD write를 받은 뒤 나타내는 내부 반응만 모사한다.
-  - MockSlave는 `virtual_device` 공통 계약을 호출하고 장치별 의미를 알지 않는다.
+  - Virtual Device는 PDO 객체나 OD write callback을 받지 않는다. Model_Update command 시점에
+    현재 OD 상태를 반영하여 실제 장치의 내부 반응과 물리 model을 갱신한다.
+  - MockSlave는 OD 반영과 Model_Update 순서만 조정하고 장치별 의미를 알지 않는다.
 - 이유: Bridge에 장치별 sequence와 role 분기가 누적되면 CPX 등 새로운 Virtual Device를 추가할
   때 Object Access 계층이 장치 behavior 계층으로 변질되고 실축과 가상 장치의 command sequence가
   이중화된다.
-- 영향: RF-001은 동일한 MockSlave와 OD Bridge를 재사용하고 CPX 고유 반응만
-  `VirtualCpxApDevice`에 구현한다. 새로운 장치 명령은 Bridge 분기가 아니라 DeviceProfile의
-  공통 sequence와 Virtual Device 내부 반응으로 추가한다.
+- 영향: RF-001은 Servo 패키지에 의존하지 않는 동일한 MockSlave와 공통 OD Bridge를 재사용한다.
+  기존 `CPXPdoConfiguration`과 `CPXPdoCodec`을 그대로 재사용하고, CPX의 OD mapping은 해당
+  configuration이 제공한다. CPX 고유 반응은
+  `VirtualCpxApDevice.model_update()`에 구현한다. 새로운 장치 명령은 Bridge 분기가 아니라
+  DeviceProfile의 공통 sequence와 Virtual Device Model_Update 반응으로 추가한다.
+
+## DEC-035 Virtual CPX의 OD, Module 및 Process Data 모델
+
+- 상태: `accepted`
+- 결정일: 2026-08-26
+- 결정:
+  - Virtual CPX는 ESI와 기존 `CPXApModule` metadata로 동작하는 공통 `VirtualApModule` 목록을
+    소유하며 DI/DO/DIO/AI/AO/AIO마다 장치 class를 만들지 않는다.
+  - Analog 값은 PDO raw integer로 유지하고 범위 밖 값은 clamp하지 않고 거부한다.
+  - OD Model은 CPX station ESI OD, 설정된 module의 slot-dependent OD와 선택된 process-image
+    assignment/mapping만 생성한다. `0x6F00`과 `0x7F00`은 ESI와 같은 16-byte block으로 보관한다.
+  - output process image가 module output의 단일 원본이고, 독립된 virtual module input state가
+    input의 단일 원본이다. Model_Update에서 두 상태를 반영하며 자동 loopback하지 않는다.
+  - IO-Link process data는 port별 raw byte buffer까지만 제공한다. 실제 AP/ISDU parameter 공간은
+    RF-013, 외부 input 조작 API는 RF-014에서 구현한다.
+  - 신규 Virtual CPX 생성은 모든 process/module state를 초기화한다. I/O reset/restart command는
+    RF-003, runtime 상세 Diagnostic과 fault injection은 RF-012에서 구현한다.
+- 이유: 실장치의 ESI/OD/process-image 구조를 유지하면서도 module별 반복 class, mock 전용 command와
+  후속 parameter·simulation·diagnostic 기능의 책임 누수를 방지하기 위해서다.
+- 검토한 대안: 채널별 가상 OD, module type별 class, output-input 자동 loopback과 RF-001의 mock 전용
+  reset/fault injection은 실제 장치 의미와 달라지고 기능 범위를 불필요하게 넓히므로 선택하지 않았다.
+- 영향: RF-001은 정상 상태의 Virtual CPX station, generic module state, raw process data와 내부 input
+  injection 경계까지만 구현한다. RF-003, RF-012, RF-013과 RF-014는 이 모델을 확장하되 Bridge와
+  MockSlave의 책임은 변경하지 않는다.
 
 ## 새 결정 작성 양식
 

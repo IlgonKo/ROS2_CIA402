@@ -32,7 +32,11 @@ Tech Debt 상태 값은 `open`, `in_progress`, `complete`를 사용한다.
 - 요약: 실장치와 동일한 설정 및 API로 시험할 수 있는 CPX-AP-I-EC Virtual I/O를 제공한다.
 - 완료 조건:
   - DI/DO/AI/AO/IO-Link process image와 AP module layout이 설정대로 생성된다.
-  - SDO, AP parameter와 IO-Link ISDU read/write가 실장치와 동일한 공개 API로 동작한다.
+  - ESI 기반 station/module OD, slot-dependent object와 선택된 `0x6F00`/`0x7F00` PDO block이
+    설정대로 구성된다.
+  - metadata 기반 공통 Virtual AP Module이 output process image와 독립 input state를
+    Model_Update 시점에 처리한다.
+  - station SDO와 AP parameter/IO-Link ISDU gateway OD의 request/response 전달 경계가 동작한다.
   - Motion Server와 IO Control Panel의 virtual I/O 회귀 테스트가 통과한다.
   - 실장치 profile과 virtual profile의 지원 범위 및 차이가 문서화된다.
 - 상세: [RF-001 기능 명세](tasks/rf/RF-001-cpx-virtual-io.md)
@@ -169,6 +173,30 @@ Tech Debt 상태 값은 `open`, `in_progress`, `complete`를 사용한다.
   - station 단위 Alarm/Fault 변환과 상세 module 정보의 표현 방식이 실제 장치 동작을 기준으로 검증된다.
   - 선택형 PDO를 사용하지 않는 구성의 기존 I/O 동작과 real/mock parity가 유지된다.
 - 상세: [RF-012 기능 명세](tasks/rf/RF-012-cpx-ap-optional-diagnostic.md)
+
+### RF-013 Virtual AP Module 및 IO-Link Parameter Device
+
+- 상태: `planned`
+- 우선순위: 보통
+- 요약: Virtual CPX gateway 뒤에 AP module parameter와 IO-Link ISDU runtime 공간을 가진 가상 장치를 제공한다.
+- 완료 조건:
+  - 설정된 AP module별 parameter/instance runtime 공간과 IO-Link module/port별 ISDU runtime 공간이 생성된다.
+  - gateway OD 요청이 Model_Update 시점에 대상 virtual device로 전달되고 data/status 응답에 반영된다.
+  - 기존 Motion Server AP parameter 및 IO-Link ISDU API의 read/write와 Failure 계약이 그대로 동작한다.
+  - 초기값, access, reset 정책과 지원 장치 범위가 문서화되고 자동 테스트가 통과한다.
+- 상세: [RF-013 기능 명세](tasks/rf/RF-013-virtual-ap-iol-parameter-devices.md)
+
+### RF-014 Virtual Device Simulation API
+
+- 상태: `planned`
+- 우선순위: 보통
+- 요약: Control Panel과 외부 simulator에서 Virtual CPX의 DI/AI/IO-Link input을 조작하는 별도 API를 제공한다.
+- 완료 조건:
+  - virtual I/O id, module, channel/port 기준 input 설정·조회·초기화 계약이 확정된다.
+  - 주입한 DI/AI/IO-Link input이 다음 Model_Update cycle의 기존 I/O feedback에 반영된다.
+  - virtual backend 및 명시적 활성화 조건이 적용되고 real backend에서는 안전하게 거부된다.
+  - Control Panel과 외부 reference client 시나리오 및 자동 테스트가 통과한다.
+- 상세: [RF-014 기능 명세](tasks/rf/RF-014-virtual-device-simulation-api.md)
 
 ## Tech Debt
 
@@ -477,7 +505,24 @@ Tech Debt 상태 값은 `open`, `in_progress`, `complete`를 사용한다.
   - Bridge에서 device reset, parameter save와 Servo 전용 role 분기가 제거된다.
   - Motion Server와 DeviceProfile의 restart/save 시퀀스는 Mock/PySOEM backend에서 동일하게 유지된다.
   - Virtual Servo는 명령 OD write에 대한 장치 내부 반응만 담당한다.
-  - `MockSlave`는 장치 의미를 해석하지 않고 object-write 결과를 Virtual Device에 전달한다.
-  - Bridge 단독 접근에는 side effect가 없고 MockSlave 경로에서는 기존 virtual device 동작이
+  - `MockSlave`는 장치 의미를 해석하지 않는다.
+  - Bridge 단독 접근에는 side effect가 없고 Model_Update 경로에서는 기존 virtual device 동작이
     유지되는 자동 테스트가 통과한다.
 - 상세: [TD-028 기술 명세](tasks/td/TD-028-virtual-od-bridge-boundary.md)
+
+### TD-029 Virtual OD Bridge의 PDO/SDO-OD 연결 복원
+
+- 상태: `complete`
+- 우선순위: 높음
+- 요약: SDO 직접 주소와 `PDO_Configuration` mapping을 공통 Virtual OD Bridge에서 하나의
+  OD Model에 연결하고 Virtual Device를 PDO 객체로부터 분리한다.
+- 완료 조건:
+  - SDO는 요청의 index/sub-index로 OD Model을 직접 read/write한다.
+  - PDO는 선택된 `PDO_Configuration`을 mapping 단일 원본으로 사용한다.
+  - MockSlave는 기존 DeviceProfile PdoCodec으로 PDO 객체와 raw payload를 변환한다.
+  - raw RxPDO payload-to-OD와 OD-to-raw TxPDO payload 연결은 공통 Bridge가 담당한다.
+  - Virtual Device는 PDO 객체나 OD write callback이 아니라 Model_Update 시점의 OD 상태에만
+    반응한다.
+  - MockSlave는 장치별 구현과 role 의미에 의존하지 않는다.
+  - SDO/PDO 공유 OD 값, cycle 순서와 reset/save 회귀 자동 테스트가 통과한다.
+- 상세: [TD-029 기술 명세](tasks/td/TD-029-virtual-od-bridge-pdo-sdo-routing.md)

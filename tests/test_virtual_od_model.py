@@ -10,7 +10,7 @@ from device.cmmt.pdo_configuration import (
     get_pdo_configuration,
 )
 from device.cmmt.profile import CMMTASDeviceProfile
-from device.virtual_servo_drive.od_bridge import VirtualOdBridge
+from device.virtual_device import VirtualOdBridge
 from device.virtual_servo_drive.od_model import VirtualObjectDictionary
 from device.virtual_servo_drive.servo_model import VirtualCiA402Servo
 from ethercat.mock_slave import MockSlave
@@ -92,20 +92,48 @@ class VirtualOdModelTest(unittest.TestCase):
         self.assertTrue(od.definition(0x6041).txpdo)
         self.assertEqual(od.definition(0x216E, 1).access, "ro")
 
-    def test_pdo_and_direct_od_access_share_runtime_value(self):
+    def test_od_bridge_owns_only_raw_sdo_access(self):
         profile = CMMTASDeviceProfile(axis_index=0, slave_index=0)
         od = VirtualObjectDictionary(profile)
+        bridge = VirtualOdBridge(od, profile.pdo_configuration)
+
+        bridge.write_sdo(0x607A, 0, (12345).to_bytes(4, "little", signed=True))
+
+        self.assertEqual(od.read(0x607A), 12345)
+        self.assertEqual(
+            bridge.read_sdo(0x607A, 0, 4),
+            (12345).to_bytes(4, "little", signed=True),
+        )
+
+    def test_od_bridge_uses_pdo_configuration_for_both_directions(self):
+        profile = CMMTASDeviceProfile(axis_index=0, slave_index=0)
+        od = VirtualObjectDictionary(profile)
+        bridge = VirtualOdBridge(od, profile.pdo_configuration)
         rxpdo = profile.create_rxpdo()
         txpdo = profile.create_txpdo()
-        bridge = VirtualOdBridge(od, rxpdo, txpdo)
 
         rxpdo.target_position = 12345
-        bridge.rxpdo_to_od()
-        self.assertEqual(bridge.read(0x607A), 12345)
+        rxpdo_payload = profile.pdo_codec.encode_rxpdo(rxpdo)
+        bridge.rxpdo_payload_to_od(rxpdo_payload)
+        self.assertEqual(od.read(0x607A), 12345)
 
-        bridge.write(0x6064, 54321)
-        bridge.od_to_txpdo()
-        self.assertEqual(txpdo.actual_position, 54321)
+        od.write(0x6064, -54321)
+        txpdo_payload = bridge.od_to_txpdo_payload()
+        profile.pdo_codec.decode_txpdo(txpdo_payload, txpdo)
+        self.assertEqual(txpdo.actual_position, -54321)
+
+    def test_virtual_servo_reacts_to_od_only_on_model_update(self):
+        profile = CMMTASDeviceProfile(axis_index=0, slave_index=0)
+        servo = VirtualCiA402Servo(device_profile=profile)
+        bridge = VirtualOdBridge(servo.od, profile.pdo_configuration)
+
+        bridge.write_sdo(0x6060, 0, (-3).to_bytes(1, "little", signed=True))
+        self.assertEqual(servo.od.read(0x6060), -3)
+        self.assertEqual(servo.od.read(0x6061), 8)
+
+        servo.model_update()
+
+        self.assertEqual(servo.od.read(0x6061), -3)
 
     def test_axis_specific_configuration_uses_real_profile_policy(self):
         def config(axis_index, pdo_configuration):
@@ -174,11 +202,7 @@ class VirtualOdModelTest(unittest.TestCase):
             device_config=config,
         )
         od_model = VirtualObjectDictionary(profile)
-        bridge = VirtualOdBridge(
-            od_model,
-            profile.create_rxpdo(),
-            profile.create_txpdo(),
-        )
+        bridge = VirtualOdBridge(od_model, profile.pdo_configuration)
         od_model.write(0x607F, 999)
 
         bridge.write_sdo(0x2000, 1, b"\x01")
@@ -189,11 +213,7 @@ class VirtualOdModelTest(unittest.TestCase):
     def test_od_bridge_parameter_save_write_has_no_device_side_effect(self):
         profile = CMMTASDeviceProfile(axis_index=0, slave_index=0)
         od_model = VirtualObjectDictionary(profile)
-        bridge = VirtualOdBridge(
-            od_model,
-            profile.create_rxpdo(),
-            profile.create_txpdo(),
-        )
+        bridge = VirtualOdBridge(od_model, profile.pdo_configuration)
         od_model.write_role("parameter_save_status", 9)
         od_model.write_role("parameter_save_return_code", 8)
         od_model.write_role("parameter_save_return_value", 7)

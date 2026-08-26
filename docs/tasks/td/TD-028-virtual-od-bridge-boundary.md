@@ -74,3 +74,8 @@ Bridge는 reset/save/AP/ISDU role을 해석하지 않는다.
   유지되는 테스트를 추가했다.
 - 기존 Motion Server/CMMT restart·save 구현은 변경하지 않았으며 2026-08-26 전체 unittest
   286개와 diff whitespace 검사가 통과했다.
+
+## 후속 책임 정리
+
+PDO/SDO와 OD Model 연결 및 Model_Update 계약은
+[TD-029](TD-029-virtual-od-bridge-pdo-sdo-routing.md)에서 최종 정리한다.

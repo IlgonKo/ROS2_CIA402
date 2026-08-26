@@ -79,6 +79,11 @@ class VirtualObjectDictionary:
             self.device_profile.non_pdo_configuration
         )
 
+    def reset_pdo_values(self):
+        for entry in self.entries.values():
+            if entry.definition.rxpdo or entry.definition.txpdo:
+                entry.value = entry.definition.default
+
     def _overlay_pdo(self, entries, direction):
         for entry in entries:
             if entry.index == 0:

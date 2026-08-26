@@ -1,8 +1,4 @@
-import struct
-
-from device.pdo_metadata import (
-    DATA_TYPE_FORMATS,
-)
+from device.od_value_codec import decode_od_value, encode_od_value
 
 
 class CiA402PdoCodec:
@@ -58,12 +54,10 @@ class CiA402PdoCodec:
         if data_type.startswith("padding"):
             bit_length = int(data_type.removeprefix("padding"))
             return b"\x00" * (bit_length // 8)
-        if data_type != "float32":
-            value = int(value)
-        return struct.pack(DATA_TYPE_FORMATS[data_type], value)
+        return encode_od_value(data_type, value)
 
     @classmethod
     def unpack_value(cls, data_type, payload):
         if data_type.startswith("padding"):
             return 0
-        return struct.unpack(DATA_TYPE_FORMATS[data_type], bytes(payload))[0]
+        return decode_od_value(data_type, payload)

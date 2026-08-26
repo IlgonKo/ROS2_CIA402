@@ -30,64 +30,77 @@ class VirtualCiA402Servo:
         self.software_limit_warning = False
         self.position_target_rejected = False
 
+        self._last_mode_command = int(self.od.read_role("mode_of_operation"))
+        self._last_target_position_command = self.od.read_role("target_position")
+        self._last_device_reset_command = int(
+            self.od.read_role("device_reset_command")
+        )
+        self._last_parameter_save_command = int(
+            self.od.read_role("parameter_save_command")
+        )
+
         #self.init_object_dictionary()
 
-    def on_object_write(self, definition, value, rxpdo, txpdo):
-        """Apply the virtual drive's internal response to one completed OD write."""
-        role = definition.role
-        if role == "device_reset_command" and int(value) == 1:
-            self._apply_device_reset_response(rxpdo, txpdo)
-        elif role == "parameter_save_command" and int(value) == 1:
+    def _apply_od_commands(self):
+        device_reset_command = int(self.od.read_role("device_reset_command"))
+        if (
+            device_reset_command != self._last_device_reset_command
+            and device_reset_command == 1
+        ):
+            self._apply_device_reset_response()
+        self._last_device_reset_command = device_reset_command
+
+        parameter_save_command = int(self.od.read_role("parameter_save_command"))
+        if (
+            parameter_save_command != self._last_parameter_save_command
+            and parameter_save_command == 1
+        ):
             self.od.write_role("parameter_save_status", 0)
             self.od.write_role("parameter_save_return_code", 0)
             self.od.write_role("parameter_save_return_value", 1)
+        self._last_parameter_save_command = parameter_save_command
 
-    def _apply_device_reset_response(self, rxpdo, txpdo):
+        requested_mode = int(self.od.read_role("mode_of_operation"))
+        requested_target = self.od.read_role("target_position")
+        if requested_mode != self._last_mode_command:
+            self.set_mode(
+                requested_mode,
+                previous_mode=self._last_mode_command,
+            )
+        if requested_target != self._last_target_position_command:
+            self.set_target_position(
+                requested_target,
+                previous_target=self._last_target_position_command,
+            )
+
+    def _apply_device_reset_response(self):
         current_position = self.od.read_role("actual_position")
         self.od.reset_non_pdo_configuration()
-        rxpdo.reset_values()
-        txpdo.reset_values()
-        if rxpdo.has_field("target_position"):
-            rxpdo.target_position = current_position
+        self.od.reset_pdo_values()
+        self.od.write_role("target_position", current_position)
         self.od.write_role("actual_position", current_position)
         self.od.write_role("statusword", 0x0027)
         self.od.write_role(
             "mode_of_operation_display",
             self.od.read_role("mode_of_operation"),
         )
-
-    def apply_rxpdo(self, rxpdo):
-        self.set_controlword(rxpdo.controlword)
-        self.set_mode(rxpdo.mode_of_operation)
-        if rxpdo.has_field("target_position"):
-            self.set_target_position(rxpdo.target_position)
-        if rxpdo.has_field("profile_velocity"):
-            self.set_profile_velocity(rxpdo.profile_velocity)
-        if rxpdo.has_field("target_velocity"):
-            self.set_target_velocity(rxpdo.target_velocity)
-        handled = {
-            "controlword",
-            "mode_of_operation",
-            "target_position",
-            "profile_velocity",
-            "target_velocity",
-        }
-        for obj in rxpdo.mapping:
-            if obj.index != 0 and obj.field is not None and obj.field not in handled:
-                self.od.write(obj.index, getattr(rxpdo, obj.field), obj.subindex)
-
-    def set_controlword(self, controlword):
-        self.od.write(0x6040, int(controlword))
+        self._last_mode_command = int(self.od.read_role("mode_of_operation"))
+        self._last_target_position_command = self.od.read_role("target_position")
 
     def get_statusword(self):
         return self.od.read(0x6041)
 
-    def update(self):
+    def model_update(self):
+        self._apply_od_commands()
         self.process_cycle()
 
-    def set_mode(self,mode):
+    def set_mode(self, mode, previous_mode=None):
         next_mode = int(mode)
-        current_mode = int(self.od.read(0x6060))
+        current_mode = int(
+            self.od.read(0x6060)
+            if previous_mode is None
+            else previous_mode
+        )
         if next_mode != current_mode:
             self.stop_at_current_position()
             if next_mode != 6:
@@ -95,9 +108,13 @@ class VirtualCiA402Servo:
                 self.homing_error = False
         self.od.write(0x6060,next_mode)
         self.od.write(0x6061,next_mode)
+        self._last_mode_command = next_mode
 
-    def set_target_position(self, position):
+    def set_target_position(self, position, previous_target=None):
         if self._position_command_requires_reference() and not self.homing_referenced:
+            if previous_target is not None:
+                self.od.write(0x607A, previous_target)
+                self._last_target_position_command = previous_target
             return
 
         if not self._position_target_is_within_software_limits(position):
@@ -111,17 +128,16 @@ class VirtualCiA402Servo:
         if not self._actual_position_exceeds_software_limits():
             self.software_limit_warning = False
 
-        current_target = self.od.read(0x607A)
+        current_target = (
+            self.od.read(0x607A)
+            if previous_target is None
+            else previous_target
+        )
         if position != current_target:
             self.target_reached = False
             self.window_counter = 0
         self.od.write(0x607A, position)
-
-    def set_target_velocity(self,velocity):
-        self.od.write(0x60FF,velocity)
-
-    def set_profile_velocity(self, velocity):
-        self.od.write(0x6081, velocity)
+        self._last_target_position_command = position
 
     def set_software_position_limits(self, negative_limit, positive_limit):
         self.od.write(0x607D, negative_limit, 1)
@@ -156,6 +172,7 @@ class VirtualCiA402Servo:
         self.pp_active = False
         self.pp_target_position = self.actual_position
         self.od.write(0x607A, self.actual_position)
+        self._last_target_position_command = self.actual_position
         self.od.write(0x6064, self.actual_position)
         self.od.write(0x606C, self.actual_velocity)
         self.window_counter = 0

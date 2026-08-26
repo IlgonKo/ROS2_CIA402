@@ -6,8 +6,23 @@
 
 ## 2026-08-26
 
+### 설계 확정
+
+- `RF-001`의 Virtual CPX를 ESI/`CPXApModule` metadata 기반 공통 `VirtualApModule` 구조로
+  확정했다. 실제 ESI와 같은 `0x6F00`/`0x7F00` 16-byte block OD, 독립 input state, raw IO-Link
+  process data와 Model_Update 경계를 사용하고 자동 loopback은 하지 않는다. I/O reset/restart는
+  RF-003, 상세 Diagnostic은 RF-012, AP/ISDU parameter device는 RF-013, 공개 Simulation API는
+  RF-014로 분리했다.
+
 ### 등록
 
+- `RF-014`를 등록하여 Control Panel과 외부 simulator가 Virtual CPX의 DI/AI/IO-Link input을
+  조작할 수 있는 별도 Simulation API를 후속 구현한다. RF-001은 module input state와 내부
+  injection 계약까지만 담당하며 일반 운전 API, MockSlave와 OD Bridge에는 simulation 의미를
+  추가하지 않는다.
+- `RF-013`을 등록하여 Virtual CPX의 gateway OD 뒤에 실제 AP module parameter 공간과 IO-Link
+  Device ISDU parameter 공간을 가진 하위 가상 장치를 후속 구현한다. RF-001은 station OD,
+  process image와 gateway 전달 기반까지만 담당하고, RF-004의 APDD catalog 기능과도 분리한다.
 - Linux 4축 Motion Server에 Windows Axis Control Panel을 연결해도 시작 시 1축 fallback UI가
   유지되는 사례를 확인했다. 기존 TD-024 범위와 동일하므로 중복 TD를 만들지 않고 재현 증거,
   endpoint 변경 시 동적 재구성 완료 조건과 높은 우선순위를 추가했다.
@@ -16,11 +31,18 @@
 
 ### 완료
 
+- `TD-029`에서 `VirtualOdBridge`를 `device.virtual_device` 공통 영역으로 이동하고 SDO의
+  index/sub-index와 `PDO_Configuration`의 raw RxPDO/TxPDO mapping을 하나의 OD Model에
+  연결했다. MockSlave는 실축과 동일한 `DeviceProfile.pdo_codec`으로 PDO 객체와 raw payload를
+  변환하고 Bridge는 장치별 PDO 객체나 codec을 참조하지 않는다.
+  Virtual Servo의 PDO 직접 참조와 OD write callback을 제거하고 Model_Update 시점에 현재 OD를
+  반영하도록 변경했다. `MockSlave`는 `RxPDO -> OD -> Model_Update -> OD -> TxPDO` 순서만
+  조정하며 Servo 패키지에 의존하지 않는다. OD 값 codec은 CMMT PDO와 Virtual SDO가 공유하며
+  전체 unittest 289개가 통과했다.
 - `TD-028`에서 `VirtualOdBridge`에 있던 CMMT reset/save role 분기와 virtual reset sequence를
-  제거했다. Bridge는 OD access와 PDO 동기화 후 definition/value만 반환하고, `MockSlave`는 이를
-  의미 해석 없이 `virtual_device.on_object_write()`에 전달한다. reset/save의 장치 내부 반응은
-  Virtual Servo로 이동했으며 Motion Server/CMMT DeviceProfile의 실축·가상축 공통 sequence는
-  변경하지 않았다. Bridge purity 및 기존 동작 회귀를 포함한 전체 unittest 286개가 통과했다.
+  제거했다. 장치 내부 반응은 Virtual Servo로 이동했으며 Motion Server/CMMT DeviceProfile의
+  실축·가상축 공통 sequence는 변경하지 않았다. Bridge purity 및 기존 동작 회귀를 포함한
+  전체 unittest 286개가 통과했다.
 - `TD-024`와 `TD-027`을 통합 구현했다. Axis Panel의 축 수 확인용 임시 TCP 연결과 1축 fallback을
   제거하고 상시 연결의 첫 feedback으로 topology를 한 번 확정한 뒤 full status로 metadata를
   보완한다. 정상·Bus 단절·초기화 실패 feedback에 공통 Server health와

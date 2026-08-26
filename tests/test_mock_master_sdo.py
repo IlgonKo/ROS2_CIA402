@@ -41,16 +41,21 @@ class MockMasterSdoTest(unittest.TestCase):
         self.assertEqual(first.value, 10)
         self.assertEqual(master.sdo.read_uint16(1, 0x7777, 3), 42)
 
-    def test_sdo_and_pdo_share_virtual_od_runtime_value(self):
+    def test_sdo_write_does_not_mutate_master_rxpdo_image(self):
         slave = create_virtual_axis_slave()
         master = MockMaster([slave])
 
-        master.sdo.write_int32(0, 0x607A, 0, 12345)
-        self.assertEqual(slave.virtual_device.od.read(0x607A), 12345)
-        self.assertEqual(slave.rxpdo.target_position, 12345)
+        master.sdo.write_uint32(0, 0x6081, 0, 12345)
+        self.assertEqual(slave.virtual_device.od.read(0x6081), 12345)
+        self.assertEqual(slave.rxpdo.profile_velocity, 0)
+
+    def test_od_bridge_publishes_od_state_to_txpdo(self):
+        slave = create_virtual_axis_slave()
+        master = MockMaster([slave])
 
         slave.virtual_device.od.write(0x6064, -2345)
-        slave.od_bridge.od_to_txpdo()
+        txpdo_payload = slave.od_bridge.od_to_txpdo_payload()
+        slave.pdo_codec.decode_txpdo(txpdo_payload, slave.txpdo)
         self.assertEqual(master.sdo.read_int32(0, 0x6064, 0), -2345)
         self.assertEqual(slave.txpdo.actual_position, -2345)
 
@@ -63,9 +68,13 @@ class MockMasterSdoTest(unittest.TestCase):
 
         self.assertAlmostEqual(master.sdo.read_float32(0, 0x2183, 0x0C), -12.5)
         self.assertEqual(master.sdo.read_int8(0, 0x6060, 0), -3)
+
+        # The next cyclic RxPDO replaces an SDO write to an RxPDO-mapped object,
+        # matching the behavior of a real slave.
         slave.process()
-        self.assertEqual(master.sdo.read_int8(0, 0x6061, 0), -3)
-        self.assertEqual(slave.txpdo.mode_of_operation_display, -3)
+        self.assertEqual(master.sdo.read_int8(0, 0x6060, 0), 8)
+        self.assertEqual(master.sdo.read_int8(0, 0x6061, 0), 8)
+        self.assertEqual(slave.txpdo.mode_of_operation_display, 8)
 
     def test_parameter_save_side_effect_is_owned_by_virtual_device(self):
         slave = create_virtual_axis_slave()
