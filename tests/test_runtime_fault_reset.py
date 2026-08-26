@@ -169,10 +169,18 @@ class RuntimeFaultResetTest(unittest.TestCase):
             True,
             message={"axis": 0},
         )
+        recovery = validate_command(
+            command_spec("system/axis/restart"),
+            {},
+            state,
+            True,
+            message={"axis": 0},
+        )
 
         self.assertEqual(faulted, "runtime_fault")
         self.assertIsNone(normal)
         self.assertIsNone(safe)
+        self.assertIsNone(recovery)
 
 
 if __name__ == "__main__":

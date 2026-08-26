@@ -5,6 +5,7 @@ import time
 import unittest
 from datetime import datetime, timezone
 from types import SimpleNamespace
+from unittest.mock import patch
 
 from motion_server.api.router import route_message
 from motion_server.app.initialization import (
@@ -18,11 +19,48 @@ from motion_server.app.state import initial_degraded_state
 from motion_server.diagnostic.startup import detect_initialization_fault
 from motion_server.server import (
     ServerRestartRequested,
+    restart_current_process,
     run_configuration_degraded_once,
 )
 
 
 OCCURRED_AT = datetime(2026, 8, 25, 5, 0, tzinfo=timezone.utc)
+
+
+class ProcessRestartTest(unittest.TestCase):
+    @patch("motion_server.server.subprocess.Popen")
+    def test_windows_restart_preserves_arguments_with_spaces(self, popen):
+        arguments = [
+            r"C:\project\motion_server\__main__.py",
+            "--bus",
+            "0: axis:cmmt-as,1: axis:cmmt-st",
+            "--port",
+            "15000",
+        ]
+        with patch("motion_server.server.os.name", "nt"), patch(
+            "motion_server.server.sys.executable", r"C:\Python\python.exe"
+        ), patch("motion_server.server.sys.argv", arguments):
+            with self.assertRaises(SystemExit) as raised:
+                restart_current_process()
+
+        self.assertEqual(raised.exception.code, 0)
+        popen.assert_called_once_with(
+            [r"C:\Python\python.exe", *arguments],
+            close_fds=True,
+        )
+
+    @patch("motion_server.server.os.execv")
+    def test_posix_restart_replaces_current_python_process(self, execv):
+        arguments = ["/project/motion_server/__main__.py", "--port", "15000"]
+        with patch("motion_server.server.os.name", "posix"), patch(
+            "motion_server.server.sys.executable", "/usr/bin/python3"
+        ), patch("motion_server.server.sys.argv", arguments):
+            restart_current_process()
+
+        execv.assert_called_once_with(
+            "/usr/bin/python3",
+            ["/usr/bin/python3", *arguments],
+        )
 
 
 class Connection:

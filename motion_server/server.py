@@ -1,6 +1,9 @@
 import json
+import os
 import select
 import socket
+import subprocess
+import sys
 import time
 from datetime import datetime, timezone
 
@@ -407,7 +410,11 @@ def list_adapters():
 
 
 def restart_current_process():
-    os.execv(sys.executable, [sys.executable, *sys.argv])
+    arguments = [sys.executable, *sys.argv]
+    if os.name == "nt":
+        subprocess.Popen(arguments, close_fds=True)
+        raise SystemExit(0)
+    os.execv(sys.executable, arguments)
 
 
 def initialize_runtime_session(

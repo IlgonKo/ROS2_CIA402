@@ -86,26 +86,66 @@ assert dict(os.environ) == before
     def test_windows_env_loader_works_outside_project_directory(self):
         project_root = Path(__file__).resolve().parents[1]
         env_script = project_root / "scripts" / "windows" / "env.ps1"
-        command = (
-            f". '{env_script}'; "
-            "$env:MOTION_SERVER_IO_IO0_MODULES = '1:do:8'; "
-            f"$values = Import-AxisServerEnv -ProjectRoot '{project_root}' "
-            f"-Python '{sys.executable}'; "
-            "Write-Output $values['MOTION_SERVER_BACKEND']; "
-            "Write-Output $values['MOTION_SERVER_IO_io0_MODULES']"
-        )
-        with tempfile.TemporaryDirectory() as outside_dir:
+        with tempfile.TemporaryDirectory() as config_dir, tempfile.TemporaryDirectory() as outside_dir:
+            config_root = Path(config_dir)
+            (config_root / ".env").write_text(
+                "MOTION_SERVER_BACKEND=pysoem\n"
+                "MOTION_SERVER_BUS=axis:cmmt_as\n"
+                "PYSOEM_INTERFACE=test-adapter\n",
+                encoding="utf-8",
+            )
+            command = (
+                f". '{env_script}'; "
+                "$env:MOTION_SERVER_BACKEND = 'mock'; "
+                "$env:MOTION_SERVER_BUS = 'axis:cmmt_st'; "
+                f"$values = Import-AxisServerEnv -ProjectRoot '{config_root}' "
+                f"-Python '{sys.executable}'; "
+                "Write-Output $values['MOTION_SERVER_BACKEND']; "
+                "Write-Output $values['MOTION_SERVER_BUS']; "
+                "Write-Output $env:MOTION_SERVER_BACKEND; "
+                f"$values = Import-AxisServerEnv -ProjectRoot '{config_root}' "
+                f"-Python '{sys.executable}'; "
+                "Write-Output $values['MOTION_SERVER_BACKEND']; "
+                "Write-Output $values['MOTION_SERVER_BUS']"
+            )
+            environment = dict(os.environ)
+            environment["PYTHONPATH"] = str(project_root)
             result = subprocess.run(
                 ["powershell", "-NoProfile", "-Command", command],
                 cwd=outside_dir,
+                env=environment,
                 capture_output=True,
                 text=True,
                 check=False,
             )
 
         self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertIn("mock", result.stdout)
-        self.assertIn("1:do:8", result.stdout)
+        self.assertEqual(
+            result.stdout.splitlines(),
+            ["pysoem", "axis:cmmt_as", "pysoem", "pysoem", "axis:cmmt_as"],
+        )
+
+    @unittest.skipUnless(os.name == "nt", "Windows PowerShell regression test")
+    def test_windows_pythonpath_does_not_accumulate_project_root(self):
+        project_root = Path(__file__).resolve().parents[1]
+        env_script = project_root / "scripts" / "windows" / "env.ps1"
+        command = (
+            f". '{env_script}'; "
+            "$env:PYTHONPATH = 'C:\\external'; "
+            f"Set-AxisServerPythonPath -ProjectRoot '{project_root}' | Out-Null; "
+            f"Set-AxisServerPythonPath -ProjectRoot '{project_root}' | Out-Null; "
+            "Write-Output $env:PYTHONPATH"
+        )
+        result = subprocess.run(
+            ["powershell", "-NoProfile", "-Command", command],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        entries = result.stdout.strip().split(os.pathsep)
+        self.assertEqual(entries, [str(project_root.resolve()), r"C:\external"])
 
     def test_cli_only_overrides_explicit_values(self):
         with tempfile.TemporaryDirectory() as temp_dir:

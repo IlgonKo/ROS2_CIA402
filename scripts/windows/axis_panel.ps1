@@ -19,13 +19,13 @@ if ($Port -le 0) {
 $env:MOTION_SERVER_HOST = $HostName
 $env:MOTION_SERVER_PORT = [string]$Port
 $env:AXIS_CONTROL_PANEL_CONFIG_ROOT = $PanelConfigRoot
-$env:PYTHONPATH = "$ProjectRoot;$env:PYTHONPATH"
+$ResolvedProjectRoot = Set-AxisServerPythonPath -ProjectRoot $ProjectRoot
 
 Write-Host "Starting Axis Control Panel"
 Write-Host "Host=$HostName"
 Write-Host "Port=$Port"
 Write-Host "Config=$PanelEnvPath"
-Write-Host "PYTHONPATH=$env:PYTHONPATH"
+Write-Host "Project root: $ResolvedProjectRoot"
 
 Push-Location $ProjectRoot
 try {

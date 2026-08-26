@@ -108,6 +108,43 @@ class ConfigurationLoaderTest(unittest.TestCase):
         self.assertEqual(model.value("MOTION_SERVER_IO_io0_MODULES"), "1:do:8")
         self.assertNotIn("MOTION_SERVER_IO_IO0_MODULES", model.values)
 
+    def test_comments_inside_continued_bus_are_ignored(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            (root / ".env").write_text(
+                "MOTION_SERVER_BUS=\\\n"
+                "  0: axis:cmmt-as,\\\n"
+                "# 1: axis:cmmt-st,\\\n"
+                "  1: axis:cmmt-as\n",
+                encoding="utf-8",
+            )
+            model = load_configuration(
+                root,
+                environ={},
+                available_profiles=AVAILABLE_PROFILES,
+            )
+
+        self.assertEqual(model.bus.axis_slave_indices, (0, 1))
+        self.assertEqual(model.bus.device_profile_names, ("cmmt_as", "cmmt_as"))
+
+    def test_comment_after_trailing_continuation_does_not_consume_next_setting(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            (root / ".env").write_text(
+                "MOTION_SERVER_BUS=axis:cmmt-as,\\\n"
+                "# 1: axis:cmmt-st\n"
+                "MOTION_SERVER_PORT=15001\n",
+                encoding="utf-8",
+            )
+            model = load_configuration(
+                root,
+                environ={},
+                available_profiles=AVAILABLE_PROFILES,
+            )
+
+        self.assertEqual(model.bus.axis_slave_indices, (0,))
+        self.assertEqual(model.value("MOTION_SERVER_PORT"), "15001")
+
     def test_unused_device_profile_file_is_not_loaded(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)

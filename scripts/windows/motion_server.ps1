@@ -27,7 +27,7 @@ if ([string]::IsNullOrWhiteSpace($Bus)) {
     $Bus = Get-AxisServerEnvValue -EnvValues $AxisEnv -Name "MOTION_SERVER_BUS" -Default "cmmt_as"
 }
 
-$env:PYTHONPATH = "$ProjectRoot;$env:PYTHONPATH"
+$ResolvedProjectRoot = Set-AxisServerPythonPath -ProjectRoot $ProjectRoot
 
 Write-Host "Starting Motion Server"
 Write-Host "Backend=$Backend"
@@ -35,7 +35,7 @@ Write-Host "ServerMode=$ServerMode"
 Write-Host "Interface=$Interface"
 Write-Host "Bus=$Bus"
 Write-Host "Port=$Port"
-Write-Host "PYTHONPATH=$env:PYTHONPATH"
+Write-Host "Project root: $ResolvedProjectRoot"
 
 $Arguments = @(
     "-B",

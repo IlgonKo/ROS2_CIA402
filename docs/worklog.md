@@ -4,6 +4,16 @@
 날짜는 기본적으로 Git commit 날짜를 기준으로 정리했고, 아직 commit되지 않은 작업은 현재 작업일 기준으로 별도 기록한다.
 미완료 기능과 기술 부채는 [Remaining Tasks](remaining_tasks.md)에서 별도로 관리한다.
 
+## 2026-08-26
+
+### 완료
+
+- Windows launcher가 이전 실행에서 process environment에 투영한 Motion Server 설정을 다음 실행에
+  재사용하지 않고 현재 `.env`를 다시 읽도록 정리했다. project root `PYTHONPATH` 중복을 제거하고
+  전체 경로 대신 resolved project root만 출력하도록 TD-021을 완료했다.
+- 실제 CMMT identity/profile 불일치가 일반 `RuntimeError` traceback으로 노출되는 초기화 오류 경계
+  개선을 TD-026으로 등록했다.
+
 ## 2026-08-25
 
 ### 완료

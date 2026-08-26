@@ -4,6 +4,7 @@ import re
 
 INDEXED_LIST_ITEM_RE = re.compile(r"^\s*\d+\s*:\s*(.+)$")
 INDEXED_LIST_ITEM_WITH_INDEX_RE = re.compile(r"^\s*(\d+)\s*:\s*(.+)$")
+CONFIG_ASSIGNMENT_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*\s*=")
 
 
 def logical_config_lines(path):
@@ -15,8 +16,12 @@ def logical_config_lines(path):
     pending = ""
     for raw_line in path.read_text(encoding="utf-8").splitlines():
         line = raw_line.strip()
-        if not pending and (not line or line.startswith("#")):
+        if not line or line.startswith("#"):
             continue
+
+        if pending and CONFIG_ASSIGNMENT_RE.match(line):
+            lines.append(pending)
+            pending = ""
 
         continued = line.endswith("\\")
         if continued:

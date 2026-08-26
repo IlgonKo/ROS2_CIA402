@@ -79,6 +79,7 @@ GLOBAL_FAULT_ALLOWED_COMMANDS = {
 AXIS_FAULT_ALLOWED_COMMANDS = {
     "system/axis/disable",
     "system/axis/fault_reset",
+    "system/axis/restart",
     "system/axis/stop",
     "system/axes/disable",
     "system/axes/fault_reset",

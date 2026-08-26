@@ -46,4 +46,6 @@ Write-Host "PYTHONPATH=$env:PYTHONPATH"
 
 ## 완료 증거
 
-완료 시 변경된 공통 처리 방식, 반복 실행 결과와 PowerShell 검증 결과를 기록한다.
+- `Set-AxisServerPythonPath()`가 project root를 대소문자 구분 없이 제거한 뒤 첫 항목에 한 번만 추가한다.
+- Motion Server와 두 Control Panel launcher는 전체 `PYTHONPATH` 대신 resolved project root만 출력한다.
+- 같은 PowerShell process에서 두 번 적용해도 project root가 한 번만 남는 Windows 회귀 테스트를 추가했다.

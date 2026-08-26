@@ -10,6 +10,26 @@ function Import-AxisServerEnv {
         throw "Missing $baseEnvPath. Create it from .env.example first."
     }
 
+    $configPrefixes = @(
+        "AXIS_",
+        "COMPOSE_",
+        "IO_",
+        "MOCK_",
+        "MOTION_SERVER_",
+        "PYSOEM_",
+        "ROS_",
+        "ROS2_"
+    )
+    $staleConfigNames = @(
+        Get-ChildItem Env: | Where-Object {
+            $name = $_.Name
+            $configPrefixes | Where-Object { $name.StartsWith($_, [System.StringComparison]::OrdinalIgnoreCase) }
+        } | Select-Object -ExpandProperty Name
+    )
+    foreach ($name in $staleConfigNames) {
+        Remove-Item -LiteralPath "Env:$name" -ErrorAction SilentlyContinue
+    }
+
     Push-Location $ProjectRoot
     try {
         $json = & $Python -m configuration --project-root $ProjectRoot --format json 2>&1
@@ -52,6 +72,26 @@ function Import-AxisServerEnv {
     }
 
     return $merged
+}
+
+function Set-AxisServerPythonPath {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$ProjectRoot
+    )
+
+    $resolvedRoot = [string](Resolve-Path $ProjectRoot)
+    $entries = @($env:PYTHONPATH -split [System.IO.Path]::PathSeparator) |
+        Where-Object {
+            -not [string]::IsNullOrWhiteSpace($_) -and
+            -not [string]::Equals(
+                $_.TrimEnd('\', '/'),
+                $resolvedRoot.TrimEnd('\', '/'),
+                [System.StringComparison]::OrdinalIgnoreCase
+            )
+        }
+    $env:PYTHONPATH = (@($resolvedRoot) + $entries) -join [System.IO.Path]::PathSeparator
+    return $resolvedRoot
 }
 
 function Read-DotEnvFile {

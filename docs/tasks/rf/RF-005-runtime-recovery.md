@@ -112,7 +112,7 @@ class ServerRuntimeState(Enum):
 - Bus WKC Fault에서는 전체 motion command를 제한하되 status, authority, fault reset,
   bus reconnect, server restart와 안전 명령인 stop/disable을 허용한다.
 - Axis Fault에서는 Fault가 발생한 Axis만 motion command를 제한하고 정상 Axis는 계속 운전할
-  수 있다. 해당 Axis의 stop/disable/fault-reset은 허용한다.
+  수 있다. 해당 Axis의 stop/disable/fault-reset과 장치 recovery인 axis restart는 허용한다.
 - 모든 fault-reset, bus reconnect와 server restart는 command authority를 요구한다.
 - Bus disconnect 및 initialization-error에서도 authority request/status/release는 허용한다.
 
