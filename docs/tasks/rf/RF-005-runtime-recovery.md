@@ -316,14 +316,19 @@ reconnect가 해결한 Initialization Fault의 내부 acknowledge/clear도 이 R
   fault-reset으로 복구했다.
 - 최종 상태는 runtime `normal`, Bus connected, WKC `15/15`, 4축 mode display `1`, 활성
   Diagnostic 없음으로 확인했다.
+- Axis 0 restart 실축 시험에서 정지 상태의 4축을 대상으로 restart를 실행했다. restart command
+  전 `disabled_controlwords`는 전 축 `0x0007`, `disabled_statuswords`는 Axis 0~2 `0x8233`,
+  Axis 3 `0x0233`으로 기록되어 모든 축이 Operation Enabled를 벗어난 뒤 장치 restart가
+  시작됐음을 확인했다.
+- Axis 0 restart와 Bus/process image 복구는 13.27초에 Success를 반환했고 WKC `15/15`, 전체
+  Axis mode display `1`을 확인했다. 기존 motion의 자동 재개 및 자동 enable은 없었고 시험 client의
+  authority는 명시적으로 release했다. Bus 단절 영향으로 다른 Axis에 발생한 CiA 402 Fault는
+  별도 Axis fault-reset 대상으로 유지됐다.
 
 ### 실축 검증 대기
 
 - reconnect 처리 중 기존 TCP socket은 유지되지만 status/stop 등 다른 API 응답은 recovery
   완료까지 대기하는지 확인
-- 실제 CMMT Axis restart에서 slave가 사라졌다가 30초 안에 재발견되고, 다른 Axis를 포함한
-  process image 복원 후 대상 Axis cache만 갱신되는지 확인. restart 전 전체 Axis가 disable되고
-  완료 후 자동 재-enable 또는 이전 trajectory 재개가 없는지도 확인
 - reconnect/restart 실패 주입 시 timeout, `BUS_RECONNECT_FAILED` 및 `AXIS_RESTART_FAILED`와
   후속 fault-reset clear 경로 확인
 - 위 결과를 기록한 뒤 RF-005를 `done`으로 변경

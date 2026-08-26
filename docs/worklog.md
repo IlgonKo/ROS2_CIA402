@@ -14,6 +14,9 @@
   추가했다. 수정 후 CMMT 4축과 CPX-AP-I-EC 1대 구성에서 cable 분리, 기존 TCP/authority 유지,
   Bus reconnect와 별도 Axis fault-reset을 검증했다. 최종 runtime `normal`, WKC `15/15`, 활성
   Diagnostic 없음이 확인됐으며 전체 unittest 265개가 통과했다.
+- 같은 실축 구성에서 Axis 0 restart를 실행하여 restart command 전 전체 축 Controlword `0x0007`,
+  Statusword state `0x0023`을 확인했다. 13.27초 후 WKC `15/15`로 recovery가 완료됐고 자동 enable
+  및 motion 재개 없이 다른 Axis의 CiA 402 Fault가 별도 fault-reset 대상으로 유지됐다.
 - Windows launcher가 이전 실행에서 process environment에 투영한 Motion Server 설정을 다음 실행에
   재사용하지 않고 현재 `.env`를 다시 읽도록 정리했다. project root `PYTHONPATH` 중복을 제거하고
   전체 경로 대신 resolved project root만 출력하도록 TD-021을 완료했다.
