@@ -652,6 +652,22 @@ Device Profile + ESI
 
 ```text
 
+## DEC-030 프로젝트 저장소와 설치 경로를 Motion Server 명칭으로 직접 전환
+
+- 상태: `accepted`
+- 결정일: 2026-08-26
+- 결정:
+  - GitHub repository는 `IlgonKo/motion-server`를 사용한다.
+  - Windows repository root는 `C:\Users\Festo\Documents\motion-server`, Linux repository
+    root는 `/home/festo/Documents/motion-server`를 사용한다.
+  - 이전 경로 alias나 fallback은 제공하지 않고 script·문서·checkout을 새 경로로 직접 전환한다.
+  - Docker/systemd 실행 식별자는 TD-020, ROS 전용 식별자는 RF-008에서 변경한다.
+- 이유: 외부 배포 전이므로 두 경로를 병행 지원하는 것보다 프로젝트명과 실제 checkout 경계를
+  일치시키는 편이 설치·동기화·장애 대응을 단순하게 유지한다.
+- 영향: TD-019는 GitHub rename, remote 갱신, Windows/Linux 경로 migration과 rollback을 함께
+  검증한다. rollback은 compatibility layer가 아니라 directory와 repository 이름을 이전 상태로
+  되돌리는 절차다.
+
 ## DEC-### 제목
 
 - 상태: proposed | accepted | superseded | deprecated

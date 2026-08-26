@@ -4,7 +4,7 @@ param(
 
     [string]$HostName = "192.168.0.12",
     [int]$SshPort = 22,
-    [string]$RemoteRoot = "/home/festo/Documents/ROS_CIA402",
+    [string]$RemotePath = "/home/festo/Documents/motion-server",
     [switch]$UseSudoCleanup,
     [switch]$Watch,
     [int]$DebounceSeconds = 2
@@ -13,11 +13,7 @@ param(
 $ErrorActionPreference = "Stop"
 
 $ProjectRoot = Resolve-Path (Join-Path $PSScriptRoot "..\..")
-$ProjectName = Split-Path $ProjectRoot -Leaf
-
-if ($ProjectName -ne "virtual_ethercat") {
-    throw "Expected project root to be virtual_ethercat, got: $ProjectRoot"
-}
+$ArchiveName = "motion-server_sync.tar.gz"
 
 if ($User -match "\\$") {
     throw "Invalid user '$User'. Use '-User festo', not '-User festo\'."
@@ -28,10 +24,14 @@ if ($User -match "@") {
 }
 
 $RemoteLogin = "${User}@${HostName}"
-$RemoteRootForShell = $RemoteRoot -replace '^~(?=/|$)', '$HOME'
-$RemoteTarget = "${RemoteRootForShell}/${ProjectName}"
-$RemoteArchive = "/tmp/${ProjectName}_sync.tar.gz"
-$TempArchive = Join-Path $env:TEMP "${ProjectName}_sync.tar.gz"
+$RemoteTarget = $RemotePath -replace '^~(?=/|$)', '$HOME'
+$RemoteParent = $RemoteTarget -replace '/[^/]+/?$', ''
+
+if ($RemoteTarget -notmatch '^(/|\$HOME/).+/motion-server/?$') {
+    throw "RemotePath must be an absolute path ending in /motion-server: $RemotePath"
+}
+$RemoteArchive = "/tmp/${ArchiveName}"
+$TempArchive = Join-Path $env:TEMP $ArchiveName
 $RemoteRemoveCommand = if ($UseSudoCleanup) { "sudo rm -rf" } else { "rm -rf" }
 
 $ExcludePatterns = @(
@@ -69,8 +69,8 @@ function Invoke-Sync {
         $tarArgs += "--exclude=$pattern"
     }
     $tarArgs += "-C"
-    $tarArgs += (Split-Path $ProjectRoot -Parent)
-    $tarArgs += $ProjectName
+    $tarArgs += $ProjectRoot
+    $tarArgs += "."
 
     & tar @tarArgs
     if ($LASTEXITCODE -ne 0) {
@@ -84,9 +84,9 @@ function Invoke-Sync {
 
     $remoteCommand = @"
 set -e
-mkdir -p "$RemoteRootForShell"
+mkdir -p "$RemoteParent"
 case "$RemoteTarget" in
-  */virtual_ethercat)
+  */motion-server)
     if ! $RemoteRemoveCommand "$RemoteTarget"; then
       echo "Failed to remove $RemoteTarget." >&2
       echo "If Docker created root-owned files, run this once on Ubuntu:" >&2
@@ -97,7 +97,8 @@ case "$RemoteTarget" in
     ;;
   *) echo "Refusing to remove unexpected path: $RemoteTarget" >&2; exit 1 ;;
 esac
-tar -xzf "$RemoteArchive" -C "$RemoteRootForShell"
+mkdir -p "$RemoteTarget"
+tar -xzf "$RemoteArchive" -C "$RemoteTarget"
 rm -f "$RemoteArchive"
 "@
 

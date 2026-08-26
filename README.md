@@ -479,24 +479,25 @@ Core ROS feedback topics:
 From Windows PowerShell, push this project to the Ubuntu PC:
 
 ```powershell
-.\scripts\windows\sync_virtual_ethercat_to_ubuntu.ps1 -User ubuntu
+.\scripts\windows\sync_motion_server_to_ubuntu.ps1 -User ubuntu
 ```
 
 To keep syncing while editing:
 
 ```powershell
-.\scripts\windows\sync_virtual_ethercat_to_ubuntu.ps1 -User ubuntu -Watch
+.\scripts\windows\sync_motion_server_to_ubuntu.ps1 -User ubuntu -Watch
 ```
 
 Replace `ubuntu` with the Ubuntu login user. The default target is
-`ubuntu@192.168.0.12:/home/festo/Documents/ROS_CIA402/virtual_ethercat`.
+`ubuntu@192.168.0.12:/home/festo/Documents/motion-server`. Override it with
+`-RemotePath` when the Linux account uses a different home directory.
 
 If sync fails because Docker created root-owned `__pycache__` files on Ubuntu,
 fix ownership once:
 
 ```bash
 sudo systemctl stop ros-cia402-axis-server.service
-sudo chown -R festo:festo /home/festo/Documents/ROS_CIA402/virtual_ethercat
+sudo chown -R festo:festo /home/festo/Documents/motion-server
 ```
 
 The PySOEM Docker image runs Python with bytecode generation disabled so new

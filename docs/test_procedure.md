@@ -30,7 +30,7 @@ namespace, feedback 형식, 단위 정책을 변경한 경우에는 이후 ROS B
 1. Python 문법 검사
 
    ```powershell
-   cd C:\Users\Festo\Documents\ROS2_CIA402\virtual_ethercat
+   cd C:\Users\Festo\Documents\motion-server
    python -B -m compileall -q motion_server ethercat device control_panel interfaces ros packaging diagnostics
    ```
 
@@ -71,7 +71,7 @@ namespace, feedback 형식, 단위 정책을 변경한 경우에는 이후 ROS B
 2. Motion Server 기동
 
    ```powershell
-   cd C:\Users\Festo\Documents\ROS2_CIA402\virtual_ethercat
+   cd C:\Users\Festo\Documents\motion-server
    python motion_server/server.py
    ```
 
@@ -295,7 +295,7 @@ namespace, feedback 형식, 단위 정책을 변경한 경우에는 이후 ROS B
 2. Docker build/up
 
    ```bash
-   cd /home/festo/Documents/ROS_CIA402/virtual_ethercat
+   cd /home/festo/Documents/motion-server
    docker compose -f docker/motion_server/compose.yaml up -d --build
    ```
 

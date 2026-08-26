@@ -343,7 +343,7 @@ Tech Debt 상태 값은 `open`, `in_progress`, `complete`를 사용한다.
 
 ### TD-019 프로젝트·저장소 및 설치 경로 변경
 
-- 상태: `open`
+- 상태: `in_progress`
 - 우선순위: 보통
 - 요약: `ROS2_CIA402/virtual_ethercat` 기반 프로젝트·저장소·설치 경로를 Motion Server 명칭으로 이관한다.
 - 완료 조건:

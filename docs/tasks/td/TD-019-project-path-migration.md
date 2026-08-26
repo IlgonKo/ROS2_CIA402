@@ -15,12 +15,16 @@
 - 경로를 즉시 변경하면 기존 shortcut, sync script, service working directory와 문서가 중단될 수 있다.
 - Git repository 자체 이름 변경과 로컬 directory 이동을 동시에 수행하면 rollback과 원인 분석이 어렵다.
 
-## 선행 결정
+## 확정 결정
 
-- GitHub repository 목표 이름
-- 로컬 repository root와 상위 workspace의 목표 구조
-- Linux 기본 설치 경로
-- 경로 migration 적용 순서와 기존 경로 지원 기간
+- GitHub repository는 `IlgonKo/ROS2_CIA402`에서 `IlgonKo/motion-server`로 변경한다.
+- Windows repository root는 `C:\Users\Festo\Documents\motion-server`를 사용한다.
+- Linux repository root는 `/home/festo/Documents/motion-server`를 사용한다.
+- 이전 경로 alias나 fallback은 두지 않고 직접 전환한다. 아직 외부 배포되지 않았으므로
+  이전 checkout은 rollback을 위한 임시 보관본으로만 취급한다.
+- 적용 순서는 script·문서의 고정 경로 제거, GitHub repository rename, remote URL 변경,
+  로컬 directory 이동 순서로 한다.
+- Docker/systemd 실행 식별자는 TD-020, ROS 전용 식별자는 RF-008에서 별도로 변경한다.
 
 ## 구현 범위
 
@@ -28,7 +32,27 @@
 - Windows/Linux local path 및 sync destination을 새 기본 경로로 변경한다.
 - script가 repository directory 이름을 고정 비교하지 않고 명시적인 project root를 사용하게 한다.
 - 문서, 설정 예제와 service working directory를 새 경로에 맞춘다.
-- 기존 checkout을 이동하거나 remote URL을 갱신하는 migration 및 rollback 절차를 제공한다.
+- 기존 checkout을 이동하고 remote URL을 갱신하는 migration 및 rollback 절차를 제공한다.
+
+## Migration
+
+1. 작업 트리가 clean이고 현재 branch가 원격에 push되었는지 확인한다.
+2. GitHub repository를 `IlgonKo/motion-server`로 rename한다.
+3. `origin`을 `https://github.com/IlgonKo/motion-server.git`로 변경한다.
+4. Windows repository를 `C:\Users\Festo\Documents\motion-server`로 이동한다.
+5. Linux checkout 또는 sync target을 `/home/festo/Documents/motion-server`로 이동한다.
+6. 새 경로에서 test, Windows launcher, Linux Basic mode startup을 검증한다.
+
+## Rollback
+
+1. 실행 중인 Motion Server와 sync watcher를 중지한다.
+2. 로컬 directory를 이전 경로로 되돌린다.
+3. `origin`을 이전 repository URL로 되돌린다.
+4. 필요할 때 GitHub repository 이름을 `ROS2_CIA402`로 되돌린다.
+5. 이전 경로에서 기본 검사와 startup을 다시 수행한다.
+
+Rollback은 이전 이름을 코드에서 동시에 지원하는 호환 계층이 아니라 migration 자체를
+취소하는 절차다.
 
 ## 범위 제외
 
