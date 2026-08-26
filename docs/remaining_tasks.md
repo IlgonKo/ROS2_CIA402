@@ -465,3 +465,19 @@ Tech Debt 상태 값은 `open`, `in_progress`, `complete`를 사용한다.
   - 오류 해제·fault-reset·reconnect 후 낡은 오류 표시가 남지 않고 정상 상태로 복귀한다.
   - 정상, Axis Fault, Bus 단절, Initialization Error 및 재연결 UI 갱신 자동 테스트가 통과한다.
 - 상세: [TD-027 기술 명세](tasks/td/TD-027-control-panel-status-diagnostics.md)
+
+### TD-028 Virtual OD Bridge의 장치 시퀀스 책임 제거
+
+- 상태: `complete`
+- 우선순위: 높음
+- 요약: Virtual OD Bridge에서 Servo reset/save 의미를 제거하고 실축과 동일한 Motion Server
+  시퀀스와 Virtual Device 내부 반응을 분리한다.
+- 완료 조건:
+  - `VirtualOdBridge`는 OD access, SDO 변환과 PDO 동기화만 담당한다.
+  - Bridge에서 device reset, parameter save와 Servo 전용 role 분기가 제거된다.
+  - Motion Server와 DeviceProfile의 restart/save 시퀀스는 Mock/PySOEM backend에서 동일하게 유지된다.
+  - Virtual Servo는 명령 OD write에 대한 장치 내부 반응만 담당한다.
+  - `MockSlave`는 장치 의미를 해석하지 않고 object-write 결과를 Virtual Device에 전달한다.
+  - Bridge 단독 접근에는 side effect가 없고 MockSlave 경로에서는 기존 virtual device 동작이
+    유지되는 자동 테스트가 통과한다.
+- 상세: [TD-028 기술 명세](tasks/td/TD-028-virtual-od-bridge-boundary.md)

@@ -15,6 +15,15 @@
 
 실장치 고유 timing과 firmware fault를 완전히 모사한다고 간주하지 않으며 지원 차이를 명시한다.
 
+## 선행 책임 경계
+
+- [TD-028](../td/TD-028-virtual-od-bridge-boundary.md)에서 확정한 공통 Virtual Device 계약을
+  사용한다.
+- OD Model은 definition과 runtime value, OD Bridge는 Object Access와 PDO 동기화만 담당한다.
+- MockSlave는 장치 의미를 해석하지 않고 `virtual_device`에 object-write와 cyclic 처리를 위임한다.
+- CPX reset, AP parameter와 IO-Link ISDU의 내부 반응은 `VirtualCpxApDevice`가 담당하며,
+  Motion Server의 command sequence를 별도로 복제하지 않는다.
+
 ## 검증 계획
 
 - module/port 조합별 process image layout과 codec을 테스트한다.

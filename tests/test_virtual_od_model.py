@@ -12,6 +12,8 @@ from device.cmmt.pdo_configuration import (
 from device.cmmt.profile import CMMTASDeviceProfile
 from device.virtual_servo_drive.od_bridge import VirtualOdBridge
 from device.virtual_servo_drive.od_model import VirtualObjectDictionary
+from device.virtual_servo_drive.servo_model import VirtualCiA402Servo
+from ethercat.mock_slave import MockSlave
 from device.cmmt.required_non_pdo_od import RequiredNonPdoOdRole
 from device.cmmt.required_non_pdo_od import NON_PDO_CONFIGURATION_OD_ROLES
 from device.cmmt.required_non_pdo_od import required_non_pdo_od_roles
@@ -159,7 +161,7 @@ class VirtualOdModelTest(unittest.TestCase):
         reset_linear = VirtualObjectDictionary(profile(0x0100, 200))
         self.assertEqual(reset_linear.read(0x607F), 200)
 
-    def test_virtual_device_reset_restores_non_pdo_configuration(self):
+    def test_od_bridge_reset_write_has_no_device_side_effect(self):
         config = CmmtDeviceConfig(
             profile_name="cmmt_as",
             axis_index=0,
@@ -181,7 +183,46 @@ class VirtualOdModelTest(unittest.TestCase):
 
         bridge.write_sdo(0x2000, 1, b"\x01")
 
-        self.assertEqual(od_model.read(0x607F), 200)
+        self.assertEqual(od_model.read(0x2000, 1), 1)
+        self.assertEqual(od_model.read(0x607F), 999)
+
+    def test_od_bridge_parameter_save_write_has_no_device_side_effect(self):
+        profile = CMMTASDeviceProfile(axis_index=0, slave_index=0)
+        od_model = VirtualObjectDictionary(profile)
+        bridge = VirtualOdBridge(
+            od_model,
+            profile.create_rxpdo(),
+            profile.create_txpdo(),
+        )
+        od_model.write_role("parameter_save_status", 9)
+        od_model.write_role("parameter_save_return_code", 8)
+        od_model.write_role("parameter_save_return_value", 7)
+
+        bridge.write_sdo(0x2005, 1, b"\x01")
+
+        self.assertEqual(od_model.read_role("parameter_save_status"), 9)
+        self.assertEqual(od_model.read_role("parameter_save_return_code"), 8)
+        self.assertEqual(od_model.read_role("parameter_save_return_value"), 7)
+
+    def test_virtual_servo_owns_device_reset_response(self):
+        config = CmmtDeviceConfig(
+            profile_name="cmmt_as",
+            axis_index=0,
+            pdo_configuration="motion_server_default",
+            non_pdo_configuration=CMMT_NON_PDO_CONFIGURATIONS["linear_mm"],
+        )
+        profile = CMMTASDeviceProfile(
+            axis_index=0,
+            slave_index=0,
+            device_config=config,
+        )
+        servo = VirtualCiA402Servo(device_profile=profile)
+        slave = MockSlave(servo, profile)
+        servo.od.write(0x607F, 999)
+
+        slave.write_sdo(0x2000, 1, b"\x01")
+
+        self.assertEqual(servo.od.read(0x607F), 200)
 
     def test_mock_runtime_does_not_overwrite_selected_motion_limits(self):
         from configuration.models import (
@@ -229,7 +270,7 @@ class VirtualOdModelTest(unittest.TestCase):
 
         runtime = create_axis_runtime(ethercat, motion, logging, (bus_device,))
 
-        self.assertEqual(runtime.slaves[0].servo.od.read(0x607F), 200)
+        self.assertEqual(runtime.slaves[0].virtual_device.od.read(0x607F), 200)
 
     def test_mock_axis_restart_refreshes_cache_and_motion_controller(self):
         from configuration.models import (

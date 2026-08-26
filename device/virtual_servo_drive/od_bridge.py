@@ -43,7 +43,7 @@ class VirtualOdBridge:
         value = self._decode(definition.data_type, payload)
         self.write(index, value, subindex)
         self._update_rxpdo_field(definition, value)
-        self._apply_write_side_effect(definition.role, value)
+        return definition, value
 
     def _sdo_definition(self, index, subindex):
         try:
@@ -54,30 +54,6 @@ class VirtualOdBridge:
     def _update_rxpdo_field(self, definition, value):
         if definition.rxpdo and definition.role and self.rxpdo.has_field(definition.role):
             setattr(self.rxpdo, definition.role, value)
-
-    def _apply_write_side_effect(self, role, value):
-        if role == "device_reset_command" and int(value) == 1:
-            self._restart_virtual_device()
-        elif role == "parameter_save_command" and int(value) == 1:
-            self.od_model.write_role("parameter_save_status", 0)
-            self.od_model.write_role("parameter_save_return_code", 0)
-            self.od_model.write_role("parameter_save_return_value", 1)
-
-    def _restart_virtual_device(self):
-        current_position = self.od_model.read_role("actual_position")
-        self.od_model.reset_non_pdo_configuration()
-        self.rxpdo.reset_values()
-        self.txpdo.reset_values()
-        if self.rxpdo.has_field("target_position"):
-            self.rxpdo.target_position = current_position
-        self.rxpdo_to_od()
-        self.od_model.write_role("actual_position", current_position)
-        self.od_model.write_role("statusword", 0x0027)
-        self.od_model.write_role(
-            "mode_of_operation_display",
-            self.od_model.read_role("mode_of_operation"),
-        )
-        self.od_to_txpdo()
 
     @staticmethod
     def _normalized_type(data_type):

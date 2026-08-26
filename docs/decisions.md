@@ -723,6 +723,24 @@ Device Profile + ESI
   시점과 health/recovery 변화에만 별도 요청하며, stale process data에서는 motion UI와 trace
   갱신을 제한한다.
 
+## DEC-034 Virtual OD Bridge는 장치 명령의 의미를 소유하지 않음
+
+- 상태: `accepted`
+- 결정일: 2026-08-26
+- 결정:
+  - Virtual OD Model은 profile/ESI 기반 definition과 runtime value를 소유한다.
+  - Virtual OD Bridge는 SDO encode/decode, access 검증과 OD/PDO 값 연결만 담당한다.
+  - reset, parameter save, AP parameter와 IO-Link ISDU 같은 command role을 Bridge에서 해석하지 않는다.
+  - Motion Server와 DeviceProfile이 Mock/PySOEM 공통 command sequence를 소유한다.
+  - Virtual Device는 실제 장치가 command OD write를 받은 뒤 나타내는 내부 반응만 모사한다.
+  - MockSlave는 `virtual_device` 공통 계약을 호출하고 장치별 의미를 알지 않는다.
+- 이유: Bridge에 장치별 sequence와 role 분기가 누적되면 CPX 등 새로운 Virtual Device를 추가할
+  때 Object Access 계층이 장치 behavior 계층으로 변질되고 실축과 가상 장치의 command sequence가
+  이중화된다.
+- 영향: RF-001은 동일한 MockSlave와 OD Bridge를 재사용하고 CPX 고유 반응만
+  `VirtualCpxApDevice`에 구현한다. 새로운 장치 명령은 Bridge 분기가 아니라 DeviceProfile의
+  공통 sequence와 Virtual Device 내부 반응으로 추가한다.
+
 ## 새 결정 작성 양식
 
 ```text

@@ -16,6 +16,11 @@
 
 ### 완료
 
+- `TD-028`에서 `VirtualOdBridge`에 있던 CMMT reset/save role 분기와 virtual reset sequence를
+  제거했다. Bridge는 OD access와 PDO 동기화 후 definition/value만 반환하고, `MockSlave`는 이를
+  의미 해석 없이 `virtual_device.on_object_write()`에 전달한다. reset/save의 장치 내부 반응은
+  Virtual Servo로 이동했으며 Motion Server/CMMT DeviceProfile의 실축·가상축 공통 sequence는
+  변경하지 않았다. Bridge purity 및 기존 동작 회귀를 포함한 전체 unittest 286개가 통과했다.
 - `TD-024`와 `TD-027`을 통합 구현했다. Axis Panel의 축 수 확인용 임시 TCP 연결과 1축 fallback을
   제거하고 상시 연결의 첫 feedback으로 topology를 한 번 확정한 뒤 full status로 metadata를
   보완한다. 정상·Bus 단절·초기화 실패 feedback에 공통 Server health와

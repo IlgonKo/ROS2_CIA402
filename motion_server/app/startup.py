@@ -120,12 +120,12 @@ def create_axis_runtime(
             slaves = []
             for axis_index in range(axis_count_value):
                 device_profile = device_profiles[axis_index]
-                servo = VirtualCiA402Servo(
+                virtual_device = VirtualCiA402Servo(
                     cycle_time=ethercat.cycle.period,
                     device_profile=device_profile,
                 )
                 slaves.append(MockSlave(
-                    servo,
+                    virtual_device,
                     device_profile,
                 ))
 

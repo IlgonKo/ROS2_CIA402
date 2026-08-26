@@ -32,6 +32,30 @@ class VirtualCiA402Servo:
 
         #self.init_object_dictionary()
 
+    def on_object_write(self, definition, value, rxpdo, txpdo):
+        """Apply the virtual drive's internal response to one completed OD write."""
+        role = definition.role
+        if role == "device_reset_command" and int(value) == 1:
+            self._apply_device_reset_response(rxpdo, txpdo)
+        elif role == "parameter_save_command" and int(value) == 1:
+            self.od.write_role("parameter_save_status", 0)
+            self.od.write_role("parameter_save_return_code", 0)
+            self.od.write_role("parameter_save_return_value", 1)
+
+    def _apply_device_reset_response(self, rxpdo, txpdo):
+        current_position = self.od.read_role("actual_position")
+        self.od.reset_non_pdo_configuration()
+        rxpdo.reset_values()
+        txpdo.reset_values()
+        if rxpdo.has_field("target_position"):
+            rxpdo.target_position = current_position
+        self.od.write_role("actual_position", current_position)
+        self.od.write_role("statusword", 0x0027)
+        self.od.write_role(
+            "mode_of_operation_display",
+            self.od.read_role("mode_of_operation"),
+        )
+
     def apply_rxpdo(self, rxpdo):
         self.set_controlword(rxpdo.controlword)
         self.set_mode(rxpdo.mode_of_operation)

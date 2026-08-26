@@ -46,10 +46,10 @@ class MockMasterSdoTest(unittest.TestCase):
         master = MockMaster([slave])
 
         master.sdo.write_int32(0, 0x607A, 0, 12345)
-        self.assertEqual(slave.servo.od.read(0x607A), 12345)
+        self.assertEqual(slave.virtual_device.od.read(0x607A), 12345)
         self.assertEqual(slave.rxpdo.target_position, 12345)
 
-        slave.servo.od.write(0x6064, -2345)
+        slave.virtual_device.od.write(0x6064, -2345)
         slave.od_bridge.od_to_txpdo()
         self.assertEqual(master.sdo.read_int32(0, 0x6064, 0), -2345)
         self.assertEqual(slave.txpdo.actual_position, -2345)
