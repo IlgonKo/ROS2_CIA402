@@ -448,3 +448,16 @@ Tech Debt 상태 값은 `open`, `in_progress`, `complete`를 사용한다.
   - 실패 후 불완전 runtime이나 가상축 없이 degraded server 상태·Diagnostic·복구 계약이 유지된다.
   - CMMT-AS/CMMT-ST mismatch와 정상 startup/reconnect 회귀 테스트가 통과한다.
 - 상세: [TD-026 기술 명세](tasks/td/TD-026-device-identity-initialization-boundary.md)
+
+### TD-027 Control Panel의 Motion Server 상태 및 Axis 오류 표시 보완
+
+- 상태: `open`
+- 우선순위: 높음
+- 요약: Axis/IO Control Panel에서 Motion Server의 runtime·Diagnostic 상태를 지속적으로 확인하고 Axis Panel Motion Tab에 선택 축의 오류 상세를 표시한다.
+- 완료 조건:
+  - Axis 및 IO Control Panel이 TCP 연결 상태와 별도로 Server initialized/runtime/Diagnostic 상태를 표시한다.
+  - initialization-error, bus-disconnected, fault와 normal 전환이 두 Panel에 지연 없이 일관되게 반영된다.
+  - Axis Panel Motion Tab의 `Error` 항목이 선택 축의 활성 Fault/Alarm과 Drive 오류 상세를 표시한다.
+  - 오류 해제·fault-reset·reconnect 후 낡은 오류 표시가 남지 않고 정상 상태로 복귀한다.
+  - 정상, Axis Fault, Bus 단절, Initialization Error 및 재연결 UI 갱신 자동 테스트가 통과한다.
+- 상세: [TD-027 기술 명세](tasks/td/TD-027-control-panel-status-diagnostics.md)

@@ -6,6 +6,11 @@
 
 ## 2026-08-26
 
+### 등록
+
+- `TD-027`을 등록하여 Axis/IO Control Panel의 Motion Server runtime·Diagnostic 상태 모니터링과
+  Axis Panel Motion Tab의 선택 축 Fault/Alarm 및 Drive 오류 상세 표시 누락을 함께 추적한다.
+
 ### 완료
 
 - `RF-005` 실축 cable reconnect에서 OP 진입 후 동기 SDO parameter refresh가 cyclic PDO를
