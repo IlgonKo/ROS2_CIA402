@@ -17,7 +17,4 @@ else
   docker compose -f "${COMPOSE_FILE}" stop motion_server
   docker compose -f "${COMPOSE_FILE}" rm -f motion_server
 fi
-docker rm -f ros_cia402_motion_server 2>/dev/null || true
-docker rm -f ros2_cia402_pysoem_host 2>/dev/null || true
-
 echo "Stopped Motion Server container."

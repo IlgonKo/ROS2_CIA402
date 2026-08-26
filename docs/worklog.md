@@ -6,6 +6,13 @@
 
 ## 2026-08-26
 
+### 진행 중
+
+- `TD-020`에서 Motion Server image/container, 공용 Control Panel image, Compose project와
+  systemd unit을 Motion Server 기반 식별자로 직접 전환했다. 운영 script의 legacy cleanup
+  fallback을 제거하고 일회성 Linux migration 절차 및 legacy identifier 검사를 추가했다.
+  Linux 신규 service 실환경 검증 후 완료할 예정이다.
+
 ### 등록
 
 - `TD-027`을 등록하여 Axis/IO Control Panel의 Motion Server runtime·Diagnostic 상태 모니터링과

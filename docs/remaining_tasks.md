@@ -355,14 +355,14 @@ Tech Debt 상태 값은 `open`, `in_progress`, `complete`를 사용한다.
 
 ### TD-020 Legacy 실행 식별자 Migration
 
-- 상태: `open`
+- 상태: `in_progress`
 - 우선순위: 보통
-- 요약: 과거 프로젝트명을 포함한 container, image, service와 환경변수 식별자를 단계적으로 변경한다.
+- 요약: 과거 프로젝트명을 포함한 container, image와 service 식별자를 직접 변경한다.
 - 완료 조건:
-  - legacy 실행 식별자와 신규 식별자의 mapping, 호환 기간과 제거 version이 문서화된다.
-  - Docker/systemd/환경변수에서 신규 식별자를 기본값으로 사용하고 legacy 입력을 명시적으로 지원한다.
-  - 기존 설치의 upgrade, 신규 설치와 rollback scenario가 Windows/Linux에서 검증된다.
-  - 호환 기간 종료 후 제거할 fallback이 코드와 문서에서 추적 가능하다.
+  - legacy 실행 식별자와 신규 식별자의 mapping 및 직접 migration 절차가 문서화된다.
+  - Docker/systemd/환경변수에서 신규 식별자만 사용한다.
+  - 기존 설치의 일회성 cleanup과 신규 Linux 설치가 검증된다.
+  - ROS 전용 legacy 식별자는 RF-008 범위로 명확히 제외된다.
 - 상세: [TD-020 기술 명세](tasks/td/TD-020-legacy-runtime-identifiers.md)
 
 ### TD-021 Windows 실행 스크립트의 PYTHONPATH 중복 및 진단 출력 정리

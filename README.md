@@ -109,7 +109,7 @@ Or use the start helper:
 
 ```bash
 bash scripts/host/start.sh
-docker logs -f ros_cia402_motion_server
+docker logs -f motion-server
 ```
 
 The Dockerized Motion Server uses host networking and privileged raw Ethernet
@@ -230,26 +230,26 @@ To start the Dockerized PySOEM server automatically when the Ubuntu PC boots:
 
 ```bash
 sudo bash scripts/host/service.sh install
-systemctl status ros-cia402-axis-server.service
-docker logs -f ros_cia402_motion_server
+systemctl status motion-server.service
+docker logs -f motion-server
 ```
 
 After this installation, Ubuntu boot starts Docker, systemd runs
-`ros-cia402-axis-server.service`, and the service starts the
-`ros_cia402_motion_server` container. The container command starts
+`motion-server.service`, and the service starts the
+`motion-server` container. The container command starts
 `motion_server/server.py` automatically.
 
 To change the EtherCAT NIC or axis count later, edit `.env` and restart:
 
 ```bash
-sudo systemctl restart ros-cia402-axis-server.service
+sudo systemctl restart motion-server.service
 ```
 
 For a multi-axis boot service:
 
 ```bash
 nano .env
-sudo systemctl restart ros-cia402-axis-server.service
+sudo systemctl restart motion-server.service
 ```
 
 To remove the boot service:
@@ -261,17 +261,17 @@ sudo bash scripts/host/service.sh uninstall
 If the boot service fails, check the systemd and container logs:
 
 ```bash
-systemctl status ros-cia402-axis-server.service --no-pager
-journalctl -xeu ros-cia402-axis-server.service --no-pager
+systemctl status motion-server.service --no-pager
+journalctl -xeu motion-server.service --no-pager
 docker ps -a
-docker logs ros_cia402_motion_server
+docker logs motion-server
 ```
 
 If an old container name is blocking startup:
 
 ```bash
-docker rm -f ros_cia402_motion_server
-sudo systemctl restart ros-cia402-axis-server.service
+docker rm -f motion-server
+sudo systemctl restart motion-server.service
 ```
 
 If Docker cannot resolve Docker Hub, configure Docker DNS and restart Docker:

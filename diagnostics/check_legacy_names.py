@@ -18,9 +18,7 @@ FULLY_ALLOWED_FILES = {
     CHECKER_PATH,
 }
 
-ALLOWED_IDENTIFIERS = (
-    "ros-cia402-axis-server.service",
-)
+ALLOWED_IDENTIFIERS: tuple[str, ...] = ()
 
 ALLOWED_LINES = {
     "docs/remaining_tasks.md": (
@@ -31,6 +29,14 @@ ALLOWED_LINES = {
 }
 
 LEGACY_NAME = re.compile(r"\baxis[ _-]server\b", re.IGNORECASE)
+LEGACY_RUNTIME_IDENTIFIER = re.compile(
+    r"ros_cia402_motion_server|"
+    r"ros2_cia402_motion_server|"
+    r"ros2_cia402_axis_panel|"
+    r"ros2_cia402_pysoem|"
+    r"ros-cia402-axis-server",
+    re.IGNORECASE,
+)
 
 
 def _tracked_files() -> list[str]:
@@ -66,7 +72,11 @@ def find_legacy_names() -> list[str]:
             candidate = line
             for identifier in ALLOWED_IDENTIFIERS:
                 candidate = re.sub(re.escape(identifier), "", candidate, flags=re.IGNORECASE)
-            if LEGACY_NAME.search(candidate) and not _is_allowed_line(normalized_path, line):
+            has_legacy_name = LEGACY_NAME.search(candidate)
+            has_legacy_runtime_identifier = LEGACY_RUNTIME_IDENTIFIER.search(candidate)
+            if (has_legacy_name or has_legacy_runtime_identifier) and not _is_allowed_line(
+                normalized_path, line
+            ):
                 violations.append(f"{normalized_path}:{line_number}: {line.strip()}")
     return violations
 

@@ -666,6 +666,22 @@ Device Profile + ESI
   검증한다. rollback은 compatibility layer가 아니라 directory와 repository 이름을 이전 상태로
   되돌리는 절차다.
 
+## DEC-031 Motion Server 실행 식별자를 호환 계층 없이 직접 전환
+
+- 상태: `accepted`
+- 결정일: 2026-08-26
+- 결정:
+  - Docker image/container는 `motion-server:dev`와 `motion-server`, Compose project는
+    `motion-server`를 사용한다.
+  - Axis/IO Panel 공용 image는 `motion-server-control-panel:dev`를 사용한다.
+  - systemd unit은 `motion-server.service`를 사용한다.
+  - 외부 배포 전이므로 이전 identifier alias, fallback 및 deprecation 기간을 두지 않는다.
+  - 이전 resource는 migration 시 한 번 명시적으로 중지·삭제하고 운영 script는 신규 이름만 다룬다.
+  - ROS 전용 image/container/environment identifier는 RF-008 범위로 유지한다.
+- 이유: 신규·이전 identifier를 함께 지원하면 cleanup과 장애 진단 경로가 계속 이중화된다.
+- 영향: TD-020은 Compose, host script, systemd installer, 문서와 legacy naming 검사를 직접
+  전환한다. 기존 설치는 문서화된 일회성 cleanup 후 신규 service를 설치해야 한다.
+
 ## 새 결정 작성 양식
 
 ```text

@@ -38,8 +38,6 @@ grep -E '^(MOTION_SERVER_BACKEND|MOTION_SERVER_BUS|MOTION_SERVER_DEVICE_CONFIG_R
 echo "Stopping existing Motion Server containers"
 docker compose -f "${COMPOSE_FILE}" --env-file "${COMPOSE_ENV_FILE}" stop motion_server
 docker compose -f "${COMPOSE_FILE}" --env-file "${COMPOSE_ENV_FILE}" rm -f motion_server
-docker rm -f ros_cia402_motion_server 2>/dev/null || true
-docker rm -f ros2_cia402_pysoem_host 2>/dev/null || true
 
 if [[ "${BUILD_SERVER}" == "1" ]]; then
   echo "Building Motion Server image"
@@ -51,4 +49,4 @@ docker compose -f "${COMPOSE_FILE}" --env-file "${COMPOSE_ENV_FILE}" up -d motio
 
 echo "Started in background."
 echo "Logs:"
-echo "  docker logs -f ros_cia402_motion_server"
+echo "  docker logs -f motion-server"

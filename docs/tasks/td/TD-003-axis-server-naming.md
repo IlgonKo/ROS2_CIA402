@@ -42,8 +42,8 @@
 
 ## 유지한 Legacy Identifier
 
-- `ros-cia402-axis-server.service`: 기존 Linux 설치 호환성을 위해 TD-020 완료 전까지 유지한다.
-- `ROS2_CIA402_*`, `ros2_cia402_*`, `ros_cia402_motion_server`: TD-020 또는 RF-008 범위에서 처리한다.
+- Motion Server Docker/systemd 실행 식별자는 TD-020에서 직접 전환한다.
+- `ROS2_CIA402_*` 및 ROS image/package 식별자는 RF-008 범위에서 처리한다.
 - `ROS2_CIA402/virtual_ethercat` 경로: TD-019에서 처리한다.
 - 과거 작업 이력과 이 TD의 설명은 역사 및 추적 목적으로 유지한다.
 

@@ -4,8 +4,8 @@ services:
       context: ../..
       dockerfile: docker/motion_server/Dockerfile
 
-    image: ros2_cia402_motion_server:dev
-    container_name: ${MOTION_SERVER_CONTAINER_NAME:-ros_cia402_motion_server}
+    image: motion-server:dev
+    container_name: ${MOTION_SERVER_CONTAINER_NAME:-motion-server}
 
     network_mode: host
     privileged: true
@@ -71,7 +71,7 @@ services:
       context: ../..
       dockerfile: docker/axis_panel/Dockerfile
 
-    image: ros2_cia402_axis_panel:dev
+    image: motion-server-control-panel:dev
 
     network_mode: host
 
@@ -104,7 +104,7 @@ services:
       context: ../..
       dockerfile: docker/axis_panel/Dockerfile
 
-    image: ros2_cia402_axis_panel:dev
+    image: motion-server-control-panel:dev
 
     network_mode: host
 

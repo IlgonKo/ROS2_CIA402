@@ -6,10 +6,8 @@ PROJECT_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 COMPOSE_FILE="${PROJECT_ROOT}/docker/motion_server/compose.yaml"
 ENV_FILE="${PROJECT_ROOT}/.env"
 source "${PROJECT_ROOT}/scripts/env.sh"
-SERVICE_NAME="ros-cia402-axis-server.service"
-LEGACY_SERVICE_NAME="ros2-cia402-pysoem.service"
+SERVICE_NAME="motion-server.service"
 SERVICE_FILE="/etc/systemd/system/${SERVICE_NAME}"
-LEGACY_SERVICE_FILE="/etc/systemd/system/${LEGACY_SERVICE_NAME}"
 ACTION="${1:-install}"
 
 require_root() {
@@ -32,9 +30,6 @@ install_service() {
 
   COMPOSE_ENV_FILE="$(prepare_compose_env_file "${PROJECT_ROOT}")"
 
-  systemctl disable --now "${LEGACY_SERVICE_NAME}" 2>/dev/null || true
-  rm -f "${LEGACY_SERVICE_FILE}"
-
   cat > "${SERVICE_FILE}" <<EOF
 [Unit]
 Description=Motion Server
@@ -46,8 +41,7 @@ Wants=network-online.target
 Type=oneshot
 RemainAfterExit=yes
 WorkingDirectory=${PROJECT_ROOT}
-ExecStartPre=-/usr/bin/docker rm -f ros_cia402_motion_server
-ExecStartPre=-/usr/bin/docker rm -f ros2_cia402_pysoem_host
+ExecStartPre=-/usr/bin/docker rm -f motion-server
 ExecStart=/usr/bin/bash -lc 'source ${PROJECT_ROOT}/scripts/env.sh; COMPOSE_ENV_FILE="\$(prepare_compose_env_file ${PROJECT_ROOT})"; exec /usr/bin/docker compose -f ${COMPOSE_FILE} --env-file "\${COMPOSE_ENV_FILE}" up -d motion_server'
 ExecStop=/usr/bin/bash -lc 'source ${PROJECT_ROOT}/scripts/env.sh; COMPOSE_ENV_FILE="\$(prepare_compose_env_file ${PROJECT_ROOT})"; exec /usr/bin/docker compose -f ${COMPOSE_FILE} --env-file "\${COMPOSE_ENV_FILE}" down'
 TimeoutStartSec=0
@@ -58,8 +52,7 @@ EOF
 
   cd "${PROJECT_ROOT}"
   docker compose -f "${COMPOSE_FILE}" --env-file "${COMPOSE_ENV_FILE}" build motion_server
-  docker rm -f ros_cia402_motion_server 2>/dev/null || true
-  docker rm -f ros2_cia402_pysoem_host 2>/dev/null || true
+  docker rm -f motion-server 2>/dev/null || true
 
   systemctl daemon-reload
   systemctl enable "${SERVICE_NAME}"
@@ -76,9 +69,7 @@ uninstall_service() {
   require_root
 
   systemctl disable --now "${SERVICE_NAME}" 2>/dev/null || true
-  systemctl disable --now "${LEGACY_SERVICE_NAME}" 2>/dev/null || true
   rm -f "${SERVICE_FILE}"
-  rm -f "${LEGACY_SERVICE_FILE}"
   systemctl daemon-reload
 
   echo "Uninstalled ${SERVICE_NAME}"
