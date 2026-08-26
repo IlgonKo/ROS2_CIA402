@@ -699,6 +699,30 @@ Device Profile + ESI
 - 영향: 상세 축 상태는 feedback/status API, startup validation 실패는 기존 warning/error,
   실행 중 상세 진단은 명시적인 diagnostics/debug log가 계속 담당한다.
 
+## DEC-033 Control Panel topology와 Server health는 주기 feedback에서 확정
+
+- 상태: `accepted`
+- 결정일: 2026-08-26
+- 결정:
+  - `system/feedback`은 process data와 함께 공통 `server_health` 및
+    `process_data_valid`를 제공한다.
+  - 정상, Bus 단절과 초기화 실패 상태 모두 TCP 연결과 feedback 전송을 유지한다.
+  - Bus 단절 feedback은 마지막 process data 배열을 유지하되 유효하지 않다고 표시하고,
+    runtime이 없는 초기화 실패 feedback은 빈 배열을 제공한다.
+  - Axis Panel은 상시 연결의 첫 비어 있지 않은 feedback 배열로 topology를 한 번만 확정한 뒤
+    full status로 단위·설정·metadata를 보완한다.
+  - UI 생성 후 topology 변경은 동적 재구성하지 않고 Panel 재시작 대상으로 처리한다.
+  - 공통 feedback에는 축별 Diagnostic 목록을 넣지 않는다. 선택 축의 상세 Diagnostic은
+    `system/axis/status`로 조회한다.
+- 이유: 별도 bootstrap 연결과 Server status polling 없이도 두 Control Panel이 연결 lifecycle,
+  process data 유효성 및 Server 상태를 일관되게 판단해야 한다.
+- 검토한 대안: `system/server/status` 저주기 polling은 feedback과 상태 전달 경로가 이중화되고,
+  endpoint 변경 때 UI를 동적으로 재구성하는 방식은 축별 Tk 상태와 진행 중 제어를 안전하게
+  이전하기 어렵기 때문에 선택하지 않았다.
+- 영향: feedback payload는 작고 공통적인 health projection만 추가한다. Axis 상세 오류는 선택
+  시점과 health/recovery 변화에만 별도 요청하며, stale process data에서는 motion UI와 trace
+  갱신을 제한한다.
+
 ## 새 결정 작성 양식
 
 ```text

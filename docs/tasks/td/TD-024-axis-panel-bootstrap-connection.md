@@ -32,12 +32,33 @@ status 응답을 받은 뒤 이 연결을 닫고, `AxisServerClient`가 실제 �
 ## 목표 구조
 
 - `AxisServerClient`의 상시 연결만 생성한다.
-- 상시 연결 직후 보내는 첫 `system/axes/status` 응답을 bootstrap status로 사용한다.
-- 축 수와 축 metadata가 확인된 후 UI를 생성하거나, UI가 먼저 필요한 경우 동적으로 축 view를
-  구성할 수 있는 명시적인 초기화 경계를 둔다.
-- 재접속 후 축 구성이 변경되었으면 동일한 status 적용 경로로 UI 상태를 안전하게 재구성한다.
+- 상시 연결에서 수신한 첫 `system/feedback`의 축 배열 길이로 축 수를 확정한다.
+- 첫 feedback 전에는 연결 및 Server health만 표시하는 bootstrap 화면을 유지한다.
+- 축 수 확정 후 로컬 설정 또는 기본 이름으로 Panel 기본 화면과 Axis UI를 한 번만 생성한다.
+- UI 생성 후 `system/axes/status`를 요청하여 단위, 설정값과 metadata를 보완한다.
+- UI 생성 뒤 feedback의 축 수가 달라지면 동적으로 재구성하지 않고 Panel 재시작 필요 상태로
+  전환하여 제어를 제한한다.
 - 연결 실패 상태에서는 임의의 1축 구성을 정상 구성처럼 확정하지 않는다.
 - 서버는 정상 EOF와 명시적인 client 종료를 오류가 아닌 disconnect lifecycle로 처리한다.
+
+## Feedback 유효성 계약
+
+- `process_data_valid=true`: 이번 feedback의 process data가 정상 EtherCAT cycle에서 갱신됐다.
+- `process_data_valid=false`: Bus 단절 또는 초기화 실패로 process data를 현재값으로 신뢰할 수 없다.
+- Bus 단절 시 마지막 배열을 유지하여 이미 구성된 UI topology를 보존하되 Panel은 값을 stale로
+  표시하고 제어 판단에 사용하지 않는다.
+- 초기화 실패로 runtime이 생성되지 않았으면 빈 process data 배열과 Server health를 전송하며
+  Axis UI는 생성하지 않는다.
+- 정상, Bus 단절, 초기화 실패 상태 모두 기존 feedback 주기로 `system/feedback`을 전송한다.
+
+## 구현 단계
+
+- S01: 공통 Server health projection 및 feedback 유효성 계약을 구현한다.
+- S02: 정상·Bus 단절·초기화 실패 loop에서 동일한 feedback 전송 경계를 적용한다.
+- S03: Axis client의 임시 연결과 시작 status 요청을 제거하고 feedback topology를 latch한다.
+- S04: bootstrap 화면에서 축 수 확정 후 Axis UI를 한 번만 생성하고 full status를 요청한다.
+- S05: 축 수 불일치 감지, stale 표시와 제어 제한을 구현한다.
+- S06: 연결 lifecycle과 bootstrap 회귀 테스트를 추가한다.
 
 ## 관련 위치
 
@@ -50,16 +71,23 @@ status 응답을 받은 뒤 이 연결을 닫고, `AxisServerClient`가 실제 �
 ## 범위 제외
 
 - Motion Server의 일반적인 client ID 발급 정책 변경
-- TCP protocol 또는 status response schema 변경
+- UI 생성 후 실시간 축 topology 변경
 - IO Control Panel 전체 연결 구조 통합
 
 ## 검증 계획
 
 - Control Panel 시작 시 accept와 `system/axes/status` 요청이 각각 한 번만 발생하는지 검증한다.
-- 첫 status가 지연되거나 연결이 실패한 경우 UI가 멈추지 않고 연결 상태를 표시하는지 검증한다.
-- 첫 연결과 재접속에서 1축/다축 metadata가 동일한 경로로 반영되는지 검증한다.
+- 첫 feedback이 지연되거나 연결이 실패한 경우 bootstrap 화면이 연결 및 Server health를 표시하는지
+  검증한다.
+- 1축/다축 feedback으로 UI가 한 번만 구성되고 이후 status가 metadata를 보완하는지 검증한다.
+- Bus 단절 feedback이 마지막 배열과 `process_data_valid=false`를 제공하는지 검증한다.
+- 축 수가 변경된 feedback에서 UI 재구성 대신 재시작 필요 상태가 되는지 검증한다.
 - 정상 종료 시 서버에 connection reset 오류가 남지 않는지 Windows socket 통합 테스트로 확인한다.
 
 ## 완료 증거
 
-완료 시 연결 lifecycle 테스트, 초기화·재접속 시나리오 결과와 대표 서버 로그를 기록한다.
+- 축 수 확인용 `request_initial_system_status()`와 임시 socket을 제거했다.
+- 상시 client의 첫 feedback이 1축/다축 topology를 latch하고 full status를 한 번 요청한다.
+- 초기화 실패 feedback은 빈 배열과 health만 제공하며 1축 fallback UI를 만들지 않는다.
+- topology 변경은 UI 재구성 없이 재시작 필요 상태와 `process_data_valid=false`로 처리한다.
+- 2026-08-26 전체 unittest 284개와 diff whitespace 검사가 통과했다.

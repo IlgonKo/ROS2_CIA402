@@ -26,12 +26,14 @@ Axis Control Panel Motion Tab의 `Error` 항목은 `device_diagnostics`의 `erro
   - 공통 Diagnostic level과 활성 Fault/Alarm 수
   - 대표 Diagnostic code/title 또는 상세 보기 진입점
   - Initialization Failure stage/cause/message
-- feedback이 중단되는 degraded 상태에서도 저주기 `system/server/status` 조회가 계속 동작한다.
-- 최초 연결, 주기 갱신, reconnect 및 recovery command 완료가 동일한 상태 적용 경로를 사용한다.
+- 공통 `system/feedback.server_health`를 사용하며 별도 주기 status polling을 추가하지 않는다.
+- 정상·Bus 단절·초기화 실패 상태에서도 feedback을 유지하여 동일한 상태 적용 경로를 사용한다.
 
 ### Axis Motion Tab 오류 표시
 
 - 선택 Axis의 `diagnostic_status.statuses`를 `source.type=axis`와 Axis index로 필터링한다.
+- Axis UI 생성 직후 선택 축, 축 tab 전환, recovery 명령 완료와 Server health 상태 변경 시
+  `system/axis/status`를 한 번 요청한다.
 - 활성 Fault/Alarm의 level, code, title과 제공되는 detail을 Motion Tab `Error` 항목에 표시한다.
 - Device error code readback은 Diagnostic을 대체하지 않고 보조 상세로 결합한다.
 - 여러 Diagnostic이 활성화되면 우선순위와 표시 순서를 `FAULT > ALARM`, 발생 순서 기준으로
@@ -47,6 +49,15 @@ Axis Control Panel Motion Tab의 `Error` 항목은 `device_diagnostics`의 `erro
 - 주기 상태 조회와 응답 저장은 client 계층, 공통 health projection은 공유 가능한 utility/model,
   widget 갱신은 각 Panel view 계층이 담당한다.
 - Panel의 socket 오류와 API Fail 메시지는 Server Diagnostic과 혼합하지 않는다.
+
+## 구현 단계
+
+- S01: Axis/IO Panel 공통 Server health projection을 추가한다.
+- S02: 두 Panel의 header에 TCP와 분리된 Server health 표시를 추가한다.
+- S03: Axis client에 선택 축 status 요청 및 최신 Diagnostic 저장 경계를 추가한다.
+- S04: Motion Tab Error에 Axis Diagnostic과 Drive error code를 결합한다.
+- S05: tab 전환·recovery·상태 변경 후 선택 축만 갱신하고 stale 오류를 제거한다.
+- S06: 공통 projection parity 및 Axis 오류 표시 테스트를 추가한다.
 
 ## 관련 위치
 
@@ -69,11 +80,20 @@ Axis Control Panel Motion Tab의 `Error` 항목은 `device_diagnostics`의 `erro
 ## 검증 계획
 
 - normal, initialization-error, bus-disconnected와 fault 상태 payload를 두 Panel에 적용한다.
-- TCP 연결은 유지되지만 feedback이 중단된 상태에서도 Server 상태가 갱신되는지 검증한다.
+- TCP 연결이 유지되는 Bus 단절·초기화 실패 상태에서도 feedback으로 Server 상태가 갱신되는지
+  검증한다.
 - 선택 Axis Fault/Alarm, 여러 Diagnostic, Drive error code와 정상 상태의 Motion Tab 표시를 검증한다.
 - Axis 선택 변경, fault-reset, reconnect와 Diagnostic clear 후 stale 표시가 제거되는지 검증한다.
 - 공통 projection의 Axis/IO Panel parity와 client reconnect 회귀 테스트를 수행한다.
 
 ## 완료 증거
 
-완료 시 두 Panel의 상태별 표시 결과, Axis Motion Tab 오류 예시와 자동 테스트 결과를 기록한다.
+- 정상·Bus 단절·초기화 실패 loop가 공통 `server_health`와 `process_data_valid` feedback을 제공한다.
+- Axis/IO Panel이 동일한 health formatter로 initialized, runtime state, Diagnostic 수와 대표 항목,
+  initialization failure 및 process data 유효성을 표시한다.
+- Axis tab 전환, health 변경과 recovery 결과 후 선택 축 status를 갱신하고 Motion Tab Error에
+  Fault/Alarm definition과 Drive 오류를 함께 표시한다.
+- stale process data에서는 마지막 표시값을 보존하되 motion UI와 trace 갱신을 제한한다.
+- 동일 축의 선택 이벤트와 변수 변경 감시가 겹쳐 status를 중복 요청하지 않도록 요청을 병합하고,
+  health 변화·recovery 완료·수동 Refresh만 강제 재조회하도록 했다.
+- 2026-08-26 전체 unittest 284개와 공통 projection parity 테스트가 통과했다.

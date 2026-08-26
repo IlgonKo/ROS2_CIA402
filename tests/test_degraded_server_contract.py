@@ -204,6 +204,14 @@ class ServerSessionTest(unittest.TestCase):
 
 
 class ConfigurationDegradedListenerTest(unittest.TestCase):
+    @staticmethod
+    def read_type(stream, expected_type):
+        for _ in range(20):
+            message = json.loads(stream.readline().decode("utf-8"))
+            if message.get("type") == expected_type:
+                return message
+        raise AssertionError(f"No {expected_type} response received")
+
     def test_listener_serves_status_and_restart_without_runtime(self):
         session = failed_session(InitializationCause.CONFIGURATION_INVALID)
         probe = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -236,13 +244,13 @@ class ConfigurationDegradedListenerTest(unittest.TestCase):
         stream = client.makefile("rwb")
         stream.write(b'{"cmd":"system/server/status"}\n')
         stream.flush()
-        status = json.loads(stream.readline().decode("utf-8"))
+        status = self.read_type(stream, "system/server/status")
         stream.write(b'{"cmd":"system/authority/request"}\n')
         stream.flush()
-        authority = json.loads(stream.readline().decode("utf-8"))
+        authority = self.read_type(stream, "system/authority/request")
         stream.write(b'{"cmd":"system/server/restart"}\n')
         stream.flush()
-        restart = json.loads(stream.readline().decode("utf-8"))
+        restart = self.read_type(stream, "system/server/restart")
         client.close()
         thread.join(timeout=2.0)
 

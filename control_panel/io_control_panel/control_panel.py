@@ -10,6 +10,7 @@ if __package__ in {None, ""}:
 
 from control_panel.io_control_panel.client import MotionServerClient
 from control_panel.io_control_panel.config import read_runtime_config
+from control_panel.server_health import format_server_health
 
 
 GUI_PERIOD_MS = 500
@@ -60,6 +61,7 @@ class IOControlPanel:
         self.iol_catalog_items = {}
         self.raw_var = tk.BooleanVar(value=False)
         self.status_var = tk.StringVar(value="Disconnected")
+        self.server_health_var = tk.StringVar(value="Server: waiting for feedback")
         self.command_authority_var = tk.StringVar(value="Authority: unknown")
         self.command_authority_button_var = tk.StringVar(value="Request Authority")
         self.connected = False
@@ -91,6 +93,12 @@ class IOControlPanel:
             side="left",
             padx=(12, 0),
         )
+        ttk.Label(
+            self.root,
+            textvariable=self.server_health_var,
+            anchor="w",
+            wraplength=1080,
+        ).pack(fill="x", padx=8, pady=(0, 8))
         ttk.Label(top, textvariable=self.status_var).pack(side="left", padx=(12, 0))
 
         ttk.Label(top, text=f"{self.client.host}:{self.client.port}").pack(
@@ -536,6 +544,7 @@ class IOControlPanel:
 
         if status:
             self.status = status
+            self.server_health_var.set(format_server_health(status))
             self.update_command_authority(status.get("command_authority", {}))
             self.update_view()
         self.root.after(GUI_PERIOD_MS, self.update_gui)

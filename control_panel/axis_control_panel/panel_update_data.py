@@ -18,6 +18,9 @@ def initial_feedback(axis_count):
         "server_mode": "basic",
         "capabilities": {},
         "device_diagnostics": [],
+        "axis_diagnostic_statuses": [None for _ in range(axis_count)],
+        "process_data_valid": False,
+        "server_health": {},
         "command_authority": {
             "owner": None,
             "owned_by_this_client": False,
@@ -34,6 +37,8 @@ def merge_system_feedback(feedback, message, axis_count):
         "statuswords",
         "mode_displays",
         "command_authority",
+        "process_data_valid",
+        "server_health",
     ):
         if key in message:
             feedback[key] = message[key]
@@ -150,6 +155,14 @@ def merge_axis_status(feedback, message, axis_count):
     if "device_diagnostics" in message:
         diagnostics = _diagnostics(feedback, axis_count)
         diagnostics[axis_index] = message["device_diagnostics"]
+
+    if "diagnostic_status" in message:
+        statuses = feedback.setdefault(
+            "axis_diagnostic_statuses",
+            [None for _ in range(axis_count)],
+        )
+        _extend(statuses, axis_count, None)
+        statuses[axis_index] = message["diagnostic_status"]
 
     return True
 

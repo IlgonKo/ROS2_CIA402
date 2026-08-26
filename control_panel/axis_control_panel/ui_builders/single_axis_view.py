@@ -167,6 +167,11 @@ class SingleAxisViewBuilderMixin:
             side="left",
             padx=4,
         )
+        ttk.Button(
+            buttons,
+            text="Refresh Status",
+            command=lambda: self.request_selected_axis_status(force=True),
+        ).pack(side="left", padx=4)
         self.manual_controlword_frame = ttk.Frame(buttons)
         self.manual_controlword_frame.pack(side="left", padx=(12, 0))
         ttk.Label(self.manual_controlword_frame, text="Manual CW").pack(

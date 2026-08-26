@@ -16,6 +16,14 @@
 
 ### 완료
 
+- `TD-024`와 `TD-027`을 통합 구현했다. Axis Panel의 축 수 확인용 임시 TCP 연결과 1축 fallback을
+  제거하고 상시 연결의 첫 feedback으로 topology를 한 번 확정한 뒤 full status로 metadata를
+  보완한다. 정상·Bus 단절·초기화 실패 feedback에 공통 Server health와
+  `process_data_valid`를 추가했으며 Axis/IO Panel에 동일하게 표시한다. 선택 축 status는 tab 전환,
+  health 변경과 recovery 결과에 맞춰 요청하고 Motion Tab Error에 활성 Diagnostic과 Drive 오류를
+  결합한다. 초기 Axis 0 status 3회 및 tab 전환 status 2회 요청을 동일 축 request 병합으로
+  제거하고 명시적인 health/recovery/Refresh만 강제 재조회하도록 보완했다. 전체 unittest
+  284개가 통과했다.
 - `TD-022`에서 Motion Server startup INFO를 server/runtime field 계약으로 분리했다. DC와 phase
   lock, CSP startup mode의 실제 활성 조건에 따라 detail을 포함하고 축별 scale/status/position
   배열을 제거했다. formatter는 typed configuration만 사용하며 정상 listening 로그는 bind

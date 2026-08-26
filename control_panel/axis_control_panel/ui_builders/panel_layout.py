@@ -77,6 +77,15 @@ class PanelLayoutMixin:
         ttk.Label(header, textvariable=self.connection_var).pack(side="right")
         ttk.Label(header, textvariable=self.scale_var).pack(side="right", padx=12)
 
+        health = ttk.LabelFrame(outer, text="Motion Server Status")
+        health.pack(fill="x", pady=(0, 10))
+        ttk.Label(
+            health,
+            textvariable=self.server_health_var,
+            anchor="w",
+            wraplength=1120,
+        ).pack(fill="x", padx=6, pady=5)
+
         self.axis_selector_notebook = ttk.Notebook(outer)
         self.axis_selector_notebook.pack(fill="x", pady=(0, 10))
         for axis_name in self.axis_names:

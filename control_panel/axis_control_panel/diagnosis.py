@@ -421,3 +421,27 @@ class DiagnosisMixin:
         if value is None:
             return "n/a"
         return "read fail"
+
+    def _format_axis_error(self, diagnostic_status, device_diagnostics):
+        statuses = []
+        if isinstance(diagnostic_status, dict):
+            statuses = list(diagnostic_status.get("statuses", []))
+        if statuses:
+            rows = []
+            for item in statuses[:3]:
+                definition = item.get("definition", {})
+                row = (
+                    f"{str(definition.get('level', '')).upper()} "
+                    f"{definition.get('code', '')}: {definition.get('title', '')}"
+                ).strip()
+                description = definition.get("description")
+                if description:
+                    row += f" ({description})"
+                rows.append(row)
+            if len(statuses) > 3:
+                rows.append(f"+{len(statuses) - 3} more")
+            drive_text = self._format_error_code(device_diagnostics)
+            if drive_text not in {"No error", "n/a"}:
+                rows.append(f"Drive: {drive_text}")
+            return " | ".join(rows)
+        return self._format_error_code(device_diagnostics)

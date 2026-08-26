@@ -1,14 +1,17 @@
 import sys
 import tkinter as tk
 from pathlib import Path
-from tkinter import messagebox
+from tkinter import messagebox, ttk
 
 if __package__ in {None, ""}:
     project_root = Path(__file__).resolve().parents[2]
     sys.path.insert(0, str(project_root))
 
 from control_panel.axis_control_panel.client import AxisServerClient
-from control_panel.axis_control_panel.config import read_runtime_config
+from control_panel.axis_control_panel.config import (
+    default_axis_names,
+    read_runtime_config,
+)
 from control_panel.axis_control_panel.connection import ConnectionMixin
 from control_panel.axis_control_panel.diagnosis import DiagnosisMixin
 from control_panel.axis_control_panel.motion import MotionMixin
@@ -22,6 +25,10 @@ from control_panel.axis_control_panel.ui_builders.single_axis_view import Single
 from control_panel.axis_control_panel.units import (
     MODE_DISPLAY_NAMES,
     UnitConversionMixin,
+)
+from control_panel.server_health import (
+    format_server_health,
+    server_health_signature,
 )
 
 GUI_PERIOD_MS = 50
@@ -111,6 +118,7 @@ class AxisServerControlPanel(
         self.server_port_var = tk.StringVar(value=str(self.client.port))
         self.connection_button_var = tk.StringVar(value="Connect")
         self.connection_var = tk.StringVar(value="Disconnected")
+        self.server_health_var = tk.StringVar(value="Server: waiting for feedback")
         self.command_authority_var = tk.StringVar(value="Authority: available")
         self.command_authority_button_var = tk.StringVar(value="Request Authority")
         self.axis_enable_button_var = tk.StringVar(value="Enable")
@@ -203,6 +211,9 @@ class AxisServerControlPanel(
         self.panel_sdo_read_queue = []
         self.panel_sdo_read_next_time = 0.0
         self.panel_sdo_read_connected = False
+        self.last_server_health_signature = None
+        self._last_axis_status_request = None
+        self.process_data_valid = False
 
         self._build_ui()
         self.update_mode_dependent_controls()
@@ -224,6 +235,7 @@ class AxisServerControlPanel(
         if selected_tab < self.axis_count:
             self.selected_axis_var.set(str(selected_tab))
             self.show_single_axis_area()
+            self.request_selected_axis_status()
         else:
             self.show_multi_axis_area()
 
@@ -269,6 +281,21 @@ class AxisServerControlPanel(
         axis_index = self.selected_axis()
         self.selected_axis_label_var.set(self.axis_names[axis_index])
         self.dirty_vars.clear()
+        self.request_selected_axis_status()
+
+    def request_selected_axis_status(self, force=False):
+        if self.axis_count < 1:
+            return
+        if not self.client.process_data_valid():
+            return
+        axis_index = self.selected_axis()
+        if not force and axis_index == self._last_axis_status_request:
+            return
+        try:
+            self.client.request_axis_status(axis_index)
+            self._last_axis_status_request = axis_index
+        except (ConnectionError, OSError):
+            pass
 
     def axis_pv_allowed(self, axis_index):
         return bool(self.axis_metadata(axis_index).get("pv_allowed", False))
@@ -445,6 +472,7 @@ class AxisServerControlPanel(
     def update_gui(self):
         connected, error, feedback, notice, diagnosis_result = self.client.get_snapshot()
         self._update_connection_feedback(connected, error, notice, diagnosis_result)
+        self._update_server_health(feedback, diagnosis_result)
         self.process_axis_param_catalog()
 
         update_data = self._build_gui_update_data(feedback)
@@ -455,10 +483,49 @@ class AxisServerControlPanel(
             update_data["profile_settings"],
         )
         self.update_multi_axis_mode_controls()
-        self._update_traces(update_data)
-        self.update_repeat(update_data["actual_positions"])
-        self.update_multi_repeat(update_data["actual_positions"])
+        if self.process_data_valid:
+            self._update_traces(update_data)
+            self.update_repeat(update_data["actual_positions"])
+            self.update_multi_repeat(update_data["actual_positions"])
+        else:
+            self._set_process_controls_enabled(False)
         self.root.after(GUI_PERIOD_MS, self.update_gui)
+
+    def _update_server_health(self, feedback, diagnosis_result):
+        _axis_count, topology_error = self.client.get_topology_snapshot()
+        self.server_health_var.set(
+            topology_error or format_server_health(feedback)
+        )
+        current_signature = server_health_signature(feedback)
+        health_changed = (
+            self.last_server_health_signature is not None
+            and current_signature != self.last_server_health_signature
+        )
+        self.last_server_health_signature = current_signature
+        process_data_valid = (
+            bool(feedback.get("process_data_valid", False))
+            and not topology_error
+        )
+        if process_data_valid != self.process_data_valid:
+            self.process_data_valid = process_data_valid
+            self._set_process_controls_enabled(process_data_valid)
+            if not process_data_valid:
+                self.stop_tab_motion()
+        if health_changed or diagnosis_result:
+            self.request_selected_axis_status(force=True)
+
+    def _set_process_controls_enabled(self, enabled):
+        for area in (self.single_axis_area, self.multi_axis_area):
+            if area is not None:
+                self._set_descendant_state(area, enabled)
+
+    def _set_descendant_state(self, widget, enabled):
+        for child in widget.winfo_children():
+            try:
+                child.state(["!disabled"] if enabled else ["disabled"])
+            except (AttributeError, tk.TclError):
+                pass
+            self._set_descendant_state(child, enabled)
 
     def _update_connection_feedback(self, connected, error, notice, diagnosis_result):
         self.connection_var.set(
@@ -604,8 +671,18 @@ class AxisServerControlPanel(
         )
 
         diagnostics = feedback.get("device_diagnostics", [])
-        diag = diagnostics[selected_axis] if selected_axis < len(diagnostics) else {}
-        self.error_code_var.set(self._format_error_code(diag))
+        device_diagnostic = (
+            diagnostics[selected_axis] if selected_axis < len(diagnostics) else {}
+        )
+        axis_statuses = feedback.get("axis_diagnostic_statuses", [])
+        diagnostic_status = (
+            axis_statuses[selected_axis]
+            if selected_axis < len(axis_statuses)
+            else None
+        )
+        self.error_code_var.set(
+            self._format_axis_error(diagnostic_status, device_diagnostic)
+        )
         self._refresh_selected_axis_settings_fields(update_data, selected_axis)
 
     def _refresh_selected_axis_settings_fields(self, update_data, selected_axis):
@@ -798,11 +875,108 @@ class AxisServerControlPanel(
 
 
 def main():
-    host, port, axis_names, auto_sdo_reads = read_runtime_config()
-    client = AxisServerClient(host, port, len(axis_names))
+    host, port, configured_axis_names, auto_sdo_reads = read_runtime_config()
+    client = AxisServerClient(host, port)
     client.start()
+    bootstrap = AxisPanelBootstrap(client)
+    axis_count = bootstrap.run()
+    if axis_count is None:
+        client.stop()
+        return
+    axis_names = list(configured_axis_names)
+    defaults = default_axis_names(axis_count)
+    if len(axis_names) < axis_count:
+        axis_names.extend(defaults[len(axis_names):])
+    axis_names = axis_names[:axis_count]
     gui = AxisServerControlPanel(client, axis_names, auto_sdo_reads)
     gui.run()
+
+
+class AxisPanelBootstrap:
+    """Minimal window shown until persistent feedback establishes topology."""
+
+    def __init__(self, client):
+        self.client = client
+        self.result = None
+        self.root = tk.Tk()
+        self.root.title("Axis Control Panel")
+        self.root.geometry("760x240")
+        self.root.protocol("WM_DELETE_WINDOW", self.close)
+        self.host_var = tk.StringVar(value=client.host)
+        self.port_var = tk.StringVar(value=str(client.port))
+        self.connection_var = tk.StringVar(value="Connecting...")
+        self.health_var = tk.StringVar(value="Server: waiting for feedback")
+        self._build_ui()
+        self.root.after(GUI_PERIOD_MS, self.update)
+
+    def _build_ui(self):
+        outer = ttk.Frame(self.root, padding=16)
+        outer.pack(fill="both", expand=True)
+        ttk.Label(
+            outer,
+            text="Axis Control Panel",
+            font=("TkDefaultFont", 12, "bold"),
+        ).pack(anchor="w", pady=(0, 12))
+        endpoint = ttk.Frame(outer)
+        endpoint.pack(fill="x", pady=(0, 10))
+        ttk.Label(endpoint, text="Host").pack(side="left")
+        ttk.Entry(endpoint, textvariable=self.host_var, width=24).pack(
+            side="left", padx=(4, 10)
+        )
+        ttk.Label(endpoint, text="Port").pack(side="left")
+        ttk.Entry(endpoint, textvariable=self.port_var, width=8).pack(
+            side="left", padx=4
+        )
+        ttk.Button(endpoint, text="Connect", command=self.connect).pack(
+            side="left", padx=8
+        )
+        ttk.Label(endpoint, textvariable=self.connection_var).pack(side="right")
+        health = ttk.LabelFrame(outer, text="Motion Server Status")
+        health.pack(fill="both", expand=True)
+        ttk.Label(
+            health,
+            textvariable=self.health_var,
+            anchor="w",
+            justify="left",
+            wraplength=700,
+        ).pack(fill="both", expand=True, padx=8, pady=8)
+
+    def connect(self):
+        host = self.host_var.get().strip()
+        try:
+            port = int(self.port_var.get())
+        except ValueError:
+            messagebox.showerror("Invalid Input", "Server port must be numeric.")
+            return
+        if not host or port < 1 or port > 65535:
+            messagebox.showerror("Invalid Input", "Enter a valid host and port.")
+            return
+        self.client.set_endpoint(host, port)
+
+    def update(self):
+        connected, error, feedback, _notice, _result = self.client.get_snapshot()
+        axis_count, topology_error = self.client.get_topology_snapshot()
+        self.connection_var.set(
+            f"Connected {self.client.host}:{self.client.port}"
+            if connected
+            else f"Disconnected {error}"
+        )
+        self.health_var.set(format_server_health(feedback))
+        if topology_error:
+            self.health_var.set(topology_error)
+        if axis_count > 0:
+            self.result = axis_count
+            self.root.destroy()
+            return
+        self.root.after(GUI_PERIOD_MS, self.update)
+
+    def close(self):
+        self.result = None
+        self.root.destroy()
+
+    def run(self):
+        self.root.mainloop()
+        return self.result
 
 if __name__ == "__main__":
     main()

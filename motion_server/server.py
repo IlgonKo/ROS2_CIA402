@@ -136,7 +136,11 @@ def run_server_loop(
             except CommunicationException as exception:
                 mark_bus_disconnected(state, exception)
                 action = run_bus_disconnected_loop(
-                    server, runtime, state, clients
+                    server,
+                    runtime,
+                    state,
+                    clients,
+                    server_config.feedback_period,
                 )
                 if action is not None:
                     return action
@@ -182,7 +186,13 @@ def run_server_loop(
                 )
         except CommunicationException as exception:
             mark_bus_disconnected(state, exception)
-            action = run_bus_disconnected_loop(server, runtime, state, clients)
+            action = run_bus_disconnected_loop(
+                server,
+                runtime,
+                state,
+                clients,
+                server_config.feedback_period,
+            )
             if action is not None:
                 return action
             next_cycle_time = time.monotonic()
@@ -193,7 +203,13 @@ def run_server_loop(
             diagnostic_monitor.update(runtime)
         except CommunicationException as exception:
             mark_bus_disconnected(state, exception)
-            action = run_bus_disconnected_loop(server, runtime, state, clients)
+            action = run_bus_disconnected_loop(
+                server,
+                runtime,
+                state,
+                clients,
+                server_config.feedback_period,
+            )
             if action is not None:
                 return action
             next_cycle_time = time.monotonic()
@@ -294,7 +310,13 @@ def run_server_loop(
         )
 
 
-def run_bus_disconnected_loop(server, runtime, state, clients):
+def run_bus_disconnected_loop(
+    server,
+    runtime,
+    state,
+    clients,
+    feedback_period,
+):
     while state["server_session"].runtime_state is ServerRuntimeState.BUS_DISCONNECTED:
         try:
             conn, addr = server.accept()
@@ -317,6 +339,13 @@ def run_bus_disconnected_loop(server, runtime, state, clients):
                 if not service_client(client, runtime, state, dispatch_message):
                     close_client(client, runtime, state)
                     clients.remove(client)
+                    continue
+                send_feedback_if_due(
+                    client,
+                    runtime,
+                    state,
+                    feedback_period,
+                )
             except OSError:
                 close_client(client, runtime, state)
                 clients.remove(client)
@@ -364,6 +393,16 @@ def run_degraded_server_loop(
                     close_client(client, None, state)
                     clients.remove(client)
                     continue
+                send_feedback_if_due(
+                    client,
+                    None,
+                    state,
+                    (
+                        server_config.feedback_period
+                        if server_config is not None
+                        else 0.05
+                    ),
+                )
             except (ConnectionError, OSError, json.JSONDecodeError) as exc:
                 print(
                     f"Client error: id={client['id']} error={exc}",

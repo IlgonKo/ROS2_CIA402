@@ -15,16 +15,13 @@ from motion_server_client import decode_server_message, is_fail_message
 
 RECONNECT_PERIOD = 1.0
 
-def axis_count_from_status(message):
+def axis_count_from_feedback(message):
     for key in (
-        "axis_metadata",
         "target_positions",
         "actual_positions",
         "actual_velocities",
         "statuswords",
         "mode_displays",
-        "motion_modes",
-        "user_position_units",
     ):
         value = message.get(key)
         if isinstance(value, list) and value:
@@ -32,30 +29,8 @@ def axis_count_from_status(message):
     return 0
 
 
-def request_initial_system_status(host, port, timeout=2.0):
-    try:
-        with socket.create_connection((host, int(port)), timeout=timeout) as sock:
-            sock.settimeout(timeout)
-            sock_file = sock.makefile("rwb")
-            sock_file.write(json.dumps({"cmd": "system/axes/status"}).encode("utf-8") + b"\n")
-            sock_file.flush()
-
-            deadline = time.monotonic() + timeout
-            while time.monotonic() < deadline:
-                line = sock_file.readline()
-                if not line:
-                    break
-                message = decode_server_message(json.loads(line.decode("utf-8")))
-                if message.get("type") == "system/axes/status":
-                    return message
-    except (OSError, ValueError, json.JSONDecodeError):
-        return {}
-
-    return {}
-
-
 class AxisServerClient:
-    def __init__(self, host, port, axis_count):
+    def __init__(self, host, port, axis_count=0):
         self.host = host
         self.port = port
         self.axis_count = axis_count
@@ -67,6 +42,7 @@ class AxisServerClient:
         self.enabled = True
         self.last_error = ""
         self.feedback = initial_feedback(axis_count)
+        self.topology_error = ""
         self.last_notice = ""
         self.last_diagnosis_result = ""
         self.last_axis_param_catalog = None
@@ -89,6 +65,7 @@ class AxisServerClient:
                 self.sock.close()
                 self.sock = None
             self.connected = False
+            self.feedback["process_data_valid"] = False
 
     def set_endpoint(self, host, port):
         with self.lock:
@@ -135,7 +112,6 @@ class AxisServerClient:
             self.sock_file = sock_file
             self.connected = True
             self.last_error = ""
-        self.request_system_status()
 
     def _read_loop(self):
         while not self.stop_event.is_set():
@@ -151,7 +127,8 @@ class AxisServerClient:
             elif message.get("type") == "system/axis/status":
                 self._merge_axis_status(message)
             elif message.get("type") == "system/feedback":
-                self._merge_system_feedback(message)
+                if self._merge_system_feedback(message):
+                    self.request_system_status()
             elif message.get("type") in {
                 "system/authority/request",
                 "system/authority/release",
@@ -165,6 +142,8 @@ class AxisServerClient:
                 "system/axis/param_catalog",
                 "system/axis/param_save",
                 "system/axis/restart",
+                "system/axis/fault_reset",
+                "system/axes/fault_reset",
                 "system/server/fault_reset",
                 "system/server/restart",
                 "system/bus/reconnect",
@@ -173,13 +152,44 @@ class AxisServerClient:
 
     def _store_feedback(self, message):
         with self.lock:
-            self.feedback = message
+            preserved = {
+                key: self.feedback.get(key)
+                for key in (
+                    "server_health",
+                    "process_data_valid",
+                    "axis_diagnostic_statuses",
+                )
+                if key in self.feedback
+            }
+            self.feedback = dict(message)
+            for key, value in preserved.items():
+                self.feedback.setdefault(key, value)
             for result in self.sdo_read_results:
                 self._apply_param_read_result(result)
 
     def _merge_system_feedback(self, message):
         with self.lock:
+            message_axis_count = axis_count_from_feedback(message)
+            topology_initialized = False
+            if self.axis_count == 0 and message_axis_count > 0:
+                self.axis_count = message_axis_count
+                self.feedback = initial_feedback(message_axis_count)
+                topology_initialized = True
+            elif (
+                self.axis_count > 0
+                and message_axis_count > 0
+                and message_axis_count != self.axis_count
+            ):
+                self.topology_error = (
+                    "Server axis configuration changed. Restart Axis Control Panel."
+                )
+                self.feedback["process_data_valid"] = False
+                self.feedback["server_health"] = dict(
+                    message.get("server_health", {})
+                )
+                return False
             merge_system_feedback(self.feedback, message, self.axis_count)
+            return topology_initialized
 
     def _merge_axis_status(self, message):
         with self.lock:
@@ -385,6 +395,14 @@ class AxisServerClient:
                 diagnosis_result,
             )
 
+    def get_topology_snapshot(self):
+        with self.lock:
+            return self.axis_count, self.topology_error
+
+    def process_data_valid(self):
+        with self.lock:
+            return bool(self.feedback.get("process_data_valid", False))
+
     def pop_axis_param_catalog(self):
         with self.lock:
             catalog = self.last_axis_param_catalog
@@ -405,6 +423,14 @@ class AxisServerClient:
 
     def request_system_status(self):
         self.send_json({"cmd": "system/axes/status"})
+
+    def request_axis_status(self, axis_index):
+        self.send_json(
+            {
+                "cmd": "system/axis/status",
+                "axis": int(axis_index),
+            }
+        )
 
     def send_axis_move_absolute(self, axis_index, position, profile_velocity=None):
         message = {

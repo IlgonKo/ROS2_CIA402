@@ -412,16 +412,19 @@ Tech Debt 상태 값은 `open`, `in_progress`, `complete`를 사용한다.
 
 ### TD-024 Axis Control Panel 초기 임시 연결 제거
 
-- 상태: `open`
+- 상태: `complete`
 - 우선순위: 높음
-- 요약: Axis Control Panel이 축 수 확인을 위해 만드는 일회성 연결을 제거하고 상시 연결의 첫 status로 초기화한다.
+- 요약: Axis Control Panel의 일회성 연결을 제거하고 상시 연결의 첫 feedback으로 축 topology를 초기화한다.
 - 완료 조건:
   - Control Panel 시작 시 `system/axes/status`를 위한 별도 임시 TCP 연결을 만들지 않는다.
-  - 상시 연결에서 받은 첫 status로 축 수, 축 이름과 UI 상태를 초기화한다.
+  - 상시 연결의 첫 feedback 배열 길이로 축 수를 확정하고 로컬 설정/default로 축 이름을 만든다.
+  - 축 수 확정 전에는 연결과 Server health를 표시하는 bootstrap 화면만 제공한다.
+  - UI 생성 후 한 번 요청한 full status로 단위·설정·metadata를 보완한다.
   - 시작 과정에서 동일 status 요청과 client 연결이 중복되지 않는다.
   - 정상적인 Control Panel 시작·종료가 서버에서 connection reset 오류로 기록되지 않는다.
-  - 연결 실패, 지연 응답과 재접속 이후에도 UI가 올바른 축 수로 복구되는 자동 테스트가 통과한다.
-  - endpoint 변경 후 서버 축 수가 달라지면 Client buffer와 Panel UI가 새 status 기준으로 재구성된다.
+  - 연결 실패와 지연 feedback에서 임의의 1축 fallback을 확정하지 않는다.
+  - UI 생성 후 축 수 변경은 동적으로 재구성하지 않고 Panel 재시작 필요 상태와 제어 제한으로 처리한다.
+  - 정상·Bus 단절·초기화 실패 feedback과 bootstrap 회귀 자동 테스트가 통과한다.
 - 상세: [TD-024 기술 명세](tasks/td/TD-024-axis-panel-bootstrap-connection.md)
 
 ### TD-025 Runtime Parameter Cache 관리 체계 확장
@@ -452,7 +455,7 @@ Tech Debt 상태 값은 `open`, `in_progress`, `complete`를 사용한다.
 
 ### TD-027 Control Panel의 Motion Server 상태 및 Axis 오류 표시 보완
 
-- 상태: `open`
+- 상태: `complete`
 - 우선순위: 높음
 - 요약: Axis/IO Control Panel에서 Motion Server의 runtime·Diagnostic 상태를 지속적으로 확인하고 Axis Panel Motion Tab에 선택 축의 오류 상세를 표시한다.
 - 완료 조건:

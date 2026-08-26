@@ -97,7 +97,18 @@ class MotionServerClient:
                         "command_authority": dict(
                             message.get("command_authority", {})
                         ),
+                        "process_data_valid": bool(
+                            message.get("process_data_valid", False)
+                        ),
+                        "server_health": dict(message.get("server_health", {})),
                     }
+                else:
+                    self.feedback["process_data_valid"] = bool(
+                        message.get("process_data_valid", False)
+                    )
+                    self.feedback["server_health"] = dict(
+                        message.get("server_health", {})
+                    )
             elif message_type in {
                 "system/io/status",
                 "system/io/input_read",
@@ -127,9 +138,15 @@ class MotionServerClient:
                             "available": bool(message.get("available", False)),
                         }
                 elif message_type in {"system/io/status", "system/io/input_read"}:
+                    server_health = self.feedback.get("server_health")
+                    process_data_valid = self.feedback.get("process_data_valid")
                     self.feedback = dict(message)
                     if command_authority and "command_authority" not in self.feedback:
                         self.feedback["command_authority"] = command_authority
+                    if server_health is not None:
+                        self.feedback["server_health"] = server_health
+                    if process_data_valid is not None:
+                        self.feedback["process_data_valid"] = process_data_valid
                 elif message_type in {
                     "system/authority/request",
                     "system/authority/release",
