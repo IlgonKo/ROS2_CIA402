@@ -37,7 +37,10 @@ class TypedConfigurationTest(unittest.TestCase):
             "docker/motion_server/compose.yaml",
             "motion_server/start_server.sh",
         ):
-            text = (project_root / relative_path).read_text(encoding="utf-8")
+            path = project_root / relative_path
+            if path.name == ".env" and not path.exists():
+                continue
+            text = path.read_text(encoding="utf-8")
             for legacy_name in legacy_names:
                 self.assertNotIn(legacy_name, text, relative_path)
 

@@ -69,4 +69,21 @@ Rollback은 이전 이름을 코드에서 동시에 지원하는 호환 계층�
 
 ## 완료 증거
 
-완료 시 경로 mapping, repository rename 기록, migration/rollback 결과와 clean-system 시험 기록을 추가한다.
+### 완료
+
+- 2026-08-26: GitHub repository를 `IlgonKo/motion-server`로 rename하고 default branch가
+  `main`인지 확인했다.
+- 2026-08-26: `origin`을 `https://github.com/IlgonKo/motion-server.git`로 변경하고
+  `main`과 `td/019-project-path-migration` branch 조회를 확인했다.
+- 2026-08-26: `C:\Users\Festo\Documents\motion-server`에 새 URL로 clean clone했다.
+- clean clone에서 optional `.env`가 없는 조건을 반영하고 전체 unittest 265개,
+  legacy naming 검사, PowerShell parser 및 `git diff --check`를 통과했다.
+- 기존 checkout은 Codex desktop process가 directory를 사용 중이라 이동할 수 없으므로
+  현재 작업 종료 후 제거 가능한 rollback 사본으로 보존했다.
+
+### 남은 검증
+
+- 기본 Linux host `192.168.0.12:22`가 연결되지 않아 Windows-to-Linux sync와 새 Linux
+  경로의 Docker Basic mode startup은 아직 검증하지 못했다.
+- Linux host가 연결되면 `sync_motion_server_to_ubuntu.ps1` one-shot/watch, 새 경로 startup,
+  migration/rollback을 확인한 뒤 TD-019를 완료한다.

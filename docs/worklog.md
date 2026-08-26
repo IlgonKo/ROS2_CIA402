@@ -6,6 +6,14 @@
 
 ## 2026-08-26
 
+### 진행 중
+
+- `TD-019`에서 GitHub repository를 `IlgonKo/motion-server`로 rename하고 Windows 목표 경로
+  `C:\Users\Festo\Documents\motion-server`에 clean clone했다. 동기화 스크립트의
+  `virtual_ethercat` 폴더명 가정과 이전 Linux 경로를 제거하고 새 경로 migration/rollback을
+  문서화했다. clean checkout에서 선택적 `.env`가 없으면 실패하던 테스트도 수정하여 전체
+  unittest 265개를 통과했다. Linux host가 연결되지 않아 원격 sync와 Basic mode 검증은 남아 있다.
+
 ### 등록
 
 - `TD-027`을 등록하여 Axis/IO Control Panel의 Motion Server runtime·Diagnostic 상태 모니터링과
