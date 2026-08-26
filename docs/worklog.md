@@ -6,13 +6,6 @@
 
 ## 2026-08-26
 
-### 진행 중
-
-- `TD-020`에서 Motion Server image/container, 공용 Control Panel image, Compose project와
-  systemd unit을 Motion Server 기반 식별자로 직접 전환했다. 운영 script의 legacy cleanup
-  fallback을 제거하고 일회성 Linux migration 절차 및 legacy identifier 검사를 추가했다.
-  Linux 신규 service 실환경 검증 후 완료할 예정이다.
-
 ### 등록
 
 - Linux 4축 Motion Server에 Windows Axis Control Panel을 연결해도 시작 시 1축 fallback UI가
@@ -23,6 +16,11 @@
 
 ### 완료
 
+- `TD-020`에서 Motion Server image/container를 `motion-server:dev`/`motion-server`, Axis/IO
+  Panel 공용 image를 `motion-server-control-panel:dev`, Compose project를 `motion-server`,
+  systemd unit을 `motion-server.service`로 직접 전환했다. 운영 script의 legacy fallback을
+  제거하고 일회성 cleanup 절차와 legacy identifier 검사를 추가했다. 전체 unittest 265개와
+  Compose render 검사를 통과하고 Linux에서 신규 service와 container의 정상 기동을 확인했다.
 - `TD-019`에서 GitHub repository를 `IlgonKo/motion-server`로 rename하고 Windows/Linux
   repository root를 각각 `C:\Users\Festo\Documents\motion-server`와
   `/home/festo/Documents/motion-server`로 전환했다. 대상 Git checkout과 `.env`를 삭제할 수 있는

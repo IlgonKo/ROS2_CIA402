@@ -66,7 +66,9 @@ sudo bash scripts/host/service.sh install
 - legacy naming 검사와 전체 unittest 265개가 통과한다.
 - host 운영 script에 TD-020 대상 legacy runtime identifier가 없음을 확인한다.
 
-### 남은 실환경 검증
+### 실환경 검증
 
-- Linux에서 기존 service/container 일회성 cleanup을 수행한다.
-- `motion-server.service` 설치·기동, `motion-server` container와 server log를 확인한다.
+- 2026-08-26: Linux에서 TD-020 branch를 적용하고 신규 `motion-server.service`와
+  `motion-server` container가 정상 기동됨을 확인했다.
+- 신규 service/container 이름으로 Motion Server가 실제 구동되므로 Docker Compose와 systemd
+  identifier 직접 전환이 완료됐다.
