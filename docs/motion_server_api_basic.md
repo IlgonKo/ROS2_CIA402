@@ -574,7 +574,8 @@ system/bus/rescan
 process와 Diagnostic 저장소를 만든다. Bus reconnect는 `initialization_error`,
 `bus_disconnected`, `fault` 상태에서만 허용되고 `normal` 상태에서는 거부된다. 별도 recovery
 worker가 없으므로 reconnect가 완료될 때까지 status/stop을 포함한 다른 API 요청 처리는
-일시 정지하지만 기존 TCP socket과 command authority는 유지된다.
+일시 정지하지만 기존 TCP socket과 command authority는 유지된다. Parameter refresh는 PRE-OP에서
+완료하며 OP 진입 후 expected WKC가 3회 연속 확인되어야 Success를 반환한다.
 
 ## Rejection Response
 

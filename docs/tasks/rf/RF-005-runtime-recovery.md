@@ -101,6 +101,10 @@ class ServerRuntimeState(Enum):
 - TD-025 연결은 범용 event가 아니라 동기
   `refresh_after_recovery(runtime, recovery_type, affected_axes)` 호출을 사용한다. Bus reconnect는
   모든 Axis, Axis restart는 해당 Axis를 대상으로 하며 refresh 성공 후에만 recovery를 완료한다.
+- 동기 parameter refresh는 PRE-OP에서 완료한다. OP 진입 후 blocking SDO read를 연속 수행하여
+  cyclic PDO watchdog을 발생시키지 않는다.
+- OP 진입 후 expected WKC와 일치하는 process data가 3회 연속 확인되어야 recovery를 완료한다.
+  입력 PDO만 수신되고 출력 PDO가 승인되지 않는 상태는 reconnect Success로 처리하지 않는다.
 - 공통 설정 기본 timeout은 Bus reconnect 10초, Axis restart 30초로 한다.
 - timeout은 backend가 지원하는 connect/OP 전이에도 남은 시간을 전달한다. 단, worker 없이
   실행하므로 이미 진입한 native/SDO 호출을 강제로 중단하는 hard timeout은 보장하지 않는다.
@@ -271,7 +275,10 @@ RF-005 구현을 시작하기 위해 추가로 결정해야 하는 사양은 없
   정리했다. TD-018의 대체된 계약은 DEC-026~DEC-029를 참조하도록 표시했다.
 - 전체 Bus Axis restart 안전 정지, 정상 상태 reconnect 거부와 WKC 기반 cable disconnect fallback을
   추가하고 동기 recovery 중 API 일시 정지 계약을 UI·문서에 명시했다.
-- 전체 unittest 258개, source compile과 diff 검사가 통과했다.
+- 실축 reconnect에서 OP 진입 뒤 전체 Axis SDO refresh 동안 cyclic PDO가 정지하여 WKC가
+  `5/15`로 떨어지고 Axis Fault Reset RxPDO가 전달되지 않는 문제를 확인했다. parameter refresh를
+  PRE-OP으로 이동하고 OP 진입 후 정상 WKC 3회 연속 검증을 recovery 완료 조건에 추가했다.
+- 전체 unittest 265개, source compile과 diff 검사가 통과했다.
 - 실축 검증은 아직 수행하지 않았으므로 RF-005 상태는 `in_progress`를 유지한다.
 
 ## 관련 작업
@@ -294,19 +301,24 @@ reconnect가 해결한 Initialization Fault의 내부 acknowledge/clear도 이 R
 
 ### 자동 검증
 
-- 전체 unittest: 258개 통과
+- 전체 unittest: 265개 통과
 - Python source compile: 통과
 - diff 형식 검사: 통과
 - MockMaster disconnect/reconnect, timeout, Axis restart와 refresh 대상 parity: 통과
 
+### 실축 검증 완료 — 2026-08-26
+
+- CMMT 4축과 CPX-AP-I-EC 1대, 총 5 slave 구성에서 운전 중 EtherCAT cable을 분리했다.
+  WKC `0/10`, `BUS_DISCONNECTED`와 `BUS_CONNECTION_LOST`를 확인했고 기존 TCP client와
+  command authority owner `1`이 유지됐다.
+- cable 재연결 후 같은 client의 `system/bus/reconnect`가 PRE-OP parameter refresh, OP 진입과
+  정상 WKC 검증을 완료했다. Bus 단절로 발생한 Axis Fault는 reconnect와 분리하여 전체 Axis
+  fault-reset으로 복구했다.
+- 최종 상태는 runtime `normal`, Bus connected, WKC `15/15`, 4축 mode display `1`, 활성
+  Diagnostic 없음으로 확인했다.
+
 ### 실축 검증 대기
 
-- 운전 중 EtherCAT cable 분리 시 TCP client와 authority가 유지되고
-  `BUS_DISCONNECTED`/`BUS_CONNECTION_LOST`가 표시되는지 확인
-- cable 분리가 transport exception 대신 WKC 0으로 관측되어도 연속 mismatch 뒤
-  `BUS_DISCONNECTED`로 전환되는지 확인
-- 같은 client의 `system/bus/reconnect`가 cable 복구 후 모든 slave/process image/parameter
-  refresh 완료 시점에 Success를 반환하는지 확인
 - reconnect 처리 중 기존 TCP socket은 유지되지만 status/stop 등 다른 API 응답은 recovery
   완료까지 대기하는지 확인
 - 실제 CMMT Axis restart에서 slave가 사라졌다가 30초 안에 재발견되고, 다른 Axis를 포함한

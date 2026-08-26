@@ -38,6 +38,8 @@ class FakeRuntime:
         self.connect_error = connect_error
         self.events = []
         self.configured_modes = []
+        self.wkc = 1
+        self._expected_wkc = 1
         self.slaves = [
             SimpleNamespace(
                 rxpdo=SimpleNamespace(mode_of_operation=0),
@@ -58,6 +60,9 @@ class FakeRuntime:
 
     def sync_trajectory_to_actual_positions(self):
         self.events.append("sync_trajectory")
+
+    def expected_wkc(self):
+        return self._expected_wkc
 
 
 def recovery_state(*, connect_error=None):
@@ -130,6 +135,61 @@ class BusRecoveryTest(unittest.TestCase):
         self.assertIsNone(
             session.diagnostic_manager.status_for(
                 BUS_CONNECTION_LOST.code,
+                BUS_SOURCE,
+            )
+        )
+
+    def test_reconnect_refreshes_in_preop_before_entering_operational(self):
+        runtime, _session, state = recovery_state()
+
+        with (
+            patch("motion_server.app.recovery.clear_axis_restart_commands"),
+            patch("motion_server.app.recovery.write_csp_interpolation_modes"),
+            patch(
+                "motion_server.app.recovery.refresh_after_recovery",
+                side_effect=lambda *_args: runtime.events.append("refresh"),
+            ),
+            patch(
+                "motion_server.app.recovery.exchange",
+                side_effect=lambda *_args, **_kwargs: runtime.events.append(
+                    "exchange"
+                ),
+            ),
+        ):
+            reconnect_runtime(runtime, state)
+
+        self.assertLess(
+            runtime.events.index("refresh"),
+            runtime.events.index("enter_operational"),
+        )
+        self.assertLess(
+            runtime.events.index("enter_operational"),
+            runtime.events.index("exchange"),
+        )
+        self.assertEqual(runtime.events.count("exchange"), 3)
+
+    def test_reconnect_rejects_processdata_that_never_reaches_expected_wkc(self):
+        runtime, session, state = recovery_state()
+        runtime.wkc = 1
+        runtime._expected_wkc = 3
+        state["bus_reconnect_timeout"] = 0.001
+
+        with (
+            patch("motion_server.app.recovery.clear_axis_restart_commands"),
+            patch("motion_server.app.recovery.write_csp_interpolation_modes"),
+            patch("motion_server.app.recovery.refresh_after_recovery"),
+            patch("motion_server.app.recovery.exchange"),
+            self.assertRaises(CommunicationException),
+        ):
+            reconnect_runtime(runtime, state)
+
+        self.assertIs(
+            session.runtime_state,
+            ServerRuntimeState.BUS_DISCONNECTED,
+        )
+        self.assertIsNotNone(
+            session.diagnostic_manager.status_for(
+                BUS_RECONNECT_FAILED.code,
                 BUS_SOURCE,
             )
         )
@@ -218,7 +278,7 @@ class BusRecoveryTest(unittest.TestCase):
             )
         )
 
-    def test_axis_refresh_failure_keeps_operational_bus_in_fault(self):
+    def test_axis_refresh_failure_before_op_disconnects_bus(self):
         runtime, session, state = recovery_state()
 
         with (
@@ -233,8 +293,12 @@ class BusRecoveryTest(unittest.TestCase):
         ):
             restart_axis_runtime(runtime, state, 0)
 
-        self.assertIs(session.runtime_state, ServerRuntimeState.FAULT)
-        self.assertEqual(runtime.events.count("close"), 1)
+        self.assertIs(
+            session.runtime_state,
+            ServerRuntimeState.BUS_DISCONNECTED,
+        )
+        self.assertEqual(runtime.events.count("close"), 2)
+        self.assertNotIn("enter_operational", runtime.events)
 
 
 class AxisRestartSafetyTest(unittest.TestCase):

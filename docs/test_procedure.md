@@ -374,6 +374,10 @@ Bus recovery 회귀에서는 다음을 추가 확인한다.
   `bus_disconnected`로 전환된다.
 - reconnect 중 TCP socket과 authority는 유지되지만 동기 recovery가 반환되기 전에는 같은
   server loop의 다른 API 응답이 일시 정지한다.
+- reconnect 중 parameter SDO refresh가 PRE-OP에서 수행되고, OP 진입 후 WKC가 expected 값과
+  3회 연속 일치한 뒤에만 Success를 반환하는지 확인한다.
+- 상태 입력은 수신되지만 출력 PDO가 승인되지 않는 WKC 상태에서는 Axis Fault Reset을 시도하지
+  않고 reconnect Fail 및 `bus_disconnected`로 처리되는지 확인한다.
 
 ## 배포 승인 기준
 

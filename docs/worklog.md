@@ -8,6 +8,12 @@
 
 ### 완료
 
+- `RF-005` 실축 cable reconnect에서 OP 진입 후 동기 SDO parameter refresh가 cyclic PDO를
+  중단하여 WKC가 `5/15`로 유지되고 Axis Fault Reset RxPDO가 전달되지 않는 문제를 확인했다.
+  recovery refresh를 PRE-OP으로 이동하고 OP 진입 후 expected WKC 3회 연속 확인을 완료 조건으로
+  추가했다. 수정 후 CMMT 4축과 CPX-AP-I-EC 1대 구성에서 cable 분리, 기존 TCP/authority 유지,
+  Bus reconnect와 별도 Axis fault-reset을 검증했다. 최종 runtime `normal`, WKC `15/15`, 활성
+  Diagnostic 없음이 확인됐으며 전체 unittest 265개가 통과했다.
 - Windows launcher가 이전 실행에서 process environment에 투영한 Motion Server 설정을 다음 실행에
   재사용하지 않고 현재 `.env`를 다시 읽도록 정리했다. project root `PYTHONPATH` 중복을 제거하고
   전체 경로 대신 resolved project root만 출력하도록 TD-021을 완료했다.

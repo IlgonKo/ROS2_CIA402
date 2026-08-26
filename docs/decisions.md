@@ -617,6 +617,10 @@ Device Profile + ESI
     `refresh_after_recovery(runtime, recovery_type, affected_axes)` 경계로 연결한다. refresh 성공
     후에만 recovery를 완료하고 실패하면 `FAULT`를 유지한다.
   - Bus reconnect는 모든 Axis, Axis restart는 해당 Axis를 refresh 대상으로 한다.
+  - recovery parameter refresh는 PRE-OP에서 수행한 뒤 OP에 진입한다. OP 진입 후 blocking SDO
+    refresh로 cyclic PDO watchdog을 발생시키지 않는다.
+  - recovery 완료 전 expected WKC와 같은 process data가 3회 연속 수신되는지 검증한다.
+    상태 입력만 들어오고 출력 PDO가 승인되지 않는 상태는 recovery 완료로 보지 않는다.
   - timeout은 공통 설정의 양수 초 단위 값으로 두며 기본값은 Bus reconnect 10초, Axis restart
     30초로 한다.
   - startup Bus 연결 실패에서는 runtime을 새로 구성하고, 운전 중 Bus 단절에서는 기존

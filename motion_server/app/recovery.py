@@ -27,6 +27,9 @@ class RecoveryRefreshException(Exception):
     pass
 
 
+RECOVERY_WKC_STABLE_CYCLES = 3
+
+
 def _resolve_if_active(manager, definition):
     if manager.status_for(definition.code, BUS_SOURCE) is not None:
         manager.resolve(definition.code, BUS_SOURCE)
@@ -142,17 +145,13 @@ def restart_axis_runtime(runtime, state, axis_index):
     try:
         runtime.close()
         _connect_until(runtime, deadline)
-        try:
-            _restore_process_image(
-                runtime,
-                state,
-                recovery_type=RecoveryType.AXIS_RESTART,
-                refresh_axes=(axis_index,),
-                deadline=deadline,
-            )
-        except RecoveryRefreshException:
-            operational = True
-            raise
+        _restore_process_image(
+            runtime,
+            state,
+            recovery_type=RecoveryType.AXIS_RESTART,
+            refresh_axes=(axis_index,),
+            deadline=deadline,
+        )
         operational = True
         if time.monotonic() > deadline:
             raise TimeoutError(
@@ -227,13 +226,43 @@ def _restore_process_image(
         mode_code = profile.mode_code(mode_name)
         runtime.slaves[axis_index].rxpdo.mode_of_operation = mode_code
         profile.configure_mode_code(runtime, axis_index, mode_code)
+    try:
+        # SDO refresh must finish in PRE-OP. Performing these blocking reads
+        # after OP would pause cyclic PDO long enough to trip slave watchdogs.
+        refresh_after_recovery(runtime, recovery_type, refresh_axes)
+    except Exception as exception:
+        raise RecoveryRefreshException from exception
     remaining = deadline - time.monotonic()
     if remaining <= 0.0:
         raise TimeoutError("EtherCAT operational transition timed out")
     runtime.enter_operational(timeout_s=remaining)
-    exchange(runtime, cycles=10)
+    _wait_for_stable_processdata(runtime, deadline)
     runtime.sync_trajectory_to_actual_positions()
-    try:
-        refresh_after_recovery(runtime, recovery_type, refresh_axes)
-    except Exception as exception:
-        raise RecoveryRefreshException from exception
+
+
+def _wait_for_stable_processdata(
+    runtime,
+    deadline,
+    stable_cycles=RECOVERY_WKC_STABLE_CYCLES,
+):
+    required_cycles = max(1, int(stable_cycles))
+    consecutive_cycles = 0
+    actual_wkc = int(getattr(runtime, "wkc", 0))
+    expected_wkc = int(runtime.expected_wkc())
+
+    while time.monotonic() < deadline:
+        exchange(runtime, cycles=1)
+        actual_wkc = int(runtime.wkc)
+        expected_wkc = int(runtime.expected_wkc())
+        if expected_wkc > 0 and actual_wkc == expected_wkc:
+            consecutive_cycles += 1
+            if consecutive_cycles >= required_cycles:
+                return
+        else:
+            consecutive_cycles = 0
+
+    raise TimeoutError(
+        "EtherCAT process data did not stabilize before recovery timeout. "
+        f"WKC={actual_wkc}/{expected_wkc} "
+        f"required_cycles={required_cycles}"
+    )
