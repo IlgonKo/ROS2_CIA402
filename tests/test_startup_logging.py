@@ -3,6 +3,7 @@ import unittest
 
 from configuration.models import CspInterpolationMode, CspProfile
 from motion_server.app.startup_logging import (
+    format_listening_endpoint,
     format_startup_summary,
     startup_summary_fields,
 )
@@ -63,6 +64,12 @@ class StartupLoggingTest(unittest.TestCase):
             "AP=",
         ):
             self.assertNotIn(device_field, text)
+
+    def test_listening_log_contains_endpoint_only(self):
+        self.assertEqual(
+            format_listening_endpoint("0.0.0.0", 15000),
+            "Motion Server listening on 0.0.0.0:15000",
+        )
 
     def test_disabled_dc_omits_every_dc_detail(self):
         fields = self.fields(

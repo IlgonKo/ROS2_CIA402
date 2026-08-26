@@ -60,3 +60,7 @@ def format_startup_summary(
     )
     details = " ".join(f"{name}={value}" for name, value in fields)
     return f"Motion Server initialized. {details}"
+
+
+def format_listening_endpoint(host, port):
+    return f"Motion Server listening on {host}:{int(port)}"

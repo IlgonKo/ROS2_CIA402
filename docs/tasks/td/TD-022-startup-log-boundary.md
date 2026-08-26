@@ -48,11 +48,13 @@ Motion Server 초기화 완료 로그가 server/runtime 설정과 축별 device 
   `csp_interpolation_mode`, `csp_velocity_offset` 추가
 - `csp_interpolation_mode`는 typed enum 이름을 소문자로 출력한다.
 - `axis_position_counts_per_api_unit`을 포함한 축별 scale/readback 배열은 출력하지 않는다.
+- 초기화 요약 직후의 listening 로그는 중복된 `backend`와 `axes` 없이 bind endpoint만 출력한다.
 
 대표 PP/DC off 출력:
 
 ```text
 Motion Server initialized. backend=pysoem server_mode=basic axes=4 cycle_time=0.008 spin_wait_time=0.00015 motion_mode=pp dc_enabled=False
+Motion Server listening on 0.0.0.0:15000
 ```
 
 ## Device 정보 제공 경계

@@ -41,7 +41,10 @@ from motion_server.app.initialization import (
     initialization_failure_from_exception,
     log_initialization_failure,
 )
-from motion_server.app.startup_logging import format_startup_summary
+from motion_server.app.startup_logging import (
+    format_listening_endpoint,
+    format_startup_summary,
+)
 from motion_server.handlers.command.trajectory import (
     update_active as update_active_trajectory,
 )
@@ -710,8 +713,10 @@ def run_main_once(
             server.bind((MOTION_SERVER_BIND_HOST, server_config.port))
             server.listen(1)
             print(
-                f"Motion Server listening on {MOTION_SERVER_BIND_HOST}:{server_config.port} "
-                f"backend={ethercat_config.backend.value} axes={axis_count_value}",
+                format_listening_endpoint(
+                    MOTION_SERVER_BIND_HOST,
+                    server_config.port,
+                ),
                 flush=True,
             )
             action = (

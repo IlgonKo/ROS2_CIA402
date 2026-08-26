@@ -691,6 +691,7 @@ Device Profile + ESI
   - DC detail은 DC와 phase lock의 실제 활성 조건에 따라 단계적으로 포함한다.
   - CSP detail은 startup motion mode가 CSP일 때만 포함한다.
   - 축별 scale, OD readback, statusword, software limit와 actual position은 초기화 요약에서 제외한다.
+  - 정상 listening 로그는 bind endpoint만 출력하고 초기화 요약의 `backend`와 `axes`를 반복하지 않는다.
   - startup summary formatter는 typed configuration과 axis count만 입력받고 device/runtime 객체에
     의존하지 않는다.
 - 이유: 비활성 설정 원본과 장치 상태 배열을 server lifecycle 로그에 함께 표시하면 실제 적용
