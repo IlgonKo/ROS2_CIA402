@@ -27,6 +27,12 @@ def normalize_od_data_type(data_type):
 
 def encode_od_value(data_type, value, size=None):
     normalized = normalize_od_data_type(data_type)
+    if is_byte_array_type(normalized):
+        payload = bytes(value)
+        if size is None:
+            return payload
+        size = int(size)
+        return payload[:size] + bytes(max(0, size - len(payload)))
     if "string" in normalized:
         payload = str(value).encode("ascii", errors="replace")
         return payload if size is None else payload[:int(size)]
@@ -49,6 +55,8 @@ def encode_od_value(data_type, value, size=None):
 def decode_od_value(data_type, payload):
     normalized = normalize_od_data_type(data_type)
     payload = bytes(payload)
+    if is_byte_array_type(normalized):
+        return payload
     if "string" in normalized:
         return payload.split(b"\x00", 1)[0].decode("ascii", errors="replace")
 
@@ -58,3 +66,9 @@ def decode_od_value(data_type, payload):
         return struct.unpack(data_format, payload[:size])[0]
 
     return int.from_bytes(payload, "little", signed=False)
+
+
+def is_byte_array_type(normalized):
+    return normalized in {"byte_array", "octet_string"} or (
+        "array" in normalized and "byte" in normalized
+    )

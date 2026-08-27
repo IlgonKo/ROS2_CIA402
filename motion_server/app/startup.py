@@ -22,6 +22,7 @@ from motion_server.app.runtime import AxisRuntime
 from device import get_device_profile
 from motion_server.device_manager import AxisBinding, DeviceManager
 from device.virtual_servo_drive import VirtualCiA402Servo
+from device.virtual_cpx_ap_i_ec import VirtualCpxApDevice
 from ethercat.mock_master import MockMaster
 from ethercat.mock_slave import MockSlave
 from ethercat.pysoem_master import PySOEMMaster
@@ -79,7 +80,6 @@ def create_axis_runtime(
 ):
     runtime_logger = RuntimeLogger(logging_config)
     sync_mode = ethercat.sync_mode
-    device_profile_names = [device.profile_name for device in devices]
     device_profiles = list(
         device_profiles
         if device_profiles is not None
@@ -92,15 +92,6 @@ def create_axis_runtime(
         for device in devices
         if device.role.value == "axis"
     ]
-    io_devices = [
-        {
-            "id": device.logical_id,
-            "profile": device.profile_name,
-            "slave_index": device.slave_index,
-        }
-        for device in devices
-        if device.role.value == "io"
-    ]
     axis_count_value = len(axis_slave_indices)
     axis_bindings = [
         AxisBinding(axis_index=axis_index, slave_index=slave_index)
@@ -111,19 +102,23 @@ def create_axis_runtime(
     device_manager = None
     try:
         if ethercat.backend.value == "mock":
-            if axis_slave_indices != list(range(axis_count_value)) or (
-                len(device_profile_names) != axis_count_value
-            ):
-                raise ValueError(
-                    "mock backend supports only one-to-one axis/slave mapping"
-                )
             slaves = []
-            for axis_index in range(axis_count_value):
-                device_profile = device_profiles[axis_index]
-                virtual_device = VirtualCiA402Servo(
-                    cycle_time=ethercat.cycle.period,
-                    device_profile=device_profile,
-                )
+            for device, device_profile in zip(devices, device_profiles):
+                if device.role.value == "axis":
+                    virtual_device = VirtualCiA402Servo(
+                        cycle_time=ethercat.cycle.period,
+                        device_profile=device_profile,
+                    )
+                elif device.role.value == "io" and (
+                    device_profile.name == "cpx_ap_i_ec"
+                ):
+                    virtual_device = VirtualCpxApDevice(device_profile)
+                else:
+                    raise ValueError(
+                        "mock backend does not support virtual device "
+                        f"profile={device_profile.name!r} "
+                        f"role={device.role.value!r}"
+                    )
                 slaves.append(MockSlave(
                     virtual_device,
                     device_profile.pdo_configuration,

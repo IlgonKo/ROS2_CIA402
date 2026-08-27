@@ -45,10 +45,16 @@ class CPXApIEcDeviceProfile:
             raise PdoCatalogMismatchException() from exc
 
     def create_rxpdo(self):
-        return CPXRxPDO(self.config)
+        return CPXRxPDO(
+            self.config,
+            mapping_bytes=self.pdo_configuration.output_bytes,
+        )
 
     def create_txpdo(self):
-        return CPXTxPDO(self.config)
+        return CPXTxPDO(
+            self.config,
+            mapping_bytes=self.pdo_configuration.input_bytes,
+        )
 
     def prepare_process_image(
         self,

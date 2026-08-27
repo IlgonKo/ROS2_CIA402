@@ -24,6 +24,15 @@
 
 ### 완료
 
+- `RF-001`에서 station ESI와 설정된 AP module ESI를 기반으로 `VirtualCpxOdModel`, metadata 기반
+  `VirtualApModule`과 `VirtualCpxApDevice`를 구현했다. 설정 크기에 맞는 고정
+  `0x6F00`/`0x7F00` PDO block만 활성화하고 Mock PRE-OP에서 실장치와 같은 module ident,
+  assignment/mapping 및 process-image 검증을 수행한다. DO/AO/IO-Link output은 OD process image를
+  `Model_Update`에서 해석하며 DI/AI/IO-Link input은 독립 상태로 보고하여 자동 loopback을 하지
+  않는다. AP/ISDU는 gateway dispatch 경계까지만 제공하고 parameter device와 공개 input injection
+  API는 RF-013/RF-014 범위로 유지했다. 완료 리뷰에서 ESI `DefaultData`/`DefaultValue` 초기값 반영과
+  input/output channel·datatype 범위 검증을 보완했다. Axis/IO 혼합 runtime을 포함한 RF 전용 테스트
+  10개와 전체 unittest 309개, source compile 및 diff whitespace 검사를 통과했다.
 - `TD-030`에서 Mock/PySOEM 공통 `MasterPdoRuntime`을 추가하고 RxPDO/TxPDO 객체, PdoCodec과
   prepared/transmitted/received raw buffer를 Master 측으로 통일했다. 두 backend는 strict
   `prepare -> send -> receive` phase와 immutable output snapshot을 사용한다. MockSlave는 raw

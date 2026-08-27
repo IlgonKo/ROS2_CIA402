@@ -3,7 +3,7 @@
 이 문서는 앞으로 구현할 기능과 현재 코드에 남아 있는 기술 부채를 관리한다.
 완료된 작업 이력은 [Work Log](worklog.md)에 기록한다.
 
-마지막 전체 점검: 2026-08-26
+마지막 전체 점검: 2026-08-27
 
 점검 범위는 Python source, shell/PowerShell script, Docker Compose, 설정 예제와 Markdown 문서다.
 외부 제공 ESI/IODD, PDF/packet capture, build/install/dist 산출물은 구조 분석 대상에서 제외했다.
@@ -27,7 +27,7 @@ Tech Debt 상태 값은 `open`, `in_progress`, `complete`를 사용한다.
 
 ### RF-001 CPX-AP-I-EC Virtual I/O
 
-- 상태: `planned`
+- 상태: `complete`
 - 우선순위: 높음
 - 요약: 실장치와 동일한 설정 및 API로 시험할 수 있는 CPX-AP-I-EC Virtual I/O를 제공한다.
 - 선행 작업: `TD-030`

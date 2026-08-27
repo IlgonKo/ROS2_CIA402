@@ -1,5 +1,6 @@
 from dataclasses import dataclass
 
+from device.cpx_ap_i_ec.esi_module_catalog import esi_module_catalog
 from device.cpx_ap_i_ec.module_resolver import (
     module_info,
     validate_layout_against_esi,
@@ -25,6 +26,31 @@ REQUIRED_STATION_OD = (
     (0xF050, 0x00, "detected_module_list"),
 )
 
+RXPDO_INDEXES = tuple(range(0x1710, 0x1717))
+TXPDO_INDEXES = tuple(range(0x1B10, 0x1B17))
+
+
+@dataclass(frozen=True)
+class CPXPdoBlock:
+    index: int
+    subindex: int
+    name: str
+    field: str
+    byte_length: int = 16
+    data_type: str = "byte_array"
+    default: bytes = bytes(16)
+
+    @property
+    def bit_length(self):
+        return self.byte_length * 8
+
+    def mapping_entry(self):
+        return (
+            (int(self.index) << 16)
+            | (int(self.subindex) << 8)
+            | self.bit_length
+        )
+
 
 @dataclass(frozen=True)
 class CPXPdoConfiguration:
@@ -33,11 +59,41 @@ class CPXPdoConfiguration:
 
     @property
     def output_bytes(self):
-        return int(self.config.output_bytes)
+        return self.rxpdo_info.byte_size
 
     @property
     def input_bytes(self):
-        return int(self.config.input_bytes)
+        return self.txpdo_info.byte_size
+
+    @property
+    def rxpdo_info(self):
+        return selected_fixed_pdo(
+            esi_module_catalog().rxpdos,
+            RXPDO_INDEXES,
+            self.config.output_bytes,
+            "RxPDO/output",
+        )
+
+    @property
+    def txpdo_info(self):
+        return selected_fixed_pdo(
+            esi_module_catalog().txpdos,
+            TXPDO_INDEXES,
+            self.config.input_bytes,
+            "TxPDO/input",
+        )
+
+    def rxpdo_mapping_entries(self):
+        return self.rxpdo_info.mapping_entries()
+
+    def txpdo_mapping_entries(self):
+        return self.txpdo_info.mapping_entries()
+
+    def rxpdo_objects(self):
+        return pdo_blocks(self.rxpdo_info, "output")
+
+    def txpdo_objects(self):
+        return pdo_blocks(self.txpdo_info, "input")
 
     def validate_catalog_support(self, esi_catalog):
         validate_required_station_od(esi_catalog)
@@ -63,6 +119,35 @@ class CPXPdoConfiguration:
 
 def cpx_pdo_configuration(config):
     return CPXPdoConfiguration("cpx_ap_i_ec_fixed_process_image", config)
+
+
+def selected_fixed_pdo(catalog, indexes, required_bytes, label):
+    required_bytes = max(1, int(required_bytes))
+    candidates = [catalog[index] for index in indexes if index in catalog]
+    for candidate in sorted(candidates, key=lambda item: item.byte_size):
+        if candidate.byte_size >= required_bytes:
+            return candidate
+    maximum = max((item.byte_size for item in candidates), default=0)
+    raise ValueError(
+        f"CPX {label} requires {required_bytes} bytes; "
+        f"maximum fixed process image is {maximum} bytes."
+    )
+
+
+def pdo_blocks(pdo_info, direction):
+    blocks = []
+    for entry in pdo_info.entries:
+        if entry.index == 0:
+            continue
+        blocks.append(CPXPdoBlock(
+            index=entry.index,
+            subindex=entry.subindex,
+            name=entry.name,
+            field=f"{direction}_block_{entry.subindex}",
+            byte_length=(int(entry.bit_length) + 7) // 8,
+            default=bytes((int(entry.bit_length) + 7) // 8),
+        ))
+    return blocks
 
 
 def validate_required_station_od(esi_catalog):

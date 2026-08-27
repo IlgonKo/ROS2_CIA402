@@ -1,14 +1,16 @@
 class CPXRxPDO:
     """CPX output image, master to slave."""
 
-    def __init__(self, config):
+    def __init__(self, config, mapping_bytes=None):
         self.config = config
         self.module_outputs = {
             module.slot: create_module_output(module)
             for module in config.layout.modules
             if module.output_bytes
         }
-        self.payload = bytearray(config.output_bytes)
+        self.payload = bytearray(
+            config.output_bytes if mapping_bytes is None else int(mapping_bytes)
+        )
 
     def resize(self, byte_count):
         byte_count = max(0, int(byte_count))
@@ -24,13 +26,24 @@ class CPXRxPDO:
         return bool(self.module_outputs[int(slot)]["digital"][int(index)])
 
     def set_module_digital_output(self, slot, index, value):
-        self.module_outputs[int(slot)]["digital"][int(index)] = bool(value)
+        if not isinstance(value, bool):
+            raise TypeError("Digital output value must be bool.")
+        values = self.module_outputs[int(slot)]["digital"]
+        index = output_channel(values, index, "digital")
+        values[index] = value
 
     def get_module_analog_output(self, slot, index):
         return int(self.module_outputs[int(slot)]["analog"][int(index)])
 
     def set_module_analog_output(self, slot, index, value):
-        self.module_outputs[int(slot)]["analog"][int(index)] = int(value)
+        module = module_by_slot(self.config, slot)
+        index = output_channel(
+            self.module_outputs[int(slot)]["analog"],
+            index,
+            "analog",
+        )
+        value = validate_analog_value(module, value)
+        self.module_outputs[int(slot)]["analog"][index] = value
 
     def get_io_link_output(self, slot):
         return bytes(self.module_outputs[int(slot)]["io_link"])
@@ -39,21 +52,27 @@ class CPXRxPDO:
         slot = int(slot)
         target = self.module_outputs[slot]["io_link"]
         source = bytes(payload)
-        target[:] = b"\x00" * len(target)
-        target[:min(len(target), len(source))] = source[:len(target)]
+        if len(source) != len(target):
+            raise ValueError(
+                f"IO-Link output for module {slot} requires "
+                f"{len(target)} bytes, got {len(source)}."
+            )
+        target[:] = source
 
 
 class CPXTxPDO:
     """CPX input image, slave to master."""
 
-    def __init__(self, config):
+    def __init__(self, config, mapping_bytes=None):
         self.config = config
         self.module_inputs = {
             module.slot: create_module_input(module)
             for module in config.layout.modules
             if module.input_bytes
         }
-        self.payload = bytes(config.input_bytes)
+        self.payload = bytes(
+            config.input_bytes if mapping_bytes is None else int(mapping_bytes)
+        )
 
     def resize(self, byte_count):
         byte_count = max(0, int(byte_count))
@@ -102,6 +121,43 @@ def flatten_module_values(modules, module_data, count_attribute, data_key):
             continue
         values.extend(module_data[module.slot][data_key])
     return values
+
+
+def module_by_slot(config, slot):
+    slot = int(slot)
+    for module in config.layout.modules:
+        if int(module.slot) == slot:
+            return module
+    raise KeyError(f"Unknown CPX AP module slot: {slot}")
+
+
+def validate_analog_value(module, value):
+    if isinstance(value, bool) or not isinstance(value, int):
+        raise TypeError("Analog value must be int.")
+    bits = int(module.analog_bits)
+    if module.analog_signed:
+        minimum = -(1 << (bits - 1))
+        maximum = (1 << (bits - 1)) - 1
+    else:
+        minimum = 0
+        maximum = (1 << bits) - 1
+    if value < minimum or value > maximum:
+        raise ValueError(
+            f"Analog value {value} is outside {minimum}..{maximum} "
+            f"for module {module.slot}."
+        )
+    return value
+
+
+def output_channel(values, channel, kind):
+    if isinstance(channel, bool) or not isinstance(channel, int):
+        raise TypeError(f"{kind.capitalize()} output channel must be int.")
+    if channel < 0 or channel >= len(values):
+        raise ValueError(
+            f"{kind.capitalize()} output channel {channel} is outside "
+            f"0..{len(values) - 1}."
+        )
+    return channel
 
 
 def flattened_digital_outputs(rxpdo):

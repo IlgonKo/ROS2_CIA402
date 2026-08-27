@@ -116,4 +116,28 @@ Virtual module input state
 
 ## 완료 증거
 
-완료 시 지원 범위 표, fixture, 자동 테스트와 실장치 비교 결과를 기록한다.
+### 지원 범위와 차이
+
+| 항목 | Virtual CPX | 실장치 CPX |
+|---|---|---|
+| 설정 및 DeviceProfile | 공통 설정과 `CPXApIEcDeviceProfile` 사용 | 동일 |
+| PDO encode/decode | Master의 기존 `CPXPdoCodec` 사용 | 동일 |
+| PRE-OP 준비 | module ident, PDO assignment/mapping과 process-image 크기 검증 | 동일 sequence |
+| Station/module OD | station ESI와 구성된 module ESI로 생성 | 장치 firmware가 제공 |
+| DI/AI | 독립 module input state, 기본값 `False`/`0` | 실제 입력 |
+| DO/AO | RxPDO process image를 `Model_Update`에서 반영 | 실제 출력 |
+| IO-Link process data | 고정 크기 raw input/output buffer | 실제 IO-Link Device data |
+| AP/ISDU parameter | gateway OD request/response dispatch 경계만 제공 | 실제 parameter 처리 |
+| Diagnostic 및 reset | 정상 초기값만 제공, RF-003/RF-012 후속 | 실제 장치 동작 |
+| 외부 input 조작 | 내부 injection 계약만 제공, RF-014 후속 | 실제 입력으로 조작 |
+
+### 자동 검증
+
+- `tests/test_virtual_cpx_ap.py`에서 fixed PDO block 선택, station/module OD, slot-dependent index,
+  PRE-OP readback, DI/DO/AI/AO, IO-Link raw buffer, no-loopback, range 검증, AP/ISDU gateway와
+  Axis/IO 혼합 runtime API를 검증한다.
+- 2026-08-27 기준 전체 unittest 309개가 통과했다.
+- IO Control Panel은 virtual 전용 분기 없이 공통 IO snapshot/input/output API를 사용하며,
+  혼합 runtime 회귀 테스트에서 같은 응답 계약을 검증했다.
+- 실제 CPX와의 통신 sequence 비교는 기존 CPX DeviceProfile 및 codec을 그대로 재사용하는 것으로
+  확보했다. firmware timing, 실제 I/O 전기 신호와 parameter device 반응은 위 표의 제외 범위다.

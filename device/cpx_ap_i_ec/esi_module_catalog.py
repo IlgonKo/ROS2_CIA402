@@ -7,6 +7,7 @@ from device.cpx_ap_i_ec.file_matching import (
     find_unique_xml_file,
     normalized_file_key,
 )
+from device.od_value_codec import decode_od_value
 
 
 ESI_DIR = Path(__file__).resolve().parent / "esi"
@@ -62,6 +63,7 @@ class EsiObjectInfo:
     data_type: str
     bit_size: int
     access: str
+    default: object = None
     depend_on_slot: bool = False
     subitems: tuple = ()
 
@@ -74,6 +76,7 @@ class EsiSubItemInfo:
     bit_size: int
     bit_offset: int
     access: str
+    default: object = None
 
 
 def module_info_by_name(name):
@@ -114,6 +117,9 @@ def esi_module_catalog():
         tuple(modules),
         by_name,
         by_ident,
+        vendor_id=parse_int(xml_text(root.find(".//Vendor/Id"))),
+        product_code=parse_int(type_element(device).get("ProductCode")),
+        revision=parse_int(type_element(device).get("RevisionNo")),
         objects=parse_device_objects(device, data_types),
         rxpdos=parse_pdos(device, "RxPdo"),
         txpdos=parse_pdos(device, "TxPdo"),
@@ -126,12 +132,22 @@ class EsiCatalog:
     modules: tuple[EsiModuleInfo, ...]
     by_name: dict
     by_ident: dict
+    vendor_id: int
+    product_code: int
+    revision: int
     objects: dict
     rxpdos: dict
     txpdos: dict
 
     def object_info(self, index, subindex=0):
         return self.objects[(int(index), int(subindex))]
+
+
+def type_element(device):
+    element = device.find("Type")
+    if element is None:
+        raise ValueError("CPX-AP-I-EC ESI Device has no Type element")
+    return element
 
 
 def find_esi_file(stem):
@@ -233,6 +249,7 @@ def parse_device_objects(device, data_types):
                 data_type=subitem.data_type,
                 bit_size=subitem.bit_size,
                 access=subitem.access or obj.access,
+                default=subitem.default,
                 depend_on_slot=obj.depend_on_slot,
                 subitems=(),
             )
@@ -255,6 +272,11 @@ def parse_objects(object_elements, data_types):
             data_type=data_type,
             bit_size=bit_size,
             access=access_text(obj),
+            default=esi_default_value(
+                obj.find("Info"),
+                data_type,
+                bit_size,
+            ),
             depend_on_slot=bool(index_el is not None and index_el.get("DependOnSlot")),
             subitems=subitems,
         ))
@@ -280,11 +302,50 @@ def object_subitems(obj, data_type, bit_size, data_types):
             for index, name in enumerate(info_names)
         )
 
+    selected = candidates[0]
     for candidate in candidates:
         candidate_names = [item.name for item in candidate]
         if same_subitem_names(info_names, candidate_names):
-            return candidate
-    return candidates[0]
+            selected = candidate
+            break
+    info_subitems = obj.findall("Info/SubItem")
+    return tuple(
+        EsiSubItemInfo(
+            subindex=item.subindex,
+            name=item.name,
+            data_type=item.data_type,
+            bit_size=item.bit_size,
+            bit_offset=item.bit_offset,
+            access=item.access,
+            default=(
+                esi_default_value(
+                    info_subitems[index].find("Info"),
+                    item.data_type,
+                    item.bit_size,
+                )
+                if index < len(info_subitems)
+                else None
+            ),
+        )
+        for index, item in enumerate(selected)
+    )
+
+
+def esi_default_value(info, data_type, bit_size):
+    if info is None:
+        return None
+    raw_data = xml_text(info.find("DefaultData")).strip()
+    if raw_data:
+        return decode_od_value(data_type, bytes.fromhex(raw_data))
+    raw_value = xml_text(info.find("DefaultValue")).strip()
+    if not raw_value:
+        return None
+    normalized = str(data_type or "").strip().lower()
+    if "string" in normalized:
+        return raw_value
+    if normalized in {"real", "float", "float32", "double", "float64"}:
+        return float(raw_value)
+    return parse_int(raw_value)
 
 
 def same_subitem_names(left, right):
