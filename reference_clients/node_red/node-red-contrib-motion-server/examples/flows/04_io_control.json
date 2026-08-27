@@ -1,0 +1,12 @@
+[
+  {"id":"tab-io","type":"tab","label":"04 I/O Control","disabled":false,"info":"Manual I/O reads and output writes. Deploy never changes an output."},
+  {"id":"io-feedback","type":"motion-server-feedback","z":"tab-io","name":"I/O Feedback","connection":"cfg-status","x":150,"y":60,"wires":[["io-feedback-debug"]]},
+  {"id":"inject-io-status","type":"inject","z":"tab-io","name":"I/O Status","props":[{"p":"payload"}],"payload":"{\"cmd\":\"system/io/status\"}","payloadType":"json","once":false,"x":140,"y":140,"wires":[["io-request"]]},
+  {"id":"inject-io-input","type":"inject","z":"tab-io","name":"Read io0 Inputs","props":[{"p":"payload"}],"payload":"{\"cmd\":\"system/io/input_read\",\"io\":\"io0\"}","payloadType":"json","once":false,"x":160,"y":190,"wires":[["io-request"]]},
+  {"id":"inject-io-output-on","type":"inject","z":"tab-io","name":"Set io0 Slot 1 DO0 ON","props":[{"p":"payload"}],"payload":"{\"cmd\":\"system/io/output_write\",\"io\":\"io0\",\"slot\":1,\"kind\":\"digital\",\"channel\":0,\"value\":true}","payloadType":"json","once":false,"x":190,"y":240,"wires":[["io-request"]]},
+  {"id":"inject-io-output-off","type":"inject","z":"tab-io","name":"Set io0 Slot 1 DO0 OFF","props":[{"p":"payload"}],"payload":"{\"cmd\":\"system/io/output_write\",\"io\":\"io0\",\"slot\":1,\"kind\":\"digital\",\"channel\":0,\"value\":false}","payloadType":"json","once":false,"x":190,"y":290,"wires":[["io-request"]]},
+  {"id":"io-request","type":"motion-server-request","z":"tab-io","name":"I/O API","connection":"cfg-status","timeout":"","x":440,"y":220,"wires":[["io-response"],["io-client-error"]]},
+  {"id":"io-feedback-debug","type":"debug","z":"tab-io","name":"I/O Feedback","active":true,"tosidebar":true,"complete":"payload.io","targetType":"msg","x":420,"y":60,"wires":[]},
+  {"id":"io-response","type":"debug","z":"tab-io","name":"I/O Success or Fail","active":true,"tosidebar":true,"complete":"payload","targetType":"msg","x":680,"y":200,"wires":[]},
+  {"id":"io-client-error","type":"debug","z":"tab-io","name":"I/O Client Error","active":true,"tosidebar":true,"complete":"payload","targetType":"msg","x":670,"y":250,"wires":[]}
+]

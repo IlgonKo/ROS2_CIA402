@@ -6,6 +6,22 @@
 
 ## 2026-08-27
 
+### RF-002 구현 완료
+
+- 독립 `reference_clients` 아래에 재사용 가능한 최소 Python client와 Node-RED package를 구현했다.
+  Python client는 thread-safe correlation, raw Success/Fail 반환, bounded feedback queue, timeout,
+  disconnect pending 실패, 1초 재연결과 authority 비복원 계약을 제공한다.
+- Node-RED에는 Connection Config, Request, Feedback, Connection Status 4종의 공통 node를 구현했다.
+  `01` connection/status와 `02` authority는 공통 기반 Flow로, `03`~`06` Axis/I/O/parameter/Virtual I/O는
+  기능 Scenario Flow로 구성했다. `01`만 Connection Config를 소유하고 다른 모든 Flow가 이를 공유하여
+  여러 Flow를 함께 사용해도 TCP 연결과 command authority가 중복되지 않는다.
+- Axis Dashboard에는 첫 feedback 기준으로 고정한 전체 축 actual position/velocity series, 축 이름
+  fallback, series당 500 sample 제한과 연결 단절 시 초기화를 반영했다.
+- mock Motion Server를 대상으로 Python `system/server/status`와 `system/feedback` smoke test를
+  통과했다. 전체 Python unittest 327개, Node-RED test 6개, production dependency audit 0건,
+  Python wheel/Node-RED tarball clean install, source compile, Node syntax와 whitespace 검사를 통과하여
+  `RF-002`를 완료 처리했다.
+
 ### 설계 보완
 
 - `RF-002`는 재사용 가능한 최소 Python client 모듈과 Node-RED의 공통 node 및 scenario flow를
@@ -45,8 +61,10 @@
   Node만 optional timeout override를 가지며 1초 재연결 주기는 UI에 노출하지 않는다.
   Connection Status는 초기 snapshot과 connected 값 변경 시에만 connected/last_error를 출력하고 반복
   재연결 시도는 event로 내보내지 않는다.
-  Example은 connection/status, authority, Axis, I/O, parameter와 Virtual I/O simulation의 6개 독립
-  flow로 제공한다. Axis flow에는 모든 축의 actual position/velocity graph를 포함하고 상태 변경
+  Example은 connection/status와 authority를 공통 기반 Flow로, Axis, I/O, parameter와 Virtual I/O
+  simulation을 기능 Scenario Flow로 제공한다. connection/status Flow만 공통 Connection Config를
+  소유하고 나머지 Flow가 이를 참조하여 함께 import해도 TCP 연결과 authority가 중복되지 않게 한다.
+  Axis flow에는 모든 축의 actual position/velocity graph를 포함하고 상태 변경
   명령은 수동 입력으로만 실행한다. Dashboard는 `@flowfuse/node-red-dashboard`의 `ui-chart`를 사용하고
   legacy dashboard package는 지원하지 않는다. Axis graph는 모든 feedback을 사용해 series당 최근
   500개 sample을 유지하고 단절 시 초기화하며 첫 feedback의 축 수와 status name/fallback으로 series를

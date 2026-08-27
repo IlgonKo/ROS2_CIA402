@@ -12,6 +12,29 @@ Motion Server documentation:
 - [Remaining tasks](docs/remaining_tasks.md)
 - [Work log](docs/worklog.md)
 
+## Reference Clients
+
+RF-002 reference clients are independent from the Axis/IO Control Panel clients:
+
+- Python: `reference_clients/python`
+- Node-RED: `reference_clients/node_red/node-red-contrib-motion-server`
+
+Install the Python package from the repository root:
+
+```powershell
+python -m pip install -e reference_clients/python
+```
+
+Install the Node-RED package from the Node-RED user directory and restart Node-RED:
+
+```powershell
+npm install C:\path\to\motion-server\reference_clients\node_red\node-red-contrib-motion-server
+```
+
+The Node-RED package provides a shared Connection Config Node plus Request, Feedback and Connection Status
+nodes. Import only the required scenario from its `examples/flows` directory. Motion and output-changing
+examples use manual Inject nodes and never run automatically on deploy.
+
 ## Mock path
 
 The mock path uses the same Motion Server TCP API as the real drive path, but

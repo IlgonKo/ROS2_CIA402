@@ -117,10 +117,14 @@ Node-RED 같은 low-code 환경과 최소 Python 코드에서 Control Panel 없�
 - trajectory 생성, application 상태 관리, 자동 recovery 정책과 프로젝트별 업무 로직은 포함하지 않는다.
 - 특정 PLC/SCADA 제품별 connector는 별도 기능으로 다룬다.
 
-## Scenario Flow 구성
+## 공통 및 Scenario Flow 구성
 
-- `01_connection_and_status.json`: connection lifecycle, server/axes/I/O status와 주기 feedback을 표시한다.
-- `02_command_authority.json`: authority request/status/release와 재연결 후 명시적 재요청을 보여준다.
+- 공통 기반 Flow는 `01_connection_and_status.json`과 `02_command_authority.json`으로 구성한다.
+- `01_connection_and_status.json`은 유일한 공통 Connection Config와 connection lifecycle,
+  server/axes/I/O status 및 주기 feedback을 제공한다.
+- `02_command_authority.json`은 공통 Connection Config를 재사용하여 authority
+  request/status/release와 재연결 후 명시적 재요청을 제공한다.
+- 기능 Scenario Flow는 다음 `03`~`06`으로 구성한다.
 - `03_axis_control.json`: axis enable/disable, absolute/relative move, stop, status와 Fail 처리를 제공한다.
   Axis Control Panel과 유사하게 feedback으로 모든 축의 actual position과 actual velocity를 시간축
   graph로 표시하고 axis별 series를 구분한다. 모든 feedback을 사용하고 각 series는 최근 500개
@@ -132,7 +136,9 @@ Node-RED 같은 low-code 환경과 최소 Python 코드에서 Control Panel 없�
   않는 요청의 Fail 처리를 제공한다.
 - `06_virtual_io_simulation.json`: Simulation API availability, DI/AI/IO-Link input write/read/reset과
   기존 I/O feedback 반영을 보여준다.
-- 각 파일은 독립적으로 import할 수 있게 유지한다. 하나의 전체 flow 파일을 중복 관리하지 않는다.
+- 각 파일은 별도로 관리하고 필요한 기능만 선택하여 import할 수 있게 유지한다. 다만 `01`을 먼저
+  import하며 `02`~`06`은 `01`이 소유한 하나의 Connection Config를 참조한다. 이를 통해 여러 Flow를
+  함께 사용할 때 중복 TCP 연결과 command authority 충돌을 방지한다.
 - 상태 변경, motion과 output command는 수동 Inject/Button으로만 실행한다. flow import 또는 deploy로
   자동 실행하지 않으며 연결과 feedback 구독만 자동으로 시작한다.
 
@@ -156,7 +162,8 @@ Node-RED 같은 low-code 환경과 최소 Python 코드에서 Control Panel 없�
   유지되는지 검증한다.
 - 기본 queue 크기 100개와 생성 인자로 지정한 크기가 각각 적용되는지 검증한다.
 - Node-RED scenario flow가 공통 연결/request/feedback node를 재사용하는지 검증한다.
-- 6개 scenario flow가 독립 import되고 deploy만으로 상태 변경 명령을 실행하지 않는지 검증한다.
+- `01`만 Connection Config를 소유하고 `02`~`06`이 이를 공통으로 참조하며, 모든 Flow가 deploy만으로
+  상태 변경 명령을 실행하지 않는지 검증한다.
 - Axis flow가 feedback의 전체 축 actual position/velocity를 axis별 graph series로 표시하는지 검증한다.
 - graph의 500 sample 제한, disconnect 초기화, reconnect 재시작과 axis name fallback을 검증한다.
 - clean Node-RED 환경에서 FlowFuse Dashboard dependency 설치 후 Axis chart가 추가 수작업 없이
@@ -207,9 +214,10 @@ Node-RED 같은 low-code 환경과 최소 Python 코드에서 Control Panel 없�
 - 두 Request 출력, caller property/topic 보존, client error payload와 initial/change-only connection status를
   검증한다.
 
-### S05 Scenario Flow 및 Dashboard
+### S05 공통/Scenario Flow 및 Dashboard
 
-- 확정된 6개 독립 example flow를 작성한다.
+- 공통 기반 `01`·`02`와 기능 Scenario `03`~`06`을 별도 example flow로 작성하되 하나의
+  Connection Config를 공유한다.
 - Axis flow에 FlowFuse Dashboard 기반 전체 축 position/velocity 500-sample graph와 disconnect reset을
   구현한다.
 
@@ -227,4 +235,16 @@ Node-RED 같은 low-code 환경과 최소 Python 코드에서 Control Panel 없�
 
 ## 완료 증거
 
-완료 시 flow/client artifact, 실행 절차와 smoke-test 결과를 기록한다.
+- 독립 Python package에 thread-safe request correlation, feedback queue, timeout, 연결 단절 및 1초
+  재연결을 구현하고 자동 테스트 8개를 추가했다.
+- 독립 Node-RED package에 Connection Config, Request, Feedback, Connection Status 4종을 구현하고
+  lifecycle/correlation/routing 자동 테스트 6개를 추가했다.
+- `01` connection/status와 `02` authority는 공통 기반 Flow로, `03`~`06`은 기능 Scenario Flow로
+  구성했다. `01`만 Connection Config를 소유하고 나머지 Flow는 이를 공유한다.
+- Axis Flow에 첫 feedback 기준 축 수 고정, 축별 actual position/velocity series, 500 sample 제한과
+  연결 단절 시 graph 초기화를 구현했다.
+- mock Motion Server에서 Python client의 `system/server/status` Success와 `system/feedback` 수신을
+  확인했다.
+- 전체 Python unittest 327개와 Node-RED test 6개가 통과했고 production dependency audit 결과는
+  취약점 0개였다. Python wheel과 Node-RED tarball을 각각 깨끗한 대상 폴더에 설치하여 import/install을
+  확인했으며 source compile, Node syntax와 whitespace 검사도 통과했다.

@@ -1,0 +1,94 @@
+<script type="text/javascript">
+RED.nodes.registerType("motion-server-connection", {
+    category: "config",
+    defaults: {
+        name: { value: "" },
+        host: { value: "127.0.0.1", required: true },
+        port: { value: 15000, required: true, validate: RED.validators.number() },
+        requestTimeout: { value: 5, required: true, validate: function(value) {
+            return Number.isFinite(Number(value)) && Number(value) > 0;
+        }}
+    },
+    label: function() {
+        return this.name || `${this.host}:${this.port}`;
+    }
+});
+
+RED.nodes.registerType("motion-server-request", {
+    category: "network",
+    color: "#86c7e8",
+    defaults: {
+        name: { value: "" },
+        connection: { value: "", type: "motion-server-connection", required: true },
+        timeout: { value: "", validate: function(value) {
+            return value === "" || (Number.isFinite(Number(value)) && Number(value) > 0);
+        }}
+    },
+    inputs: 1,
+    outputs: 2,
+    outputLabels: ["server response", "client transport failure"],
+    icon: "bridge.svg",
+    label: function() { return this.name || "Motion Server Request"; }
+});
+
+RED.nodes.registerType("motion-server-feedback", {
+    category: "network",
+    color: "#86c7e8",
+    defaults: {
+        name: { value: "" },
+        connection: { value: "", type: "motion-server-connection", required: true }
+    },
+    inputs: 0,
+    outputs: 1,
+    icon: "bridge.svg",
+    label: function() { return this.name || "Motion Server Feedback"; }
+});
+
+RED.nodes.registerType("motion-server-connection-status", {
+    category: "network",
+    color: "#86c7e8",
+    defaults: {
+        name: { value: "" },
+        connection: { value: "", type: "motion-server-connection", required: true }
+    },
+    inputs: 0,
+    outputs: 1,
+    icon: "bridge.svg",
+    label: function() { return this.name || "Motion Server Connection Status"; }
+});
+</script>
+
+<script type="text/html" data-template-name="motion-server-connection">
+    <div class="form-row"><label for="node-config-input-name">Name</label><input type="text" id="node-config-input-name"></div>
+    <div class="form-row"><label for="node-config-input-host">Host</label><input type="text" id="node-config-input-host"></div>
+    <div class="form-row"><label for="node-config-input-port">Port</label><input type="number" id="node-config-input-port"></div>
+    <div class="form-row"><label for="node-config-input-requestTimeout">Default Request Timeout (s)</label><input type="number" step="0.1" id="node-config-input-requestTimeout"></div>
+</script>
+
+<script type="text/html" data-template-name="motion-server-request">
+    <div class="form-row"><label for="node-input-name">Name</label><input type="text" id="node-input-name"></div>
+    <div class="form-row"><label for="node-input-connection">Connection</label><input type="text" id="node-input-connection"></div>
+    <div class="form-row"><label for="node-input-timeout">Request Timeout (s)</label><input type="number" step="0.1" id="node-input-timeout" placeholder="Use connection default"></div>
+</script>
+
+<script type="text/html" data-template-name="motion-server-feedback">
+    <div class="form-row"><label for="node-input-name">Name</label><input type="text" id="node-input-name"></div>
+    <div class="form-row"><label for="node-input-connection">Connection</label><input type="text" id="node-input-connection"></div>
+</script>
+
+<script type="text/html" data-template-name="motion-server-connection-status">
+    <div class="form-row"><label for="node-input-name">Name</label><input type="text" id="node-input-name"></div>
+    <div class="form-row"><label for="node-input-connection">Connection</label><input type="text" id="node-input-connection"></div>
+</script>
+
+<script type="text/html" data-help-name="motion-server-request">
+    <p>Sends <code>msg.payload</code> as a Motion Server request. The first output carries raw server Success/Fail responses. The second carries client connection or timeout failures.</p>
+</script>
+
+<script type="text/html" data-help-name="motion-server-feedback">
+    <p>Emits unsolicited <code>system/feedback</code> messages from the selected shared connection.</p>
+</script>
+
+<script type="text/html" data-help-name="motion-server-connection-status">
+    <p>Emits the initial connection snapshot and subsequent connected/disconnected transitions.</p>
+</script>

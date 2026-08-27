@@ -855,8 +855,11 @@ Device Profile + ESI
   제공하고 Feedback/Connection Status Node는 Name과 Config 선택만 가진다.
   기존 Control Panel용 `motion_server_client`, Axis/IO client와 장비 자료용 `Reference` 폴더는
   변경하지 않는다. 기존 client 이관은 새 package 안정화 후 별도 TD에서 검토한다.
-  Node-RED example은 connection/status, authority, Axis, I/O, parameter access, Virtual I/O simulation의
-  6개 독립 flow로 제공한다. Axis flow는 전체 축의 actual position과 actual velocity를 axis별 graph
+  Node-RED example의 connection/status와 authority는 공통 기반 Flow로 제공하고 Axis, I/O,
+  parameter access, Virtual I/O simulation은 기능 Scenario Flow로 제공한다. connection/status Flow만
+  하나의 Connection Config를 소유하고 나머지 모든 Flow가 이를 참조하여 중복 socket과 authority
+  충돌을 방지한다. 각 Flow는 별도 파일로 관리하되 connection/status Flow를 먼저 import한다.
+  Axis flow는 전체 축의 actual position과 actual velocity를 axis별 graph
   series로 표시한다. graph는 `@flowfuse/node-red-dashboard`의 `ui-chart`를 사용하고 legacy
   `node-red-dashboard`는 지원하지 않는다. 모든 feedback을 반영하되 series당 최근 500개 sample만
   유지하고 연결 단절 시 graph를 초기화한다. 첫 feedback으로 축 수를 정하고 status의 axis name 또는

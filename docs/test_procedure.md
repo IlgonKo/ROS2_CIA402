@@ -377,6 +377,48 @@ namespace, feedback 형식, 단위 정책을 변경한 경우에는 이후 ROS B
 현재 reserved 상태인 API는 배포 blocking 항목으로 보지 않는다. 단, 문서에 reserved 또는
 not implemented 상태가 명확히 표시되어야 한다.
 
+## RF-002 Reference Client Test
+
+Python package 자동 시험:
+
+```powershell
+python -m unittest tests.test_reference_python_client
+```
+
+Node-RED package 자동 시험과 production dependency audit:
+
+```powershell
+cd reference_clients/node_red/node-red-contrib-motion-server
+npm install
+npm test
+npm audit --omit=dev
+```
+
+독립 설치 확인:
+
+```powershell
+python -m pip wheel --no-deps --wheel-dir .runtime/rf002-wheels reference_clients/python
+cd reference_clients/node_red/node-red-contrib-motion-server
+npm pack --dry-run
+```
+
+Mock Motion Server smoke test:
+
+1. `.env`에서 `MOTION_SERVER_BACKEND=mock`으로 서버를 시작한다.
+2. Python client로 `system/server/status` Success와 `system/feedback` 수신을 확인한다.
+3. Node-RED에 package를 설치하고 `01_connection_and_status.json`을 먼저 import한다.
+4. 공통 authority가 필요하면 `02_command_authority.json`, 기능별 검증이 필요하면 `03`~`06` Flow를
+   추가 import한다. 모든 Motion Server node가 `01`의 같은 Connection Config를 참조하는지 확인한다.
+5. Connection Status가 connected로 바뀌고 read-only status Inject 응답이 첫 번째 Request 출력으로
+   전달되는지 확인한다.
+6. Authority는 명시적 Inject로 요청하고 재연결 후 자동 복원되지 않는지 확인한다.
+7. Axis flow의 position/velocity chart가 축별 series를 표시하고 disconnect에서 초기화되는지 확인한다.
+8. 상태 변경, motion 및 output command가 deploy만으로 실행되지 않는지 확인한다.
+
+실장치에서 Axis/I/O 명령 flow를 사용할 때는 target과 parameter를 먼저 검토하고 수동 Inject로만
+실행한다. Python client와 Node-RED Connection 모두 단절 시 pending request를 실패 처리하며 자동
+재전송하거나 command authority를 자동 재획득하지 않는다.
+
 Bus recovery 회귀에서는 다음을 추가 확인한다.
 
 - `normal` 상태의 `system/bus/reconnect`는 거부된다.

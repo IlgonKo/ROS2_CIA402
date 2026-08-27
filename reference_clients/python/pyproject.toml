@@ -1,0 +1,16 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "motion-server-reference-client"
+version = "0.1.0"
+description = "Minimal reusable TCP JSON-lines client for Motion Server"
+readme = "README.md"
+requires-python = ">=3.10"
+license = {text = "Proprietary"}
+dependencies = []
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["motion_server_reference_client*"]
