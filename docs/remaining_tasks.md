@@ -520,7 +520,8 @@ Tech Debt 상태 값은 `open`, `in_progress`, `complete`를 사용한다.
 - 완료 조건:
   - SDO는 요청의 index/sub-index로 OD Model을 직접 read/write한다.
   - PDO는 선택된 `PDO_Configuration`을 mapping 단일 원본으로 사용한다.
-  - MockSlave는 기존 DeviceProfile PdoCodec으로 PDO 객체와 raw payload를 변환한다.
+  - Mock/PySOEM Master의 공통 MasterPdoRuntime이 DeviceProfile PdoCodec으로 PDO 객체와 raw
+    payload를 변환한다.
   - raw RxPDO payload-to-OD와 OD-to-raw TxPDO payload 연결은 공통 Bridge가 담당한다.
   - Virtual Device는 PDO 객체나 OD write callback이 아니라 Model_Update 시점의 OD 상태에만
     반응한다.
@@ -530,16 +531,18 @@ Tech Debt 상태 값은 `open`, `in_progress`, `complete`를 사용한다.
 
 ### TD-030 Mock/실축 PDO 직렬화 책임 비대칭
 
-- 상태: `open`
+- 상태: `complete`
 - 우선순위: 높음
 - 요약: Mock/PySOEM 모두 Master 측에서 PDO를 직렬화하고 같은 prepare/send/receive cycle 계약을
   사용하도록 책임을 대칭화한다.
 - 후속 작업: `RF-001`
 - 완료 조건:
-  - MockMaster와 PySOEMMaster가 Master 측에서 RxPDO encode와 TxPDO decode를 수행한다.
+  - MockMaster와 PySOEMMaster가 공통 MasterPdoRuntime에서 RxPDO encode와 TxPDO decode를 수행한다.
   - `prepare`에서 output을 생성하고 `send`에서 snapshot을 확정하며 `receive`에서 input을 decode한다.
   - MockSlave는 raw PDO/SDO endpoint만 담당하고 RxPDO/TxPDO 객체와 PdoCodec을 소유하지 않는다.
   - VirtualOdBridge와 Virtual Device의 TD-029 책임 경계가 유지된다.
   - lifecycle, snapshot, 다중 slave, WKC와 timing field의 backend parity test가 통과한다.
+  - Mock CMMT도 PRE-OP에서 기존 DeviceProfile sequence로 PDO assignment/mapping을 SDO write하고
+    readback을 검증한 뒤 실제 mapping을 MasterPdoRuntime에 적용한다.
   - `DEC-034`, TD-029와 RF-001 문서가 최종 책임 구조와 일치한다.
 - 상세: [TD-030 기술 명세](tasks/td/TD-030-mock-pdo-transport-parity.md)

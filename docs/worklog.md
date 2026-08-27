@@ -6,6 +6,14 @@
 
 ## 2026-08-27
 
+### 설계 보완
+
+- `TD-030` 검토 중 Mock CMMT가 선택된 `PDO_Configuration`을 Master runtime, OD Model과 Bridge에
+  직접 주입하여 cyclic PDO 변환은 수행하지만, 실축의 PRE-OP PDO assignment/mapping SDO write와
+  readback 검증을 우회하는 것을 확인했다. `PDO_Configuration` 주입은 변환 규칙일 뿐 device
+  configuration을 대체하지 않는 것으로 확정하고, 기존 CMMT profile sequence를 Mock에서도
+  실행하는 S08을 TD-030에 추가했다. 이 항목 완료 전까지 TD-030 상태를 `in_progress`로 되돌렸다.
+
 ### 등록
 
 - `TD-030`을 등록하여 MockSlave가 소유한 PDO encode/decode를 MockMaster 측으로 이동하고
@@ -13,6 +21,20 @@
   endpoint로 축소하되 TD-029의 VirtualOdBridge 및 Model_Update 경계를 유지하며, RF-001 구현과
   EtherCAT frame simulation은 범위에서 제외한다. 현재 구조에 Virtual CPX를 먼저 결합한 뒤 다시
   분리하는 재작업을 막기 위해 TD-030을 RF-001의 명시적인 선행 작업으로 확정했다.
+
+### 완료
+
+- `TD-030`에서 Mock/PySOEM 공통 `MasterPdoRuntime`을 추가하고 RxPDO/TxPDO 객체, PdoCodec과
+  prepared/transmitted/received raw buffer를 Master 측으로 통일했다. 두 backend는 strict
+  `prepare -> send -> receive` phase와 immutable output snapshot을 사용한다. MockSlave는 raw
+  PDO/SDO endpoint로 축소하여 `exchange_processdata()`에서 TD-029의
+  `OD -> Model_Update -> OD` 경계만 수행한다. 다중 slave raw input 선검증, in-place TxPDO decode,
+  snapshot, lifecycle, WKC와 timing parity를 자동 테스트했다.
+- `TD-030-S08`에서 Mock PRE-OP connect도 기존 DeviceProfile의 process-image 준비 sequence를
+  실행하도록 연결했다. CMMT ESI array datatype을 subindex별 Virtual OD entry로 확장하고, virtual
+  identity 확인, PDO assignment/mapping SDO write, readback 검증과 Master mapping 확정을
+  PySOEM startup과 정렬했다. identity mismatch cleanup 및 mapping OD 상태 회귀 테스트를 포함해
+  전체 unittest 299개, source compile과 diff whitespace 검사를 통과하여 TD-030을 완료했다.
 
 ## 2026-08-26
 

@@ -733,8 +733,16 @@ Device Profile + ESI
     `PDO_Configuration`의 RxPDO/TxPDO mapping을 raw PDO payload와 OD Model 사이에 연결한다.
   - SDO encode/decode와 access 검증, raw RxPDO payload-to-OD 및 OD-to-raw TxPDO payload 변환을
     담당하고 PdoCodec이나 장치별 PDO 객체를 참조하지 않는다.
-  - MockSlave는 실제 slave 경로와 동일하게 `DeviceProfile.pdo_codec`을 사용해 PDO 객체와 raw
-    payload를 변환한다.
+  - MockMaster와 PySOEMMaster는 공통 `MasterPdoRuntime`에서 RxPDO/TxPDO 객체,
+    `DeviceProfile.pdo_codec`과 cycle별 raw snapshot을 소유한다.
+  - 두 Master는 `prepare`에서 RxPDO를 encode하고 `send`에서 output snapshot을 확정하며
+    `receive`에서 raw input을 TxPDO로 decode한다.
+  - `PDO_Configuration`의 생성 시점 주입은 Master/Bridge의 변환 규칙을 제공할 뿐 device
+    configuration을 대신하지 않는다. Mock와 PySOEM 모두 PRE-OP에서 같은 DeviceProfile
+    process-image 준비 sequence를 실행하고, PDO assignment/mapping SDO write와 readback 검증 후
+    Master-side mapping을 확정한다.
+  - MockSlave는 raw PDO/SDO endpoint로서 raw RxPDO를 Bridge에 전달하고 Model_Update 이후 raw
+    TxPDO를 반환하며 PDO 객체나 codec을 소유하지 않는다.
   - OD 값 codec은 실축 CMMT PDO와 Virtual SDO adapter가 공통으로 사용한다.
   - reset, parameter save, AP parameter와 IO-Link ISDU 같은 command role을 Bridge에서 해석하지 않는다.
   - Motion Server와 DeviceProfile이 Mock/PySOEM 공통 command sequence를 소유한다.
@@ -744,7 +752,7 @@ Device Profile + ESI
 - 이유: Bridge에 장치별 sequence와 role 분기가 누적되면 CPX 등 새로운 Virtual Device를 추가할
   때 Object Access 계층이 장치 behavior 계층으로 변질되고 실축과 가상 장치의 command sequence가
   이중화된다.
-- 영향: RF-001은 Servo 패키지에 의존하지 않는 동일한 MockSlave와 공통 OD Bridge를 재사용한다.
+- 영향: RF-001은 Servo 패키지에 의존하지 않는 raw MockSlave와 공통 OD Bridge를 재사용한다.
   기존 `CPXPdoConfiguration`과 `CPXPdoCodec`을 그대로 재사용하고, CPX의 OD mapping은 해당
   configuration이 제공한다. CPX 고유 반응은
   `VirtualCpxApDevice.model_update()`에 구현한다. 새로운 장치 명령은 Bridge 분기가 아니라

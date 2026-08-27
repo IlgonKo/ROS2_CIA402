@@ -37,6 +37,7 @@ APPROVED_BROAD_CATCHES = {
     "device/cmmt/profile.py::read_converting_unit_exponents",
     "device/cmmt/profile.py::read_diagnostics",
     "device/virtual_servo_drive/servo_model.py::_unit_scale",
+    "ethercat/mock_master.py::connect",
     "ethercat/mock_master.py::read_sdo",
     "ethercat/mock_master.py::write_sdo",
     "ethercat/pysoem_master.py::connect",

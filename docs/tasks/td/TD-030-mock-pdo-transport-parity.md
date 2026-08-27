@@ -17,6 +17,12 @@ Virtual CPX를 현재 구조에 추가하면 이 책임 누수가 CMMT와 CPX �
 따라서 TD-030은 RF-001의 선행 작업이다. TD-030을 완료하여 MockSlave를 raw endpoint로 축소한
 후, RF-001의 Virtual CPX를 같은 MockMaster 및 MockSlave 계약 위에 추가한다.
 
+추가 검토에서 Mock backend가 선택된 `PDO_Configuration`을 Master runtime, OD Model과 Bridge에
+생성 시점부터 직접 주입하여 cyclic PDO는 동작하지만, 실축에서 수행하는 PRE-OP PDO
+assignment/mapping SDO write와 readback 검증을 생략하는 것이 확인되었다. 이는 최종적으로 허용할
+Mock 전용 단축 경로가 아니며, TD-030에서 기존 CMMT startup sequence의 backend parity까지
+완성한다.
+
 ## 목표 책임 경계
 
 ### MockMaster 및 PySOEMMaster
@@ -28,6 +34,10 @@ Virtual CPX를 현재 구조에 추가하면 이 책임 누수가 CMMT와 CPX �
   encode한다.
 - `receive_processdata()`에서 수신 raw input을 TxPDO 객체로 decode한다.
 - 두 backend는 같은 lifecycle 오류, buffer 갱신 순서와 관찰 가능한 PDO 계약을 제공한다.
+- 두 backend 모두 PRE-OP에서 DeviceProfile의 동일한 process-image 준비 sequence를 실행한다.
+- CMMT는 `PDO_Configuration`에 따라 `0x1C12`/`0x1C13` assignment와
+  `0x1600`/`0x1A00` mapping을 SDO로 기록하고, device readback을 검증한 뒤 Master-side mapping을
+  확정한다.
 
 ### MockSlave
 
@@ -82,11 +92,14 @@ receive
 - S06: prepare 이후 RxPDO 변경, send 전후 snapshot, receive decode, 다중 slave와 실패 경로의
   backend parity test를 추가한다.
 - S07: `DEC-034`, TD-029, RF-001, Remaining Tasks와 Work Log의 책임 설명을 최종 구조에 맞춘다.
+- S08: Mock CMMT startup도 PRE-OP에서 기존 `DeviceProfile.prepare_process_image()` 계약을
+  실행하도록 하고, virtual identity 및 PDO assignment/mapping OD의 write/readback과 검증된
+  Master mapping 적용을 PySOEM과 동일하게 테스트한다.
 
 ## 제외 범위
 
 - RF-001 Virtual CPX 구현
-- CPX OD Model, module state 또는 PDO mapping 작성
+- CPX OD Model, module state 또는 CPX 고유 PDO mapping 정의
 - 실제 EtherCAT frame, datagram이나 network timing simulation
 - 공개 Motion Server API 변경
 - WKC/DC algorithm 및 recovery 정책 재설계
@@ -107,10 +120,35 @@ receive
 - MockSlave는 raw PDO/SDO endpoint만 담당하고 RxPDO/TxPDO 객체나 PdoCodec을 소유하지 않는다.
 - `VirtualOdBridge`와 Virtual Device의 TD-029 책임 경계가 유지된다.
 - lifecycle 오류, 다중 slave, WKC와 timing field의 Mock/PySOEM parity가 검증된다.
+- Mock CMMT가 PRE-OP에서 기존 CMMT profile을 통해 PDO assignment/mapping을 SDO write하고,
+  virtual device readback을 기대 `PDO_Configuration`과 비교한다.
+- 검증된 device mapping이 Mock와 PySOEM의 `MasterPdoRuntime`에 같은 방식으로 적용된다.
 - `DEC-034`, TD-029와 RF-001의 책임 설명이 최종 구조와 일치한다.
 - 전체 자동 테스트, source compile과 diff whitespace 검사가 통과한다.
 
 ## 완료 증거
 
-완료 시 변경된 Master/Slave 책임 구조, phase별 characterization/parity test와 전체 검증 결과를
-기록한다.
+- 공통 `MasterPdoRuntime`을 추가하여 MockMaster와 PySOEMMaster가 slave별 RxPDO/TxPDO 객체,
+  PdoCodec, prepared/transmitted output과 received input을 같은 구조로 소유한다.
+- 두 Master 모두 strict `prepare -> send -> receive` phase를 적용한다. prepare 이후 RxPDO 변경은
+  현재 transmitted snapshot에 반영되지 않고 다음 cycle로 이월된다.
+- MockSlave에서 RxPDO/TxPDO 객체와 PdoCodec을 제거하고 raw
+  `exchange_processdata(output_payload) -> input_payload` 및 SDO endpoint만 유지했다.
+- 다중 slave input은 모든 raw payload 길이를 먼저 검증한 후 기존 TxPDO 객체에 in-place
+  decode한다. malformed payload가 앞선 slave의 TxPDO를 부분 갱신하지 않으며 cycle마다 TxPDO
+  전체를 복제하지 않는다.
+- Mock/PySOEM의 lifecycle, snapshot, input decode, WKC, timing과 raw byte 조회 parity test를
+  추가했다.
+- Motion Server mock startup과 기존 SDO/Virtual Servo 동작을 새 Master/endpoint 생성 계약으로
+  이관했다.
+- MockMaster의 PRE-OP connect가 PySOEM과 동일하게 각 DeviceProfile의
+  `prepare_process_image()`를 실행한다. CMMT profile은 기존 sequence를 그대로 사용하여 virtual
+  device에 `0x1C12`/`0x1C13` assignment와 `0x1600`/`0x1A00` mapping을 SDO write하고 readback을
+  검증한 뒤 Master PDO mapping을 확정한다.
+- CMMT ESI의 array datatype을 subindex별 OD entry로 확장하여 virtual OD가 PDO assignment
+  subindex를 실제 SDO 대상으로 제공한다. MockSlave는 가상 장치 profile의 identity를 raw slave
+  identity로 제공하고, profile mismatch 시 Mock connect도 transport를 닫고 실패한다.
+- Mock PRE-OP mapping OD 상태, assignment/mapping readback, identity mismatch cleanup과 ESI array
+  expansion 회귀 테스트를 추가했다.
+- `DEC-034`, TD-029, RF-001, Remaining Tasks와 Work Log의 책임 설명을 최종 구조로 정합화했다.
+- 2026-08-27 전체 unittest 299개, source compile과 diff whitespace 검사가 통과했다.

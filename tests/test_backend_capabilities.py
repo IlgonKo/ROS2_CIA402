@@ -8,8 +8,37 @@ from ethercat.pysoem_master import PySOEMMaster
 
 
 class EmptySlave:
-    def process(self):
-        pass
+    pass
+
+
+class EmptyPdo:
+    pass
+
+
+class EmptyPdoCodec:
+    @staticmethod
+    def encode_rxpdo(rxpdo):
+        return b""
+
+    @staticmethod
+    def decode_txpdo(payload, txpdo):
+        return None
+
+
+class EmptyProfile:
+    pdo_codec = EmptyPdoCodec
+
+    @staticmethod
+    def create_rxpdo():
+        return EmptyPdo()
+
+    @staticmethod
+    def create_txpdo():
+        return EmptyPdo()
+
+    @staticmethod
+    def prepare_process_image(master, slave_index):
+        return None
 
 
 class RecordingSdo:
@@ -27,7 +56,10 @@ class RecordingMaster:
 
 class BackendCapabilityTest(unittest.TestCase):
     def test_mock_master_enforces_staged_lifecycle_order(self):
-        master = MockMaster([EmptySlave()])
+        master = MockMaster(
+            [EmptySlave()],
+            device_profiles=[EmptyProfile()],
+        )
         validate_staged_backend(master)
 
         with self.assertRaisesRegex(RuntimeError, "PRE-OP"):

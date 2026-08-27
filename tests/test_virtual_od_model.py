@@ -92,6 +92,15 @@ class VirtualOdModelTest(unittest.TestCase):
         self.assertTrue(od.definition(0x6041).txpdo)
         self.assertEqual(od.definition(0x216E, 1).access, "ro")
 
+    def test_esi_array_objects_expose_pdo_assignment_subindices(self):
+        profile = CMMTASDeviceProfile(axis_index=0, slave_index=0)
+        od = VirtualObjectDictionary(profile)
+
+        self.assertEqual(od.definition(0x1C12, 1).data_type, "UINT")
+        self.assertEqual(od.definition(0x1C13, 1).data_type, "UINT")
+        self.assertEqual(od.definition(0x1C13, 3).data_type, "UINT")
+        self.assertEqual(od.definition(0x1C12, 1).access, "rw")
+
     def test_od_bridge_owns_only_raw_sdo_access(self):
         profile = CMMTASDeviceProfile(axis_index=0, slave_index=0)
         od = VirtualObjectDictionary(profile)
@@ -237,7 +246,7 @@ class VirtualOdModelTest(unittest.TestCase):
             device_config=config,
         )
         servo = VirtualCiA402Servo(device_profile=profile)
-        slave = MockSlave(servo, profile)
+        slave = MockSlave(servo, profile.pdo_configuration)
         servo.od.write(0x607F, 999)
 
         slave.write_sdo(0x2000, 1, b"\x01")
@@ -290,7 +299,10 @@ class VirtualOdModelTest(unittest.TestCase):
 
         runtime = create_axis_runtime(ethercat, motion, logging, (bus_device,))
 
-        self.assertEqual(runtime.slaves[0].virtual_device.od.read(0x607F), 200)
+        self.assertEqual(
+            runtime.ethercat_master.sdo.read_uint32(0, 0x607F, 0),
+            200,
+        )
 
     def test_mock_axis_restart_refreshes_cache_and_motion_controller(self):
         from configuration.models import (

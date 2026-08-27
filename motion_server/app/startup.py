@@ -126,11 +126,12 @@ def create_axis_runtime(
                 )
                 slaves.append(MockSlave(
                     virtual_device,
-                    device_profile,
+                    device_profile.pdo_configuration,
                 ))
 
             master = MockMaster(
                 slaves,
+                device_profiles=device_profiles,
                 cycle_time=ethercat.cycle.period,
             )
         else:

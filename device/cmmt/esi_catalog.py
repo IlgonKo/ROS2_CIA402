@@ -168,6 +168,7 @@ def find_device(root):
 
 
 def parse_data_types(root):
+    array_types = parse_array_data_types(root)
     data_types = {}
     for data_type in root.findall(".//DataType"):
         name = xml_text(data_type.find("Name"))
@@ -176,23 +177,64 @@ def parse_data_types(root):
         bit_size = parse_int(xml_text(data_type.find("BitSize")))
         data_types.setdefault(name, []).append((
             bit_size,
-            parse_data_type_subitems(data_type),
+            parse_data_type_subitems(data_type, array_types),
         ))
     return data_types
 
 
-def parse_data_type_subitems(data_type):
-    return tuple(
-        CMMTEsiSubItemInfo(
-            subindex=parse_int(xml_text(subitem.find("SubIdx"))),
-            name=english_display_name(subitem) or xml_text(subitem.find("Name")),
-            data_type=xml_text(subitem.find("Type")),
-            bit_size=parse_int(xml_text(subitem.find("BitSize"))),
-            bit_offset=parse_int(xml_text(subitem.find("BitOffs"))),
-            access=access_text(subitem),
-        )
-        for subitem in data_type.findall("SubItem")
-    )
+def parse_array_data_types(root):
+    result = {}
+    for data_type in root.findall(".//DataType"):
+        array_info = data_type.find("ArrayInfo")
+        if array_info is None:
+            continue
+        name = xml_text(data_type.find("Name"))
+        elements = parse_int(xml_text(array_info.find("Elements")))
+        if not name or elements <= 0:
+            continue
+        total_bits = parse_int(xml_text(data_type.find("BitSize")))
+        result.setdefault(name, (
+            xml_text(data_type.find("BaseType")),
+            parse_int(xml_text(array_info.find("LBound"))),
+            elements,
+            total_bits // elements,
+        ))
+    return result
+
+
+def parse_data_type_subitems(data_type, array_types):
+    result = []
+    for subitem in data_type.findall("SubItem"):
+        item_type = xml_text(subitem.find("Type"))
+        array_type = array_types.get(item_type)
+        if array_type is None:
+            result.append(CMMTEsiSubItemInfo(
+                subindex=parse_int(xml_text(subitem.find("SubIdx"))),
+                name=(
+                    english_display_name(subitem)
+                    or xml_text(subitem.find("Name"))
+                ),
+                data_type=item_type,
+                bit_size=parse_int(xml_text(subitem.find("BitSize"))),
+                bit_offset=parse_int(xml_text(subitem.find("BitOffs"))),
+                access=access_text(subitem),
+            ))
+            continue
+
+        base_type, lower_bound, elements, element_bits = array_type
+        base_offset = parse_int(xml_text(subitem.find("BitOffs")))
+        base_name = english_display_name(subitem) or xml_text(subitem.find("Name"))
+        for element_offset in range(elements):
+            subindex = lower_bound + element_offset
+            result.append(CMMTEsiSubItemInfo(
+                subindex=subindex,
+                name=f"{base_name} {subindex:03d}",
+                data_type=base_type,
+                bit_size=element_bits,
+                bit_offset=base_offset + element_offset * element_bits,
+                access=access_text(subitem),
+            ))
+    return tuple(result)
 
 
 def parse_objects(device, data_types):

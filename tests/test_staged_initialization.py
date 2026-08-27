@@ -144,7 +144,7 @@ class RuntimeFactoryCleanupTest(unittest.TestCase):
             with self.assertRaisesRegex(RuntimeError, "runtime failed"):
                 create_axis_runtime(
                     *inputs,
-                    device_profiles=(object(),),
+                    device_profiles=(SimpleNamespace(pdo_configuration=object()),),
                 )
 
         manager.close.assert_called_once_with()
@@ -167,7 +167,7 @@ class RuntimeFactoryCleanupTest(unittest.TestCase):
             with self.assertRaisesRegex(RuntimeError, "manager failed"):
                 create_axis_runtime(
                     *inputs,
-                    device_profiles=(object(),),
+                    device_profiles=(SimpleNamespace(pdo_configuration=object()),),
                 )
 
         master.close.assert_called_once_with()

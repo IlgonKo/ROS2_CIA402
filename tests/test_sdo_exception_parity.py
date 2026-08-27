@@ -29,8 +29,36 @@ class FailingSlave:
             raise self.exception
         self.written = bytes(payload)
 
-    def process(self):
-        pass
+
+
+class EmptyPdo:
+    pass
+
+
+class EmptyPdoCodec:
+    @staticmethod
+    def encode_rxpdo(rxpdo):
+        return b""
+
+    @staticmethod
+    def decode_txpdo(payload, txpdo):
+        return None
+
+
+class EmptyProfile:
+    pdo_codec = EmptyPdoCodec
+
+    @staticmethod
+    def create_rxpdo():
+        return EmptyPdo()
+
+    @staticmethod
+    def create_txpdo():
+        return EmptyPdo()
+
+    @staticmethod
+    def prepare_process_image(master, slave_index):
+        return None
 
 
 class FakePysoemSlave:
@@ -85,6 +113,10 @@ def pysoem_master(slave):
     return master
 
 
+def mock_master(slave):
+    return MockMaster([slave], device_profiles=[EmptyProfile()])
+
+
 def invoke_raw(master, operation):
     if operation == "read":
         return master.read_sdo(0, 0x1234, 2, 2)
@@ -95,7 +127,7 @@ class SdoExceptionParityTest(unittest.TestCase):
     def test_mock_and_pysoem_normal_read_write_match(self):
         mock_slave = FailingSlave()
         real_slave = FakePysoemSlave()
-        mock = MockMaster([mock_slave])
+        mock = mock_master(mock_slave)
         real = pysoem_master(real_slave)
 
         for master in (mock, real):
@@ -110,9 +142,9 @@ class SdoExceptionParityTest(unittest.TestCase):
     def test_object_not_found_parity_for_read_and_write(self):
         for operation in ("read", "write"):
             cases = (
-                MockMaster([
+                mock_master(
                     FailingSlave(SdoObjectNotFoundException(0x1234, 2)),
-                ]),
+                ),
                 pysoem_master(FakePysoemSlave(FakeSdoError(0x06020000))),
             )
             for master in cases:
@@ -127,7 +159,7 @@ class SdoExceptionParityTest(unittest.TestCase):
     def test_device_rejected_parity_for_read_and_write(self):
         for operation in ("read", "write"):
             cases = (
-                MockMaster([FailingSlave(DeviceRejectedException("sdo"))]),
+                mock_master(FailingSlave(DeviceRejectedException("sdo"))),
                 pysoem_master(FakePysoemSlave(FakeSdoError(0x06010002))),
             )
             for master in cases:
@@ -143,7 +175,7 @@ class SdoExceptionParityTest(unittest.TestCase):
     def test_timeout_parity_for_read_and_write(self):
         for operation in ("read", "write"):
             cases = (
-                MockMaster([FailingSlave(TimeoutError("timeout"))]),
+                mock_master(FailingSlave(TimeoutError("timeout"))),
                 pysoem_master(FakePysoemSlave(FakeSdoError(0x05040000))),
             )
             for master in cases:
@@ -155,7 +187,7 @@ class SdoExceptionParityTest(unittest.TestCase):
     def test_communication_failure_parity_for_read_and_write(self):
         for operation in ("read", "write"):
             cases = (
-                MockMaster([FailingSlave(OSError("disconnected"))]),
+                mock_master(FailingSlave(OSError("disconnected"))),
                 pysoem_master(FakePysoemSlave(FakeMailboxError("mailbox"))),
             )
             for master in cases:
@@ -170,7 +202,7 @@ class SdoExceptionParityTest(unittest.TestCase):
     def test_unexpected_exception_is_not_hidden(self):
         for operation in ("read", "write"):
             for master in (
-                MockMaster([FailingSlave(ValueError("programming defect"))]),
+                mock_master(FailingSlave(ValueError("programming defect"))),
                 pysoem_master(FakePysoemSlave(ValueError("programming defect"))),
             ):
                 with self.subTest(operation=operation, backend=type(master).__name__):
@@ -178,7 +210,7 @@ class SdoExceptionParityTest(unittest.TestCase):
                         invoke_raw(master, operation)
 
     def test_mock_master_does_not_interpret_device_key_error(self):
-        master = MockMaster([FailingSlave(KeyError("programming defect"))])
+        master = mock_master(FailingSlave(KeyError("programming defect")))
 
         with self.assertRaises(KeyError):
             master.read_sdo(0, 0x1234, 2, 2)

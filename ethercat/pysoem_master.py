@@ -4,6 +4,7 @@ import sys
 import time
 
 from ethercat.distributed_clock import DistributedClock
+from ethercat.master_pdo_runtime import MasterPdoRuntime
 from ethercat.sdo_access import SdoAccess
 from ethercat.working_counter import WorkingCounter
 from motion_server.failure import (
@@ -22,14 +23,6 @@ AL_STATUS_DESCRIPTIONS = {
 }
 SDO_OBJECT_NOT_FOUND_ABORT_CODES = frozenset({0x06020000, 0x06090011})
 SDO_TIMEOUT_ABORT_CODES = frozenset({0x05040000})
-
-
-class PySOEMPdoSlave:
-    def __init__(self, device_profile):
-        self.device_profile = device_profile
-        self.rxpdo = device_profile.create_rxpdo()
-        self.txpdo = device_profile.create_txpdo()
-        self.pdo_codec = device_profile.pdo_codec
 
 
 class PySOEMMaster:
@@ -68,13 +61,14 @@ class PySOEMMaster:
         self.last_tx_prepare_duration_ns = 0
         self.last_send_call_duration_ns = 0
         self._processdata_prepared = False
+        self._processdata_sent = False
         self._pysoem = None
         self._master = None
         self._emergency_callbacks = []
         self.emergency_messages = []
 
         self.slaves = [
-            PySOEMPdoSlave(device_profile)
+            MasterPdoRuntime(device_profile)
             for device_profile in self.device_profiles
         ]
 
@@ -307,12 +301,15 @@ class PySOEMMaster:
 
     def prepare_processdata(self):
         self._require_connected()
+        self._require_processdata_phase("idle", "prepare_processdata")
 
         prepare_start_ns = time.monotonic_ns()
         try:
-            self._write_outputs()
+            candidates = self._encode_output_candidates()
         except Exception as exception:
             self._raise_processdata_exception(exception, "processdata_prepare")
+        for slave, payload in zip(self.slaves, candidates):
+            slave.commit_prepared_output(payload)
         self.last_tx_prepare_duration_ns = (
             time.monotonic_ns() - prepare_start_ns
         )
@@ -321,10 +318,19 @@ class PySOEMMaster:
     def send_processdata(self):
         self._require_connected()
 
+        if self._processdata_sent:
+            raise RuntimeError(
+                "Call receive_processdata() before sending another PDO cycle."
+            )
         if not self._processdata_prepared:
             raise RuntimeError(
                 "Call prepare_processdata() before send_processdata()."
             )
+
+        snapshots = [
+            slave.transmitted_output_candidate()
+            for slave in self.slaves
+        ]
 
         self.last_tx_monotonic_ns = time.monotonic_ns()
         self.last_direct_tx_dc_time_ns = self.get_dc_time_ns()
@@ -332,14 +338,22 @@ class PySOEMMaster:
         self.dc_time_ns = self.last_tx_dc_time_ns
         send_start_ns = time.monotonic_ns()
         try:
+            self._assign_output_snapshots(snapshots)
             self._master.send_processdata()
         except Exception as exception:
             self._raise_processdata_exception(exception, "processdata_send")
         self.last_send_call_duration_ns = time.monotonic_ns() - send_start_ns
+        for slave, payload in zip(self.slaves, snapshots):
+            slave.commit_transmitted_output(payload)
         self._processdata_prepared = False
+        self._processdata_sent = True
 
     def receive_processdata(self, timeout_us=2000):
         self._require_connected()
+        if not self._processdata_sent:
+            raise RuntimeError(
+                "Call send_processdata() before receive_processdata()."
+            )
 
         try:
             self.wkc = self._master.receive_processdata(timeout_us)
@@ -349,7 +363,12 @@ class PySOEMMaster:
         self.dc_time_ns = self.get_dc_time_ns()
         self.last_rx_dc_time_ns = self.dc_time_ns
         self.last_rx_monotonic_ns = receive_monotonic_ns
-        self._read_inputs()
+        try:
+            payloads = self._validate_input_payloads()
+        except Exception as exception:
+            self._raise_processdata_exception(exception, "processdata_receive")
+        self._decode_inputs(payloads)
+        self._processdata_sent = False
         return self.wkc
 
     def _raise_processdata_exception(self, exception, operation):
@@ -406,17 +425,23 @@ class PySOEMMaster:
             for slave in slaves[: self.slave_count]
         )
 
-    def _write_outputs(self):
-        for index, slave in enumerate(self.slaves):
-            payload = slave.pdo_codec.encode_rxpdo(slave.rxpdo)
-            if payload is None:
-                continue
-            self._master.slaves[index].output = payload
+    def _encode_output_candidates(self):
+        return [slave.encode_output_candidate() for slave in self.slaves]
 
-    def _read_inputs(self):
-        for index, slave in enumerate(self.slaves):
-            payload = self._master.slaves[index].input
-            slave.pdo_codec.decode_txpdo(payload, slave.txpdo)
+    def _assign_output_snapshots(self, snapshots):
+        for index, payload in enumerate(snapshots):
+            if payload is not None:
+                self._master.slaves[index].output = payload
+
+    def _validate_input_payloads(self):
+        return [
+            slave.validate_input_payload(self._master.slaves[index].input)
+            for index, slave in enumerate(self.slaves)
+        ]
+
+    def _decode_inputs(self, payloads):
+        for slave, payload in zip(self.slaves, payloads):
+            slave.decode_input(payload)
 
     def _request_pre_operational(self, pysoem, timeout_us):
         self._master.state = pysoem.PREOP_STATE
@@ -596,11 +621,14 @@ class PySOEMMaster:
         )
 
     def _prime_outputs(self):
-        self._write_outputs()
+        snapshots = self._encode_output_candidates()
+        self._assign_output_snapshots(snapshots)
 
         for _ in range(10):
             self._master.send_processdata()
             self._master.receive_processdata(2000)
+        for slave, payload in zip(self.slaves, snapshots):
+            slave.commit_transmitted_output(payload)
 
     def _request_operational(self, pysoem, timeout_us):
         self._master.state = pysoem.OP_STATE
@@ -608,8 +636,11 @@ class PySOEMMaster:
 
         reached_state = pysoem.NONE_STATE
         for _ in range(100):
-            self._write_outputs()
+            snapshots = self._encode_output_candidates()
+            self._assign_output_snapshots(snapshots)
             self._master.send_processdata()
+            for slave, payload in zip(self.slaves, snapshots):
+                slave.commit_transmitted_output(payload)
             self.wkc = self._master.receive_processdata(2000)
             reached_state = self._master.state_check(
                 pysoem.OP_STATE,
@@ -634,6 +665,7 @@ class PySOEMMaster:
 
     def _reset_processdata_state(self):
         self._processdata_prepared = False
+        self._processdata_sent = False
         self.wkc = 0
         self.dc_time_ns = 0
         self.last_tx_dc_time_ns = 0
@@ -641,6 +673,22 @@ class PySOEMMaster:
         self.last_rx_dc_time_ns = 0
         self.last_rx_monotonic_ns = None
         self.last_tx_monotonic_ns = None
+        self.last_tx_prepare_duration_ns = 0
+        self.last_send_call_duration_ns = 0
+        for slave in self.slaves:
+            slave.reset_processdata()
+
+    def _require_processdata_phase(self, expected, operation):
+        phase = (
+            "sent" if self._processdata_sent
+            else "prepared" if self._processdata_prepared
+            else "idle"
+        )
+        if phase != expected:
+            raise RuntimeError(
+                f"Cannot {operation} while PDO cycle phase is {phase}. "
+                "Expected prepare -> send -> receive."
+            )
 
     def _load_pysoem(self):
         if self._pysoem is not None:

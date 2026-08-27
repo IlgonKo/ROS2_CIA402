@@ -37,14 +37,16 @@ TD-028에서 장치별 reset/save 동작을 Bridge 밖으로 분리한 뒤 책�
 - 장치 내부 상태 전이와 처리 결과를 OD Model에 기록한다.
 - reset/save/AP/ISDU 등 장치별 내부 반응만 담당한다.
 
-### MockSlave
+### Master 및 MockSlave
 
-- 실제 slave 경로와 동일한 `DeviceProfile.pdo_codec`을 사용한다.
-- RxPDO 객체를 raw payload로 encode한 뒤 Bridge를 통해 OD Model에 반영한다.
-- OD 반영과 별도의 단계로 Virtual Device에 Model_Update command를 전달한다.
-- Bridge가 만든 raw TxPDO payload를 기존 codec으로 TxPDO 객체에 decode한다.
-- 한 cycle을 `RxPDO -> OD -> Model_Update -> OD -> TxPDO` 순서로 조정한다.
-- 장치 종류와 OD role 의미를 해석하지 않는다.
+- TD-030 후 MockMaster와 PySOEMMaster의 공통 `MasterPdoRuntime`이 RxPDO/TxPDO 객체와
+  `DeviceProfile.pdo_codec`을 소유한다.
+- Master가 RxPDO 객체를 raw payload로 encode하고 raw TxPDO payload를 TxPDO 객체로 decode한다.
+- MockSlave는 raw RxPDO를 Bridge에 전달하고 OD 반영 뒤 Virtual Device에 Model_Update command를
+  전달한 후 Bridge의 raw TxPDO를 반환한다.
+- 전체 cycle은 `Master RxPDO -> codec -> raw RxPDO -> OD -> Model_Update -> OD -> raw TxPDO ->
+  codec -> Master TxPDO` 순서다.
+- MockSlave는 PDO 객체, codec, 장치 종류와 OD role 의미를 알지 않는다.
 
 ## 구현 단계
 
@@ -54,7 +56,7 @@ TD-028에서 장치별 reset/save 동작을 Bridge 밖으로 분리한 뒤 책�
 - S03: SDO/PDO write와 Virtual Device 반응 사이의 직접 callback을 제거한다.
 - S04: Virtual Servo의 RxPDO/TxPDO 직접 참조를 제거하고 Model_Update 시점의 OD 상태 반영으로
   전환한다.
-- S05: MockSlave cycle과 SDO 처리 순서를 새 계약으로 정리한다.
+- S05: Mock cycle과 SDO 처리 순서를 새 계약으로 정리한다.
 - S06: SDO 직접 주소 접근, PDO mapping 접근과 장치 반응 회귀 테스트를 추가한다.
 - S07: TD-028, RF-001과 Decision/Worklog 문서를 새 책임 경계로 정합화한다.
 
@@ -69,8 +71,11 @@ TD-028에서 장치별 reset/save 동작을 Bridge 밖으로 분리한 뒤 책�
 
 - SDO는 요청의 index/sub-index로 OD Model을 직접 read/write한다.
 - PDO는 선택된 `PDO_Configuration`만을 mapping 원본으로 사용해 OD Model과 양방향 연결된다.
-- MockSlave는 실제 장비 경로와 동일한 `DeviceProfile.pdo_codec`으로 PDO 객체와 raw payload를
-  변환한다.
+- `PDO_Configuration`을 Bridge에 전달하는 것은 raw PDO와 OD의 변환 규칙을 제공하는 것이며,
+  PRE-OP에서 device의 PDO assignment/mapping OD를 SDO write하고 readback하는 startup 절차를
+  대체하지 않는다. Mock startup parity는 TD-030에서 완성한다.
+- Mock/PySOEM Master는 실제 장비 경로와 동일한 `DeviceProfile.pdo_codec`으로 PDO 객체와 raw
+  payload를 변환한다.
 - Virtual Servo는 RxPDO/TxPDO 객체를 직접 참조하거나 OD write callback을 받지 않고
   Model_Update만 입력으로 사용한다.
 - MockSlave는 Servo 패키지나 장치별 role에 의존하지 않는다.
@@ -89,11 +94,9 @@ TD-028에서 장치별 reset/save 동작을 Bridge 밖으로 분리한 뒤 책�
 - Virtual Servo에서 RxPDO/TxPDO 인자와 OD write callback을 제거했다.
 - `VirtualCiA402Servo.model_update()`가 현재 OD의 reset/save/mode/target command를 반영한 뒤
   CiA 402 상태기계와 motion model을 갱신한다.
-- `MockSlave`는 `DeviceProfile.pdo_codec`을 보유하고 실제 장비와 동일한 `encode_rxpdo()` 및
-  `decode_txpdo()`로 PDO 객체와 raw payload를 변환한다.
-- `MockSlave.process()`는 `RxPDO object -> codec -> raw payload -> OD -> Model_Update -> OD ->
-  raw payload -> codec -> TxPDO object`를 수행한다. SDO write도 먼저 OD에 반영한 뒤 별도
-  `model_update()` 단계로 장치 반응을 계산한다.
+- TD-030에서 codec과 PDO 객체를 공통 `MasterPdoRuntime`으로 이동했다. `MockSlave`의
+  `exchange_processdata()`는 raw RxPDO를 OD에 반영하고 Model_Update 뒤 raw TxPDO를 반환한다.
+  SDO write도 먼저 OD에 반영한 뒤 별도 `model_update()` 단계로 장치 반응을 계산한다.
 - device reset은 master의 PDO 객체를 직접 초기화하지 않고 Virtual OD의 PDO runtime value를
   초기화한다.
 - OD 값 encode/decode를 `device.od_value_codec`으로 공통화하여 CMMT PDO와 Virtual SDO가 같은
