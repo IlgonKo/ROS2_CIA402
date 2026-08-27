@@ -26,6 +26,7 @@ from motion_server.handlers.status.io_ap_parameter_catalog import (
     reject_ap_parameter_catalog,
 )
 from motion_server.handlers.status.server_status import server_status_message
+from motion_server.handlers.simulation_io_input import read_inputs as read_simulation_inputs
 
 
 def handle_server_status(message_type, message, runtime, state, client):
@@ -120,6 +121,10 @@ def handle_io_input_read(message_type, message, runtime, state, client):
     return input_read(message, runtime, state, client)
 
 
+def handle_simulation_input_read(message_type, message, runtime, state, client):
+    return read_simulation_inputs(message, runtime, state, client)
+
+
 def handle_axis_parameter_catalog(message_type, message, runtime, state, client):
     return axis_param_catalog(message, runtime, client)
 
@@ -149,6 +154,7 @@ STATUS_HANDLERS = {
     "system/axis/param_read": handle_axis_parameter_read,
     "system/io/param_read": handle_io_parameter_read,
     "system/io/input_read": handle_io_input_read,
+    "system/simulation/io/input_read": handle_simulation_input_read,
     "system/axis/param_catalog": handle_axis_parameter_catalog,
     "system/io/ethercat/param_catalog": handle_ethercat_parameter_catalog,
     "system/io/ap/param_catalog": reject_ap_parameter_catalog,

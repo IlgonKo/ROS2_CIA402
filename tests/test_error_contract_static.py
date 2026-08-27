@@ -30,6 +30,8 @@ APPROVED_BROAD_CATCHES = {
     "control_panel/io_control_panel/control_panel.py::read_iol_parameter",
     "control_panel/io_control_panel/control_panel.py::read_parameter",
     "control_panel/io_control_panel/control_panel.py::refresh",
+    "control_panel/io_control_panel/control_panel.py::reset_simulation_input",
+    "control_panel/io_control_panel/control_panel.py::set_simulation_input",
     "control_panel/io_control_panel/control_panel.py::toggle_command_authority",
     "control_panel/io_control_panel/control_panel.py::write_ap_parameter",
     "control_panel/io_control_panel/control_panel.py::write_iol_parameter",

@@ -24,6 +24,13 @@
 
 ### 완료
 
+- `RF-014`에서 `system/simulation/io/input_read`, `input_write`, `input_reset` API와
+  `MOTION_SERVER_SIMULATION_API_ENABLED` 설정을 추가했다. API는 mock backend에서 명시적으로
+  활성화한 경우에만 동작하고 command authority와 독립적으로 DI boolean, AI raw integer와
+  IO-Link module raw input payload를 RF-001 Virtual CPX input state에 주입한다. 값은 다음 PDO
+  cycle부터 기존 feedback에 반영되며 module/station reset과 bus reconnect/server restart에서
+  초기화된다. IO Control Panel은 capability probe 성공 시에만 Simulation UI를 표시한다. 다중
+  station 격리, 정책/target 거부와 panel 상태 보존을 포함해 전체 unittest 319개를 통과했다.
 - `RF-001`에서 station ESI와 설정된 AP module ESI를 기반으로 `VirtualCpxOdModel`, metadata 기반
   `VirtualApModule`과 `VirtualCpxApDevice`를 구현했다. 설정 크기에 맞는 고정
   `0x6F00`/`0x7F00` PDO block만 활성화하고 Mock PRE-OP에서 실장치와 같은 module ident,

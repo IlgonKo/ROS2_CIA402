@@ -71,6 +71,10 @@ def initial_server_state(
         ),
         "bus_reconnect_timeout": server_config.bus_reconnect_timeout,
         "axis_restart_timeout": server_config.axis_restart_timeout,
+        "simulation_api_enabled": bool(
+            server_config.simulation_api_enabled
+        ),
+        "backend_is_mock": bool(backend_is_mock),
         "csp_interpolation_modes": [
             int(motion_config.csp_interpolation_mode)
             for _ in range(axis_count_value)
@@ -93,6 +97,9 @@ def initial_server_state(
             "software_position_limits": True,
             "csp_trajectory_feedback": server_config.mode.value == "advanced",
             "trajectory_commands": server_config.mode.value == "advanced",
+            "simulation_io_inputs": bool(
+                backend_is_mock and server_config.simulation_api_enabled
+            ),
         },
         "trajectory": inactive_trajectory_state(),
         "trajectory_sequence": 0,

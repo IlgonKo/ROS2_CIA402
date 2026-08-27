@@ -221,21 +221,31 @@ namespace, feedback 형식, 단위 정책을 변경한 경우에는 이후 ROS B
    - command authority 획득 후 `system/io/output_write`가 정상 수행되는지 확인한다.
    - 실제 DO lamp 또는 연결 부하가 command와 일치하는지 확인한다.
 
-5. EtherCAT parameter 확인
+5. Virtual input simulation 확인 (`mock` 전용)
+
+   - `MOTION_SERVER_SIMULATION_API_ENABLED=1`에서만 IO Control Panel의 Virtual Input Simulation
+     영역이 표시되는지 확인한다.
+   - DI checkbox, AI raw integer와 IO-Link hexadecimal payload를 설정한다.
+   - 설정 직후 다음 PDO cycle의 기존 I/O feedback에 동일 값이 표시되는지 확인한다.
+   - Reset Module은 선택 module만, Reset Station은 해당 station 전체 입력을 초기화하는지 확인한다.
+   - command authority를 다른 client가 보유해도 simulation input 변경이 가능한지 확인한다.
+   - API 비활성 또는 `pysoem` backend에서는 Simulation 영역이 숨겨지고 API가 거부되는지 확인한다.
+
+6. EtherCAT parameter 확인
 
    - IO Control Panel의 EC Parameter 탭에서 catalog load가 동작하는지 확인한다.
    - ESI에 존재하는 OD read가 성공하는지 확인한다.
    - ESI에 없는 OD는 서버에서 거부되는지 확인한다.
    - `VISIBLE_STRING`/`STRING(n)` 계열이 표시 가능한 문자열과 hex data로 함께 표시되는지 확인한다.
 
-6. AP parameter 확인
+7. AP parameter 확인
 
    - 지원되는 AP parameter read/write가 `0x27F0` mailbox sequence로 수행되는지 확인한다.
    - `0x27F0:01` trigger가 마지막에 write되는지 확인한다.
    - `0x27F0:05` status가 `0xFFFF` busy에서 `0x0000` 또는 error로 전이되는지 확인한다.
    - write 가능한 parameter만 변경하고, read-only parameter write는 실패해야 한다.
 
-7. IO-Link ISDU 확인
+8. IO-Link ISDU 확인
 
    - IODD binding이 있는 포트에서 catalog load가 동작하는지 확인한다.
    - port 입력은 필수다.

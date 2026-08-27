@@ -782,6 +782,30 @@ Device Profile + ESI
   injection 경계까지만 구현한다. RF-003, RF-012, RF-013과 RF-014는 이 모델을 확장하되 Bridge와
   MockSlave의 책임은 변경하지 않는다.
 
+## DEC-036 Virtual I/O Simulation API 경계
+
+- 상태: `accepted`
+- 결정일: 2026-08-27
+- 결정:
+  - `system/simulation/io/input_write`, `input_read`, `input_reset`의 별도 namespace를 사용한다.
+  - API는 `MOTION_SERVER_SIMULATION_API_ENABLED=1`이고 backend가 `mock`일 때만 사용할 수 있다.
+  - DI는 JSON boolean, AI는 PDO raw integer, IO-Link는 module 전체 input process-data raw payload로
+    설정한다. IO-Link port별 분할은 초기 범위에서 제외한다.
+  - Simulation input은 외부 환경 자극이므로 Motion Server command authority를 요구하지 않는다.
+    여러 client가 쓰면 서버가 처리한 마지막 값이 적용된다.
+  - 입력은 cycle 사이에 유지하고 명시적 reset까지 보존한다. virtual device가 bus reconnect 또는
+    server restart로 재생성되면 기본값으로 초기화한다.
+  - reset은 I/O id를 필수로 받고 optional slot으로 station 전체 또는 module 하나를 초기화한다.
+  - IO Control Panel은 API 사용 가능 여부를 조회하여 mock simulation에서만 DI checkbox, AI 정수와
+    IO-Link hexadecimal payload 조작 화면을 노출한다.
+- 이유: 일반 운전 API와 virtual environment 입력 조작을 분리하고 실제 EtherCAT 장치에 simulation
+  값이 전달될 가능성을 차단하면서 제어 client와 simulator가 동시에 동작할 수 있게 하기 위해서다.
+- 검토한 대안: 일반 I/O output authority 공유는 simulator의 독립 실행을 막고, 별도 simulation
+  authority는 초기 범위에 비해 복잡하다. IO-Link port별 API는 IODD layout 의존성이 추가되므로
+  module raw payload 이후로 미룬다.
+- 영향: RF-014 handler는 MockMaster의 virtual-device 접근과 RF-001 input injection만 사용한다.
+  MockSlave, VirtualOdBridge, 일반 I/O feedback 및 실장치 DeviceProfile 계약은 변경하지 않는다.
+
 ## 새 결정 작성 양식
 
 ```text

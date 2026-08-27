@@ -88,6 +88,16 @@ class MockMaster:
         payload = self.slaves[int(slave_index)].transmitted_output
         return b"" if payload is None else bytes(payload)
 
+    def virtual_device(self, slave_index):
+        """Return the virtual device behind one mock transport endpoint."""
+        return self._slave_endpoints[int(slave_index)].virtual_device
+
+    def reset_virtual_io_inputs(self):
+        for endpoint in self._slave_endpoints:
+            reset_inputs = getattr(endpoint.virtual_device, "reset_inputs", None)
+            if callable(reset_inputs):
+                reset_inputs()
+
     def write_sdo(self, slave_index, index, subindex, payload):
         try:
             self._slave_endpoints[int(slave_index)].write_sdo(

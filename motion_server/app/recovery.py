@@ -66,6 +66,14 @@ def reconnect_runtime(runtime, state):
     try:
         runtime.close()
         _connect_until(runtime, started_at + timeout)
+        if state.get("simulation_api_enabled", False):
+            reset_virtual_inputs = getattr(
+                runtime.ethercat_master,
+                "reset_virtual_io_inputs",
+                None,
+            )
+            if callable(reset_virtual_inputs):
+                reset_virtual_inputs()
         _restore_process_image(
             runtime,
             state,

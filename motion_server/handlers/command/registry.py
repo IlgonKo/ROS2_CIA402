@@ -47,6 +47,10 @@ from motion_server.handlers.command.trajectory import (
     move_api as move_trajectory,
     stop as stop_trajectory,
 )
+from motion_server.handlers.simulation_io_input import (
+    reset_inputs as reset_simulation_inputs,
+    write_input as write_simulation_input,
+)
 
 
 def reject_not_implemented(message, runtime, state, client):
@@ -118,6 +122,8 @@ COMMAND_HANDLERS = {
     "system/bus/reconnect": request_bus_reconnect,
     "system/bus/rescan": reject_not_implemented,
     "system/io/output_write": output_write,
+    "system/simulation/io/input_write": write_simulation_input,
+    "system/simulation/io/input_reset": reset_simulation_inputs,
     "system/io/reset": reject_not_implemented,
     "system/io/restart": reject_not_implemented,
     "system/io/param_write": lambda message, runtime, state, client: (

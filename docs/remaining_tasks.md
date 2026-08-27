@@ -189,7 +189,7 @@ Tech Debt 상태 값은 `open`, `in_progress`, `complete`를 사용한다.
 
 ### RF-014 Virtual Device Simulation API
 
-- 상태: `planned`
+- 상태: `complete`
 - 우선순위: 보통
 - 요약: Control Panel과 외부 simulator에서 Virtual CPX의 DI/AI/IO-Link input을 조작하는 별도 API를 제공한다.
 - 완료 조건:

@@ -102,6 +102,25 @@ class VirtualApModule:
             )
         self.io_link_input[:] = payload
 
+    def reset_inputs(self):
+        self.digital_inputs[:] = [False] * len(self.digital_inputs)
+        self.analog_inputs[:] = [0] * len(self.analog_inputs)
+        self.io_link_input[:] = bytes(len(self.io_link_input))
+
+    def input_snapshot(self):
+        values = {}
+        if self.digital_inputs:
+            values["digital"] = list(self.digital_inputs)
+        if self.analog_inputs:
+            values["analog"] = list(self.analog_inputs)
+        if self.module.module_type == "iol":
+            values["io_link"] = bytes(self.io_link_input).hex()
+        return {
+            "slot": self.slot,
+            "type": self.module.module_type,
+            "inputs": values,
+        }
+
 
 def input_channel(values, channel, kind):
     if isinstance(channel, bool) or not isinstance(channel, int):

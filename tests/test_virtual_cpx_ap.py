@@ -37,6 +37,17 @@ from motion_server.app.startup import (
 )
 from motion_server.handlers.command.io_output_write import write_output_target
 from motion_server.handlers.status.io_input_read import input_read_data
+from motion_server.handlers.simulation_io_input import (
+    read_inputs as read_simulation_inputs,
+    reset_inputs as reset_simulation_inputs,
+    write_input as write_simulation_input,
+)
+from motion_server.api.specification import command_spec
+from motion_server.failure import (
+    InvalidArgumentException,
+    ResourceNotFoundException,
+    UnsupportedOperationException,
+)
 
 
 def cpx_profile(*modules):
@@ -272,7 +283,7 @@ class VirtualCpxRuntimeIntegrationTest(unittest.TestCase):
             PreLoggingConfig(False, 0),
         )
 
-    def runtime(self):
+    def runtime(self, *, io_count=1):
         axis = BusDeviceConfig(
             0,
             DeviceRole.AXIS,
@@ -296,7 +307,21 @@ class VirtualCpxRuntimeIntegrationTest(unittest.TestCase):
                 (
                     IoModuleConfig(1, "do:8"),
                     IoModuleConfig(2, "di:8"),
+                    IoModuleConfig(3, "aio:4:4"),
+                    IoModuleConfig(4, "iol:4:in8:out8"),
                 ),
+                (),
+            ),
+        )
+        io1 = BusDeviceConfig(
+            2,
+            DeviceRole.IO,
+            "cpx_ap_i_ec",
+            "io1",
+            CpxApIEcDeviceConfig(
+                "cpx_ap_i_ec",
+                "io1",
+                (IoModuleConfig(1, "di:8"),),
                 (),
             ),
         )
@@ -316,7 +341,7 @@ class VirtualCpxRuntimeIntegrationTest(unittest.TestCase):
             CspInterpolationMode.CSP,
             False,
         )
-        devices = (axis, io)
+        devices = (axis, io) if io_count == 1 else (axis, io, io1)
         profiles = build_device_models(devices)
         runtime = create_axis_runtime(
             ethercat,
@@ -360,14 +385,195 @@ class VirtualCpxRuntimeIntegrationTest(unittest.TestCase):
         response = input_read_data({"io": "io0", "raw": True}, runtime)
 
         self.assertTrue(response["modules"][1]["inputs"]["digital"][3])
-        self.assertEqual(response["output_bytes"], 16)
-        self.assertEqual(response["input_bytes"], 16)
+        self.assertEqual(response["output_bytes"], 32)
+        self.assertEqual(response["input_bytes"], 32)
         self.assertEqual(
             runtime.sdo.io.read_uint8("io0", 0x1001, 0),
             0,
         )
         snapshot = io_device_snapshot(runtime.device_manager.io.devices[0])
         self.assertTrue(snapshot["digital_outputs"][0])
+
+    @staticmethod
+    def simulation_state(*, enabled=True, mock=True):
+        return {
+            "simulation_api_enabled": enabled,
+            "backend_is_mock": mock,
+        }
+
+    def test_simulation_input_write_appears_on_next_processdata_cycle(self):
+        runtime = self.runtime()
+        state = self.simulation_state()
+
+        response = write_simulation_input(
+            {
+                "io": "io0",
+                "slot": 2,
+                "kind": "digital",
+                "channel": 3,
+                "value": True,
+            },
+            runtime,
+            state,
+            {},
+        )
+
+        self.assertTrue(response["available"])
+        before = input_read_data({"io": "io0"}, runtime)
+        self.assertFalse(before["modules"][1]["inputs"]["digital"][3])
+
+        runtime.ethercat_master.prepare_processdata()
+        runtime.send_processdata()
+        runtime.receive_processdata()
+
+        after = input_read_data({"io": "io0"}, runtime)
+        self.assertTrue(after["modules"][1]["inputs"]["digital"][3])
+
+    def test_simulation_input_read_and_module_reset(self):
+        runtime = self.runtime()
+        state = self.simulation_state()
+        virtual_device = runtime.ethercat_master.virtual_device(1)
+        write_simulation_input(
+            {
+                "io": "io0",
+                "slot": 2,
+                "kind": "digital",
+                "channel": 1,
+                "value": True,
+            },
+            runtime,
+            state,
+            {},
+        )
+        snapshot = read_simulation_inputs({}, runtime, state, {})
+        self.assertTrue(
+            snapshot["devices"][0]["modules"][0]["inputs"]["digital"][1]
+        )
+
+        reset_simulation_inputs(
+            {"io": "io0", "slot": 2},
+            runtime,
+            state,
+            {},
+        )
+        self.assertFalse(virtual_device.module(2).digital_inputs[1])
+
+    def test_simulation_analog_and_io_link_payload(self):
+        runtime = self.runtime()
+        state = self.simulation_state()
+        write_simulation_input(
+            {
+                "io": "io0",
+                "slot": 3,
+                "kind": "analog",
+                "channel": 2,
+                "value": -1234,
+            },
+            runtime,
+            state,
+            {},
+        )
+        payload = bytes(range(12))
+        write_simulation_input(
+            {
+                "io": "io0",
+                "slot": 4,
+                "kind": "io_link",
+                "payload": payload.hex(),
+            },
+            runtime,
+            state,
+            {},
+        )
+        snapshot = read_simulation_inputs(
+            {"io": "io0"},
+            runtime,
+            state,
+            {},
+        )["devices"][0]
+
+        self.assertEqual(snapshot["modules"][1]["inputs"]["analog"][2], -1234)
+        self.assertEqual(snapshot["modules"][2]["inputs"]["io_link"], payload.hex())
+
+    def test_simulation_api_policy_and_target_validation(self):
+        runtime = self.runtime()
+        self.assertFalse(
+            command_spec("system/simulation/io/input_write").authority_required
+        )
+        self.assertFalse(
+            command_spec("system/simulation/io/input_reset").authority_required
+        )
+
+        with self.assertRaises(UnsupportedOperationException):
+            read_simulation_inputs(
+                {},
+                runtime,
+                self.simulation_state(enabled=False),
+                {},
+            )
+        with self.assertRaises(UnsupportedOperationException):
+            read_simulation_inputs(
+                {},
+                runtime,
+                self.simulation_state(mock=False),
+                {},
+            )
+        with self.assertRaises(ResourceNotFoundException):
+            read_simulation_inputs(
+                {"io": "missing"},
+                runtime,
+                self.simulation_state(),
+                {},
+            )
+        with self.assertRaises(ResourceNotFoundException):
+            write_simulation_input(
+                {
+                    "io": "io0",
+                    "slot": 99,
+                    "kind": "digital",
+                    "channel": 0,
+                    "value": True,
+                },
+                runtime,
+                self.simulation_state(),
+                {},
+            )
+        with self.assertRaises(InvalidArgumentException):
+            write_simulation_input(
+                {
+                    "io": "io0",
+                    "slot": 2,
+                    "kind": "digital",
+                    "channel": 0,
+                    "value": 1,
+                },
+                runtime,
+                self.simulation_state(),
+                {},
+            )
+
+    def test_simulation_state_is_isolated_between_io_stations(self):
+        runtime = self.runtime(io_count=2)
+        state = self.simulation_state()
+        write_simulation_input(
+            {
+                "io": "io0",
+                "slot": 2,
+                "kind": "digital",
+                "channel": 0,
+                "value": True,
+            },
+            runtime,
+            state,
+            {},
+        )
+        devices = {
+            device["id"]: device
+            for device in read_simulation_inputs({}, runtime, state, {})["devices"]
+        }
+
+        self.assertTrue(devices["io0"]["modules"][0]["inputs"]["digital"][0])
+        self.assertFalse(devices["io1"]["modules"][0]["inputs"]["digital"][0])
 
 
 if __name__ == "__main__":

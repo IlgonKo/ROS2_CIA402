@@ -457,6 +457,81 @@ system/io/iol/param_read
 system/io/iol/param_write
 ```
 
+### Virtual I/O Simulation
+
+Virtual CPX 입력 주입은 일반 I/O 명령과 분리된 개발·시험용 namespace를 사용한다.
+
+```text
+system/simulation/io/input_read
+system/simulation/io/input_write
+system/simulation/io/input_reset
+```
+
+`.env`에서 아래 두 조건이 모두 만족될 때만 사용할 수 있다.
+
+```env
+MOTION_SERVER_BACKEND=mock
+MOTION_SERVER_SIMULATION_API_ENABLED=1
+```
+
+이 명령은 command authority를 요구하지 않는다. 설정한 값은 다음 PDO cycle부터 기존
+`system/feedback`, `system/io/status`, `system/io/input_read`에 반영된다.
+
+Digital Input:
+
+```json
+{
+  "cmd": "system/simulation/io/input_write",
+  "io": "io0",
+  "slot": 2,
+  "kind": "digital",
+  "channel": 0,
+  "value": true
+}
+```
+
+Analog Input:
+
+```json
+{
+  "cmd": "system/simulation/io/input_write",
+  "io": "io0",
+  "slot": 4,
+  "kind": "analog",
+  "channel": 0,
+  "value": 1234
+}
+```
+
+IO-Link Input Process Data는 module 전체 raw payload로 지정한다.
+
+```json
+{
+  "cmd": "system/simulation/io/input_write",
+  "io": "io0",
+  "slot": 5,
+  "kind": "io_link",
+  "payload": "0001020304050607"
+}
+```
+
+현재 상태 조회에서 `io`를 생략하면 모든 Virtual CPX station을 반환한다.
+
+```json
+{"cmd": "system/simulation/io/input_read"}
+```
+
+Module 또는 station 입력 초기화:
+
+```json
+{"cmd": "system/simulation/io/input_reset", "io": "io0", "slot": 2}
+{"cmd": "system/simulation/io/input_reset", "io": "io0"}
+```
+
+입력은 client 연결이 끊겨도 유지되며 reset, bus reconnect 또는 server restart 시 기본값으로
+초기화된다. `pysoem` backend 또는 API 비활성 상태에서는 `UNSUPPORTED_OPERATION` Failure를
+반환한다.
+
 I/O SDO parameter access는 `axis`가 아니라 `io` selector를 사용한다.
 `io`는 `MOTION_SERVER_BUS`에서 선언한 I/O id 또는 I/O index다.
 

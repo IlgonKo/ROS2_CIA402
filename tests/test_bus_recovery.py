@@ -168,6 +168,24 @@ class BusRecoveryTest(unittest.TestCase):
         )
         self.assertEqual(runtime.events.count("exchange"), 3)
 
+    def test_mock_bus_reconnect_resets_enabled_virtual_inputs(self):
+        runtime, _session, state = recovery_state()
+        reset_inputs = Mock()
+        runtime.ethercat_master = SimpleNamespace(
+            reset_virtual_io_inputs=reset_inputs,
+        )
+        state["simulation_api_enabled"] = True
+
+        with (
+            patch("motion_server.app.recovery.clear_axis_restart_commands"),
+            patch("motion_server.app.recovery.write_csp_interpolation_modes"),
+            patch("motion_server.app.recovery.exchange"),
+            patch("motion_server.app.recovery.refresh_after_recovery"),
+        ):
+            reconnect_runtime(runtime, state)
+
+        reset_inputs.assert_called_once_with()
+
     def test_reconnect_rejects_processdata_that_never_reaches_expected_wkc(self):
         runtime, session, state = recovery_state()
         runtime.wkc = 1

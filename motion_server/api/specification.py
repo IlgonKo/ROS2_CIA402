@@ -62,6 +62,7 @@ COMMAND_SPECS = {
         status("system/axes/status"),
         status("system/io/status"),
         status("system/io/input_read"),
+        status("system/simulation/io/input_read"),
         status("system/axis/param_read"),
         status("system/axis/param_catalog"),
         status("system/io/param_read"),
@@ -103,6 +104,14 @@ COMMAND_SPECS = {
         command("system/axes/trajectory", advanced_only=True),
         command("system/axes/trajectory_stop", advanced_only=True),
         command("system/io/output_write"),
+        command(
+            "system/simulation/io/input_write",
+            authority_required=False,
+        ),
+        command(
+            "system/simulation/io/input_reset",
+            authority_required=False,
+        ),
         command("system/io/reset"),
         command("system/io/restart"),
         command("system/io/param_write"),

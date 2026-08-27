@@ -41,6 +41,25 @@ class VirtualCpxApDevice:
     def set_io_link_input(self, slot, payload):
         self.module(slot).set_io_link_input(payload)
 
+    def reset_inputs(self, slot=None):
+        modules = (
+            self.modules.values()
+            if slot is None
+            else (self.module(slot),)
+        )
+        for module in modules:
+            module.reset_inputs()
+
+    def input_snapshot(self):
+        modules = []
+        for module in self.modules.values():
+            snapshot = module.input_snapshot()
+            if snapshot["inputs"]:
+                modules.append(snapshot)
+        return {
+            "modules": modules,
+        }
+
     def model_update(self):
         self._dispatch_gateway_request()
         output_image = self._read_process_image(

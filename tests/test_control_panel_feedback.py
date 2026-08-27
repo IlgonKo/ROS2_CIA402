@@ -5,6 +5,8 @@ from types import SimpleNamespace
 from control_panel.axis_control_panel.client import AxisServerClient
 from control_panel.axis_control_panel.control_panel import AxisServerControlPanel
 from control_panel.axis_control_panel.diagnosis import DiagnosisMixin
+from control_panel.io_control_panel.client import MotionServerClient
+from control_panel.io_control_panel.control_panel import IOControlPanel
 from control_panel.axis_control_panel.panel_update_data import (
     initial_feedback,
     merge_axis_status,
@@ -238,6 +240,54 @@ class ServerHealthFeedbackTest(unittest.TestCase):
         self.assertEqual(health["runtime_state"], "bus_disconnected")
         self.assertIn("process data stale", text)
         self.assertIn("faults 1", text)
+
+
+class IoSimulationFeedbackTest(unittest.TestCase):
+    def test_panel_filters_simulation_modules_by_input_kind(self):
+        panel = object.__new__(IOControlPanel)
+        panel.simulation_device_var = SimpleNamespace(get=lambda: "io0")
+        simulation = {
+            "devices": [{
+                "id": "io0",
+                "modules": [
+                    {"slot": 1, "inputs": {"digital": [False]}},
+                    {"slot": 2, "inputs": {"analog": [0]}},
+                    {"slot": 3, "inputs": {"io_link": "0000"}},
+                ],
+            }],
+        }
+
+        self.assertEqual(panel.simulation_input_slots(simulation, "digital"), ["1"])
+        self.assertEqual(panel.simulation_input_slots(simulation, "analog"), ["2"])
+        self.assertEqual(panel.simulation_input_slots(simulation, "io_link"), ["3"])
+
+    def test_simulation_capability_survives_periodic_feedback(self):
+        client = MotionServerClient("127.0.0.1", 15000)
+        client._store_message({
+            "type": "system/simulation/io/input_read",
+            "ok": True,
+            "available": True,
+            "devices": [{"id": "io0", "modules": []}],
+        })
+        client._store_message({
+            "type": "system/feedback",
+            "process_data_valid": True,
+            "io": {"devices": [{"id": "io0"}]},
+            "server_health": {"runtime_state": "normal"},
+        })
+
+        self.assertTrue(client.feedback["simulation"]["available"])
+
+    def test_failed_simulation_probe_marks_feature_unavailable(self):
+        client = MotionServerClient("127.0.0.1", 15000)
+        client._store_message({
+            "type": "system/simulation/io/input_read",
+            "ok": False,
+            "reason": "unsupported_operation",
+            "message": "Simulation API is disabled",
+        })
+
+        self.assertFalse(client.feedback["simulation"]["available"])
 
 
 if __name__ == "__main__":

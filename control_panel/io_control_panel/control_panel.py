@@ -34,6 +34,14 @@ class IOControlPanel:
         self.slot_var = tk.StringVar()
         self.channel_var = tk.StringVar(value="0")
         self.output_value_var = tk.BooleanVar(value=False)
+        self.simulation_device_var = tk.StringVar()
+        self.simulation_kind_var = tk.StringVar(value="digital")
+        self.simulation_slot_var = tk.StringVar(value="")
+        self.simulation_channel_var = tk.StringVar(value="0")
+        self.simulation_digital_var = tk.BooleanVar(value=False)
+        self.simulation_analog_var = tk.StringVar(value="0")
+        self.simulation_iol_var = tk.StringVar(value="")
+        self.simulation_result_var = tk.StringVar(value="")
         self.param_index_var = tk.StringVar(value="0x1000")
         self.param_subindex_var = tk.StringVar(value="0x00")
         self.param_type_var = tk.StringVar(value="uint32")
@@ -144,11 +152,18 @@ class IOControlPanel:
             command=self.apply_digital_output,
         ).grid(row=0, column=7)
 
-        parameter_tabs = ttk.Notebook(self.root)
-        parameter_tabs.pack(fill="x", padx=8, pady=(0, 8))
+        self.simulation_frame = ttk.LabelFrame(
+            self.root,
+            text="Virtual Input Simulation",
+            padding=8,
+        )
+        self.build_simulation_ui(self.simulation_frame)
 
-        parameter = ttk.Frame(parameter_tabs, padding=8)
-        parameter_tabs.add(parameter, text="EC Parameter")
+        self.parameter_tabs = ttk.Notebook(self.root)
+        self.parameter_tabs.pack(fill="x", padx=8, pady=(0, 8))
+
+        parameter = ttk.Frame(self.parameter_tabs, padding=8)
+        self.parameter_tabs.add(parameter, text="EC Parameter")
 
         ttk.Label(parameter, text="Catalog").grid(row=0, column=0, sticky="w")
         self.ec_catalog_combo = ttk.Combobox(
@@ -256,8 +271,8 @@ class IOControlPanel:
         )
         parameter.columnconfigure(13, weight=1)
 
-        ap_parameter = ttk.Frame(parameter_tabs, padding=8)
-        parameter_tabs.add(ap_parameter, text="AP Parameter")
+        ap_parameter = ttk.Frame(self.parameter_tabs, padding=8)
+        self.parameter_tabs.add(ap_parameter, text="AP Parameter")
 
         ttk.Label(ap_parameter, text="I/O").grid(row=0, column=0, sticky="w")
         self.ap_device_combo = ttk.Combobox(
@@ -351,8 +366,8 @@ class IOControlPanel:
         )
         ap_parameter.columnconfigure(9, weight=1)
 
-        iol_parameter = ttk.Frame(parameter_tabs, padding=8)
-        parameter_tabs.add(iol_parameter, text="IOL Parameter")
+        iol_parameter = ttk.Frame(self.parameter_tabs, padding=8)
+        self.parameter_tabs.add(iol_parameter, text="IOL Parameter")
 
         ttk.Label(iol_parameter, text="Catalog").grid(row=0, column=0, sticky="w")
         self.iol_catalog_combo = ttk.Combobox(
@@ -491,6 +506,95 @@ class IOControlPanel:
         self.tree.column("value", width=520)
         self.tree.pack(fill="both", expand=True, padx=8, pady=(0, 8))
 
+    def build_simulation_ui(self, parent):
+        ttk.Label(parent, text="I/O").grid(row=0, column=0, sticky="w")
+        self.simulation_device_combo = ttk.Combobox(
+            parent,
+            textvariable=self.simulation_device_var,
+            width=12,
+            state="readonly",
+        )
+        self.simulation_device_combo.grid(row=0, column=1, padx=4)
+        self.simulation_device_combo.bind(
+            "<<ComboboxSelected>>",
+            self.update_simulation_fields,
+        )
+
+        ttk.Label(parent, text="Kind").grid(row=0, column=2, sticky="w")
+        self.simulation_kind_combo = ttk.Combobox(
+            parent,
+            textvariable=self.simulation_kind_var,
+            values=("digital", "analog", "io_link"),
+            width=10,
+            state="readonly",
+        )
+        self.simulation_kind_combo.grid(row=0, column=3, padx=4)
+        self.simulation_kind_combo.bind(
+            "<<ComboboxSelected>>",
+            self.update_simulation_fields,
+        )
+
+        ttk.Label(parent, text="Module").grid(row=0, column=4, sticky="w")
+        self.simulation_slot_combo = ttk.Combobox(
+            parent,
+            textvariable=self.simulation_slot_var,
+            width=8,
+            state="readonly",
+        )
+        self.simulation_slot_combo.grid(row=0, column=5, padx=4)
+
+        self.simulation_channel_label = ttk.Label(parent, text="Channel")
+        self.simulation_channel_label.grid(row=0, column=6, sticky="w")
+        self.simulation_channel_entry = ttk.Entry(
+            parent,
+            textvariable=self.simulation_channel_var,
+            width=8,
+        )
+        self.simulation_channel_entry.grid(row=0, column=7, padx=4)
+
+        self.simulation_digital_check = ttk.Checkbutton(
+            parent,
+            text="ON",
+            variable=self.simulation_digital_var,
+        )
+        self.simulation_digital_check.grid(row=0, column=8, padx=4)
+        self.simulation_analog_entry = ttk.Entry(
+            parent,
+            textvariable=self.simulation_analog_var,
+            width=14,
+        )
+        self.simulation_analog_entry.grid(row=0, column=8, padx=4)
+        self.simulation_iol_entry = ttk.Entry(
+            parent,
+            textvariable=self.simulation_iol_var,
+            width=28,
+        )
+        self.simulation_iol_entry.grid(row=0, column=8, padx=4)
+
+        ttk.Button(
+            parent,
+            text="Set",
+            command=self.set_simulation_input,
+        ).grid(row=0, column=9, padx=(8, 0))
+        ttk.Button(
+            parent,
+            text="Reset Module",
+            command=lambda: self.reset_simulation_input(module_only=True),
+        ).grid(row=0, column=10, padx=4)
+        ttk.Button(
+            parent,
+            text="Reset Station",
+            command=lambda: self.reset_simulation_input(module_only=False),
+        ).grid(row=0, column=11, padx=4)
+        ttk.Label(parent, textvariable=self.simulation_result_var).grid(
+            row=1,
+            column=0,
+            columnspan=12,
+            sticky="w",
+            pady=(6, 0),
+        )
+        self.update_simulation_fields()
+
     def add_detail_text(self, parent, row, columnspan):
         frame = ttk.Frame(parent)
         frame.grid(
@@ -570,6 +674,75 @@ class IOControlPanel:
         for device in devices:
             self.add_device(device)
         self.restore_open_tree_paths(open_paths)
+        self.update_simulation_ui(self.status.get("simulation", {}))
+
+    def update_simulation_ui(self, simulation):
+        available = bool(simulation.get("available", False))
+        if not available:
+            if self.simulation_frame.winfo_manager():
+                self.simulation_frame.pack_forget()
+            return
+        if not self.simulation_frame.winfo_manager():
+            self.simulation_frame.pack(
+                fill="x",
+                padx=8,
+                pady=(0, 8),
+                before=self.parameter_tabs,
+            )
+        device_ids = [
+            str(device.get("id", ""))
+            for device in simulation.get("devices", [])
+        ]
+        self.simulation_device_combo["values"] = device_ids
+        if device_ids and self.simulation_device_var.get() not in device_ids:
+            self.simulation_device_var.set(device_ids[0])
+        kind = self.simulation_kind_var.get()
+        slots = self.simulation_input_slots(simulation, kind)
+        self.simulation_slot_combo["values"] = slots
+        if slots and self.simulation_slot_var.get() not in slots:
+            self.simulation_slot_var.set(slots[0])
+        self.update_simulation_fields()
+
+    def simulation_input_slots(self, simulation, kind):
+        selected_id = self.simulation_device_var.get()
+        input_key = {
+            "digital": "digital",
+            "analog": "analog",
+            "io_link": "io_link",
+        }.get(kind)
+        for device in simulation.get("devices", []):
+            if str(device.get("id")) != selected_id:
+                continue
+            return [
+                str(module.get("slot"))
+                for module in device.get("modules", [])
+                if input_key in module.get("inputs", {})
+            ]
+        return []
+
+    def update_simulation_fields(self, _event=None):
+        kind = self.simulation_kind_var.get()
+        if kind == "io_link":
+            self.simulation_channel_label.grid_remove()
+            self.simulation_channel_entry.grid_remove()
+        else:
+            self.simulation_channel_label.grid()
+            self.simulation_channel_entry.grid()
+        self.simulation_digital_check.grid_remove()
+        self.simulation_analog_entry.grid_remove()
+        self.simulation_iol_entry.grid_remove()
+        if kind == "digital":
+            self.simulation_digital_check.grid()
+        elif kind == "analog":
+            self.simulation_analog_entry.grid()
+        else:
+            self.simulation_iol_entry.grid()
+        if self.status:
+            simulation = self.status.get("simulation", {})
+            slots = self.simulation_input_slots(simulation, kind)
+            self.simulation_slot_combo["values"] = slots
+            if slots and self.simulation_slot_var.get() not in slots:
+                self.simulation_slot_var.set(slots[0])
 
     def add_device(self, device):
         device_id = self.tree.insert(
@@ -713,6 +886,60 @@ class IOControlPanel:
                 raise RuntimeError(response.get("message", "command rejected"))
         except Exception as exc:
             messagebox.showerror("IO Control Panel", str(exc))
+
+    def set_simulation_input(self):
+        try:
+            kind = self.simulation_kind_var.get()
+            message = {
+                "cmd": "system/simulation/io/input_write",
+                "io": self.simulation_device_var.get(),
+                "slot": int(self.simulation_slot_var.get()),
+                "kind": kind,
+            }
+            if kind == "digital":
+                message.update(
+                    channel=int(self.simulation_channel_var.get()),
+                    value=self.simulation_digital_var.get(),
+                )
+            elif kind == "analog":
+                message.update(
+                    channel=int(self.simulation_channel_var.get()),
+                    value=int(self.simulation_analog_var.get()),
+                )
+            else:
+                message["payload"] = self.simulation_iol_var.get()
+            response = self.client.request(message)
+            self.require_successful_response(response)
+            self.status["simulation"] = response
+            self.simulation_result_var.set("Virtual input updated")
+            self.update_simulation_ui(response)
+        except Exception as exc:
+            messagebox.showerror("IO Control Panel", str(exc))
+
+    def reset_simulation_input(self, *, module_only):
+        try:
+            message = {
+                "cmd": "system/simulation/io/input_reset",
+                "io": self.simulation_device_var.get(),
+            }
+            if module_only:
+                message["slot"] = int(self.simulation_slot_var.get())
+            response = self.client.request(message)
+            self.require_successful_response(response)
+            self.status["simulation"] = response
+            self.simulation_result_var.set(
+                "Virtual module reset" if module_only else "Virtual station reset"
+            )
+            self.update_simulation_ui(response)
+        except Exception as exc:
+            messagebox.showerror("IO Control Panel", str(exc))
+
+    @staticmethod
+    def require_successful_response(response):
+        if not response.get("ok", False):
+            raise RuntimeError(
+                response.get("message", response.get("error", "command failed"))
+            )
 
     def read_parameter(self):
         try:

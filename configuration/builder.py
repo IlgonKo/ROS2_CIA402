@@ -102,6 +102,11 @@ def build_motion_server_config(
             "MOTION_SERVER_AXIS_RESTART_TIMEOUT",
             30.0,
         ),
+        simulation_api_enabled=boolean(
+            values,
+            "MOTION_SERVER_SIMULATION_API_ENABLED",
+            False,
+        ),
     )
     cycle = CycleConfig(
         period=choose(cli.cycle_time, number(values, "PYSOEM_CYCLE_TIME", 0.01)),
