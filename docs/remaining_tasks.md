@@ -30,6 +30,7 @@ Tech Debt 상태 값은 `open`, `in_progress`, `complete`를 사용한다.
 - 상태: `planned`
 - 우선순위: 높음
 - 요약: 실장치와 동일한 설정 및 API로 시험할 수 있는 CPX-AP-I-EC Virtual I/O를 제공한다.
+- 선행 작업: `TD-030`
 - 완료 조건:
   - DI/DO/AI/AO/IO-Link process image와 AP module layout이 설정대로 생성된다.
   - ESI 기반 station/module OD, slot-dependent object와 선택된 `0x6F00`/`0x7F00` PDO block이
@@ -526,3 +527,19 @@ Tech Debt 상태 값은 `open`, `in_progress`, `complete`를 사용한다.
   - MockSlave는 장치별 구현과 role 의미에 의존하지 않는다.
   - SDO/PDO 공유 OD 값, cycle 순서와 reset/save 회귀 자동 테스트가 통과한다.
 - 상세: [TD-029 기술 명세](tasks/td/TD-029-virtual-od-bridge-pdo-sdo-routing.md)
+
+### TD-030 Mock/실축 PDO 직렬화 책임 비대칭
+
+- 상태: `open`
+- 우선순위: 높음
+- 요약: Mock/PySOEM 모두 Master 측에서 PDO를 직렬화하고 같은 prepare/send/receive cycle 계약을
+  사용하도록 책임을 대칭화한다.
+- 후속 작업: `RF-001`
+- 완료 조건:
+  - MockMaster와 PySOEMMaster가 Master 측에서 RxPDO encode와 TxPDO decode를 수행한다.
+  - `prepare`에서 output을 생성하고 `send`에서 snapshot을 확정하며 `receive`에서 input을 decode한다.
+  - MockSlave는 raw PDO/SDO endpoint만 담당하고 RxPDO/TxPDO 객체와 PdoCodec을 소유하지 않는다.
+  - VirtualOdBridge와 Virtual Device의 TD-029 책임 경계가 유지된다.
+  - lifecycle, snapshot, 다중 slave, WKC와 timing field의 backend parity test가 통과한다.
+  - `DEC-034`, TD-029와 RF-001 문서가 최종 책임 구조와 일치한다.
+- 상세: [TD-030 기술 명세](tasks/td/TD-030-mock-pdo-transport-parity.md)

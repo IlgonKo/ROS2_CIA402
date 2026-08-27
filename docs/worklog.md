@@ -4,6 +4,16 @@
 날짜는 기본적으로 Git commit 날짜를 기준으로 정리했고, 아직 commit되지 않은 작업은 현재 작업일 기준으로 별도 기록한다.
 미완료 기능과 기술 부채는 [Remaining Tasks](remaining_tasks.md)에서 별도로 관리한다.
 
+## 2026-08-27
+
+### 등록
+
+- `TD-030`을 등록하여 MockSlave가 소유한 PDO encode/decode를 MockMaster 측으로 이동하고
+  PySOEM과 동일한 `prepare -> send -> receive` 직렬화 경계로 정렬한다. MockSlave는 raw PDO/SDO
+  endpoint로 축소하되 TD-029의 VirtualOdBridge 및 Model_Update 경계를 유지하며, RF-001 구현과
+  EtherCAT frame simulation은 범위에서 제외한다. 현재 구조에 Virtual CPX를 먼저 결합한 뒤 다시
+  분리하는 재작업을 막기 위해 TD-030을 RF-001의 명시적인 선행 작업으로 확정했다.
+
 ## 2026-08-26
 
 ### 설계 확정

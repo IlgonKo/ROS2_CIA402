@@ -77,14 +77,16 @@ Virtual module input state
 - [TD-028](../td/TD-028-virtual-od-bridge-boundary.md)의 장치 sequence 분리와
   [TD-029](../td/TD-029-virtual-od-bridge-pdo-sdo-routing.md)의 공통 PDO/SDO-OD 연결 계약을
   사용한다.
+- [TD-030](../td/TD-030-mock-pdo-transport-parity.md)을 먼저 완료하여 Mock/PySOEM의 PDO
+  encode/decode를 Master 측으로 통일하고 MockSlave를 raw PDO/SDO endpoint로 축소한다.
 - OD Model은 definition과 runtime value를 소유한다.
 - 공통 OD Bridge는 SDO의 index/sub-index와 `PDO_Configuration`의 RxPDO/TxPDO mapping을 같은
   OD Model에 연결하되 raw PDO payload만 다룬다.
-- MockSlave는 실제 CPX 경로에서 사용하는 기존 `CPXPdoCodec`으로 CPXRxPDO/CPXTxPDO 객체와
+- MockMaster는 실제 CPX 경로에서 사용하는 기존 `CPXPdoCodec`으로 CPXRxPDO/CPXTxPDO 객체와
   raw payload를 변환한다. Virtual 전용 PDO codec이나 configuration은 만들지 않는다.
 - Virtual Device는 PDO 객체를 직접 다루지 않고 Model_Update 시점의 OD 상태를 반영해 장치
   상태와 결과 OD를 갱신한다.
-- MockSlave는 장치 의미를 해석하지 않고 OD 반영과 Model_Update 순서만 조정한다.
+- MockSlave는 장치 의미를 해석하지 않고 raw PDO/SDO endpoint만 담당한다.
 - Gateway request dispatch 경계는 `VirtualCpxApDevice`가 제공하지만 AP module과 IO-Link Device의
   실제 parameter 저장 및 반응은 RF-013의 하위 virtual device가 담당한다.
 - Virtual input은 module state에 별도로 보관하고 Model_Update 시점에 TxPDO OD로 반영한다.
