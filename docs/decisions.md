@@ -806,6 +806,63 @@ Device Profile + ESI
 - 영향: RF-014 handler는 MockMaster의 virtual-device 접근과 RF-001 input injection만 사용한다.
   MockSlave, VirtualOdBridge, 일반 I/O feedback 및 실장치 DeviceProfile 계약은 변경하지 않는다.
 
+## DEC-037 Python 통신 모듈과 Node-RED Scenario Flow의 책임 분리
+
+- 상태: `accepted`
+- 결정일: 2026-08-27
+- 결정: RF-002의 Python reference client는 재사용 가능한 최소 통신 모듈만 제공하고 scenario별
+  Python script를 만들지 않는다. 사용자 scenario는 Node-RED의 공통 연결/request/feedback node를
+  조합한 flow로 제공한다. 초기 Custom Node는 Connection, Request, Feedback, Connection Status의
+  4종으로 제한하고 기능별 API 사용법은 scenario Subflow/Flow로 제공한다. Connection은 Config Node로
+  구현하여 이를 선택한 모든 node가 하나의 TCP 연결과 authority/correlation 상태를 공유한다. 두
+  결과물은 새 `reference_clients` 폴더 아래의 독립 Python 및 Node-RED package로 구성한다.
+- 이유: 단일 예제마다 통신 코드를 복제하지 않으면서도 모든 API를 전용 method로 감싸는 대형 SDK와
+  application별 업무 로직으로 범위가 확장되는 것을 방지해야 한다.
+- 영향: authority, axis motion, I/O, parameter access와 Virtual I/O simulation의 실행 순서는
+  Node-RED scenario flow 또는 Python client 외부 application이 소유한다. Python client와 Node-RED
+  node는 동일한 JSON API 및 correlation 계약을 따른다. 연결이 끊어지면 미완료 요청을
+  모두 실패 처리하고 자동 재전송하지 않으며, 재연결 후 application이 필요한 명령을 새 요청으로
+  명시적으로 실행한다. 연결 단절로 해제된 command authority도 자동으로 다시 획득하지 않고
+  application이 server 상태를 확인한 뒤 명시적으로 요청한다. 비동기 `system/feedback`은 전용 queue로
+  전달하고 TCP 수신 thread에서 사용자 callback을 직접 실행하지 않는다. queue가 가득 차면 가장
+  오래된 feedback을 제거하고 최신 값을 보존하며 request response는 별도 correlation 경로에서
+  손실 없이 처리한다. queue 기본 크기는 100개로 두고 client 생성 인자로만 조정하며 서버 설정에는
+  추가하지 않는다. 공개 요청 API는 동기 `request()`로 유지하되 여러 thread의 동시 호출을 지원한다.
+  송신은 lock으로 직렬화하고 각 호출은 고유 `request_id`로 독립 대기하며 `async/await` API는 초기
+  범위에서 제외한다. client는 message 복사본에 session prefix와 단조 증가 번호 기반 문자열
+  `request_id`를 자동 부여하고 caller의 직접 지정은 거부한다. 같은 client instance는 재연결 후에도
+  번호를 계속 증가시킨다. 기본 request timeout은 5초로 하고 client와 개별 요청에서 변경할 수 있게 한다.
+  timeout된 pending 요청과 이후 도착한 response는 폐기하지만 TCP 연결은 유지하며, 장시간 명령은
+  caller가 더 긴 timeout을 명시한다. `start()`는 background connection thread를 시작하고 고정
+  1초 간격으로 최초 연결 및 단절 후 재연결을 시도한다. 미연결 `request()`는 즉시 실패하며 application은
+  `wait_connected()`로 연결을 기다릴 수 있다. `stop()`은 재연결을 중단하고 socket을 정리한다.
+  연결 단절 시 feedback queue를 비우고 재연결 후 새 feedback만 제공하며 연결 상태는
+  `is_connected`와 `last_error`로 별도 노출한다. synthetic feedback은 만들지 않는다. 서버 `Fail`
+  envelope는 API response dict로 반환하고 Python exception은 client 자체의 연결, timeout과 사용
+  실패에만 적용하며 서버 Failure code별 exception 계층은 만들지 않는다. API command마다 Custom
+  Node를 만들지 않으며 반복 사용성이 확인된 Subflow만 후속 검토를 거쳐 기능 Node로 승격한다.
+  Request node는 `msg.payload.cmd`만 command 식별자로 사용하고 caller의 `msg.topic` 및 다른 property를
+  보존한다. Feedback과 Connection Status만 각각 `system/feedback`, `motion-server/connection` topic을
+  설정한다. Request의 첫 번째 출력은 서버 Success/Fail response를 모두 전달하고 두 번째 출력은
+  client transport failure만 전달한다. 원본 request payload는 복제하지 않고 caller topic/property만
+  보존한다. client error payload는 type, code, message, request id와 command만 제공하며 초기 code는
+  `not_connected`, `connection_lost`, `request_timeout`, `invalid_client_request`로 제한한다.
+  Connection Status는 시작 시 현재 상태를 한 번 내보내고 이후 connected 값이 바뀔 때만 출력한다.
+  payload는 connected와 last_error만 제공하며 반복 retry event나 추가 lifecycle state를 만들지 않는다.
+  여러 Motion Server는 각각 별도 Connection Config를 사용하여 socket, authority, request counter와
+  재연결 상태를 격리한다. Config UI는 Name, Host(127.0.0.1), Port(15000), Default Request Timeout(5초)을
+  제공하며 재연결 주기는 노출하지 않는다. Request Node는 optional timeout override를 설정으로만
+  제공하고 Feedback/Connection Status Node는 Name과 Config 선택만 가진다.
+  기존 Control Panel용 `motion_server_client`, Axis/IO client와 장비 자료용 `Reference` 폴더는
+  변경하지 않는다. 기존 client 이관은 새 package 안정화 후 별도 TD에서 검토한다.
+  Node-RED example은 connection/status, authority, Axis, I/O, parameter access, Virtual I/O simulation의
+  6개 독립 flow로 제공한다. Axis flow는 전체 축의 actual position과 actual velocity를 axis별 graph
+  series로 표시한다. graph는 `@flowfuse/node-red-dashboard`의 `ui-chart`를 사용하고 legacy
+  `node-red-dashboard`는 지원하지 않는다. 모든 feedback을 반영하되 series당 최근 500개 sample만
+  유지하고 연결 단절 시 graph를 초기화한다. 첫 feedback으로 축 수를 정하고 status의 axis name 또는
+  `Axis N` fallback을 사용한다. 상태 변경 명령은 수동 입력으로만 실행하고 deploy 시 자동 실행하지
+  않는다.
+
 ## 새 결정 작성 양식
 
 ```text

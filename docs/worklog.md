@@ -8,6 +8,49 @@
 
 ### 설계 보완
 
+- `RF-002`는 재사용 가능한 최소 Python client 모듈과 Node-RED의 공통 node 및 scenario flow를
+  분리하기로 확정했다. 두 결과물은 새 `reference_clients` 폴더 아래 독립 installable package로
+  구성하며 기존 Control Panel client와 장비 자료용 `Reference` 폴더는 변경하지 않는다. Python에서
+  scenario별 script를 중복 구현하지 않는다. 공통 모듈은 TCP
+  JSON-lines 연결, request id correlation,
+  response/feedback 분리, timeout과 연결 단절 처리만 담당하며 authority, motion, I/O와 parameter
+  access의 실행 순서는 Node-RED flow 또는 Python client 외부 application에 둔다. 모든 API를 Python method로 감싸는 범용 SDK와 application
+  업무 로직은 범위에서 제외한다. 연결 단절 시 미완료 요청은 모두 실패 처리하고 자동 재전송하지
+  않으며, 재연결 후 필요한 동작은 application이 새 요청으로 명시하도록 확정했다. 연결 단절로
+  해제된 command authority도 자동 복원하지 않고 scenario가 server 상태 확인 후 명시적으로 다시
+  요청한다. 비동기 feedback은 전용 queue에 저장하고 scenario가 `get_feedback()`으로 소비하며,
+  TCP 수신 thread에서는 사용자 callback을 직접 실행하지 않기로 확정했다. queue 포화 시 가장 오래된
+  feedback을 제거하고 최신 값을 유지하되 request response는 별도 경로에서 손실 없이 처리한다.
+  queue 기본 크기는 100개로 하고 client 생성 인자로만 조정한다. 공개 API는 동기 `request()`로
+  유지하면서 여러 thread의 동시 호출을 지원하고, 송신 직렬화와 고유 `request_id`별 독립 대기를
+  제공한다. client는 message 복사본에 session prefix와 증가 번호 기반 `request_id`를 자동 부여하며
+  caller의 직접 지정은 거부하고 재연결 후에도 번호를 계속 증가시킨다. `async/await` API는 초기
+  범위에서 제외한다. 기본 request timeout은 5초이며 client와
+  개별 요청에서 변경할 수 있다. timeout된 pending 요청과 지연 response는 폐기하되 연결은 유지하고,
+  장시간 recovery 명령은 scenario가 더 긴 timeout을 지정한다. `start()` 이후 최초 연결 및 단절 후
+  재연결은 기존 Control Panel과 같은 고정 1초 주기로 background에서 수행한다. 미연결 요청은 즉시
+  실패하고 `wait_connected()`와 `stop()`으로 application이 연결 대기와 종료를 제어한다. 단절 시
+  feedback queue를 비우고 재연결 후 새 feedback만 제공하며 연결 상태와 마지막 오류는
+  `is_connected`와 `last_error`로 별도 조회한다. 서버 `Fail`은 정상 API response로 반환하고 Python
+  exception은 client 자체의 연결, timeout과 사용 실패에만 사용하며 Failure code별 exception 계층은
+  만들지 않는다. Node-RED Custom Node는 Connection, Request, Feedback, Connection Status 4종으로
+  제한하고 상태 조회, authority, Axis, I/O, parameter와 simulation은 scenario Subflow/Flow로
+  구성한다. API command마다 Custom Node를 만들지 않고 반복 사용성이 확인된 Subflow만 추후 승격한다.
+  Request node는 `msg.payload.cmd`만 command 식별자로 사용하고 caller topic/property를 보존하며,
+  Feedback과 Connection Status만 고정 topic을 출력한다. Request 출력은 서버 Success/Fail response와
+  client transport failure의 2개로 분리한다. 원본 request payload는 복제하지 않고 caller property만
+  보존하며 client error에는 request id와 command를 포함한 최소 정보만 제공한다. Connection은 Config
+  Node로 구현하여 이를 선택한 node가 하나의 TCP 연결과 authority/correlation 상태를 공유하고,
+  여러 서버는 별도 Config로 격리한다. Config는 host, port와 기본 5초 timeout을 제공하고 Request
+  Node만 optional timeout override를 가지며 1초 재연결 주기는 UI에 노출하지 않는다.
+  Connection Status는 초기 snapshot과 connected 값 변경 시에만 connected/last_error를 출력하고 반복
+  재연결 시도는 event로 내보내지 않는다.
+  Example은 connection/status, authority, Axis, I/O, parameter와 Virtual I/O simulation의 6개 독립
+  flow로 제공한다. Axis flow에는 모든 축의 actual position/velocity graph를 포함하고 상태 변경
+  명령은 수동 입력으로만 실행한다. Dashboard는 `@flowfuse/node-red-dashboard`의 `ui-chart`를 사용하고
+  legacy dashboard package는 지원하지 않는다. Axis graph는 모든 feedback을 사용해 series당 최근
+  500개 sample을 유지하고 단절 시 초기화하며 첫 feedback의 축 수와 status name/fallback으로 series를
+  구성한다.
 - `TD-030` 검토 중 Mock CMMT가 선택된 `PDO_Configuration`을 Master runtime, OD Model과 Bridge에
   직접 주입하여 cyclic PDO 변환은 수행하지만, 실축의 PRE-OP PDO assignment/mapping SDO write와
   readback 검증을 우회하는 것을 확인했다. `PDO_Configuration` 주입은 변환 규칙일 뿐 device

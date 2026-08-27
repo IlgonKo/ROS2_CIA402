@@ -44,13 +44,13 @@ Tech Debt 상태 값은 `open`, `in_progress`, `complete`를 사용한다.
 
 ### RF-002 Low-code Reference Client
 
-- 상태: `planned`
+- 상태: `in_progress`
 - 우선순위: 높음
 - 요약: 패널 없이 Motion Server API를 사용할 수 있는 Node-RED 및 Python reference client를 제공한다.
 - 완료 조건:
   - JSON-lines 연결, 재연결과 request/response correlation이 구현된다.
   - authority, feedback, axis motion, I/O output과 parameter access 예제가 제공된다.
-  - Node-RED flow와 Python client가 동일한 Basic mode 시나리오를 완료한다.
+  - Node-RED scenario flow와 Python client smoke test가 동일한 공개 API 및 correlation 계약을 검증한다.
   - clean environment에서 설치·실행 절차가 재현되고 자동 또는 scripted smoke test가 통과한다.
 - 상세: [RF-002 기능 명세](tasks/rf/RF-002-low-code-client.md)
 
