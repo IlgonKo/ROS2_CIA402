@@ -1,4 +1,5 @@
 from device.cpx_ap_i_ec.esi_module_catalog import esi_module_catalog
+from device.cpx_ap_i_ec.isdu_gateway import isdu_access_object_index
 from device.cpx_ap_i_ec.module_resolver import module_info_for_ap_module
 from motion_server.api import parse_int
 from motion_server.failure import (
@@ -106,7 +107,7 @@ def io_config(device):
 
 
 def iodd_device_to_dict(binding):
-    input_bytes, output_bytes = binding.device.process_data_size
+    input_bytes, output_bytes = binding.process_data_size
     return {
         "module": binding.module,
         "port": binding.port,
@@ -116,6 +117,8 @@ def iodd_device_to_dict(binding):
         "device_id": binding.device.device_id,
         "vendor_name": binding.device.vendor_name,
         "device_name": binding.device.device_name,
+        "process_data_profile": binding.process_data_profile.condition_value,
+        "process_data_profile_id": binding.process_data_profile.profile_id,
         "input_bytes": input_bytes,
         "output_bytes": output_bytes,
         "variables": [
@@ -136,7 +139,3 @@ def iodd_variable_to_dict(variable):
         "name": variable.name,
         "subindices": list(variable.subindices),
     }
-
-
-def isdu_access_object_index(module_number):
-    return 0x2001 + int(module_number) * 0x10

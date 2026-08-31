@@ -23,6 +23,8 @@ class EsiModuleInfo:
     txpdo_bytes: int
     has_isdu_access: bool = False
     objects: tuple = ()
+    rxpdos: tuple = ()
+    txpdos: tuple = ()
 
 
 @dataclass(frozen=True)
@@ -31,6 +33,7 @@ class EsiPdoEntryInfo:
     subindex: int
     bit_length: int
     name: str
+    depend_on_slot: bool = False
 
     def mapping_entry(self):
         if self.index == 0:
@@ -199,6 +202,8 @@ def parse_esi_modules(root, data_types):
             txpdo_bytes=module_pdo_bytes(module, "TxPdo"),
             has_isdu_access=module_has_isdu_access(module),
             objects=parse_module_objects(module, data_types),
+            rxpdos=tuple(parse_pdos(module, "RxPdo").values()),
+            txpdos=tuple(parse_pdos(module, "TxPdo").values()),
         ))
     return modules
 
@@ -399,11 +404,13 @@ def parse_pdos(device, tag):
 
 
 def parse_pdo_entry(entry):
+    index_el = entry.find("Index")
     return EsiPdoEntryInfo(
         index=parse_int(xml_text(entry.find("Index"))),
         subindex=parse_int(xml_text(entry.find("SubIndex"))),
         bit_length=parse_int(xml_text(entry.find("BitLen"))),
         name=xml_text(entry.find("Name")),
+        depend_on_slot=(index_el is not None and index_el.get("DependOnSlot") == "1"),
     )
 
 

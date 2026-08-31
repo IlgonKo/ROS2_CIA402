@@ -7,6 +7,21 @@
 수행할 필요는 없지만, Windows package 또는 Linux Docker 배포 전에는 해당 환경의
 절차를 반드시 완료한다.
 
+## RF-015 IO-Link 입력 디코딩 회귀
+
+- 자동 검증: `python -m unittest tests.test_io_link_decoding` 및 전체 unittest를 실행한다.
+  기본 타입, flat Record/DatatypeRef, metadata scale, 독립 raw fixture, qualifier 및 무효 입력,
+  포트 격리, mock/실장치용 codec parity와 4-port payload/처리 비용을 확인한다.
+- mock으로 시험할 때 RF-014 input_write에는 module 전체 raw를 넣는다. Variant 32는
+  4개 port × 32byte 후 qualifier 4byte이며 시험 포트 qualifier를 `0xA0`으로 설정한다.
+  다음 cycle의 io_link_channels에서 raw/qualifier/decoded를 확인한다. qualifier를 0으로 바꾸면
+  raw는 남고 decoded=null, decode_status=invalid_data여야 한다.
+- 실센서 대조는 별도 수행한다. 설정 profile과 장치의 실제 process-data mode가 같음을 확인하고,
+  vendor tool의 값/단위와 Feedback을 비교한다. API는 장치 mode를 자동 변경하지 않는다.
+  케이블 단절 시 stale 값이 정상으로 표시되지 않는지도 확인한다.
+- 신규 String/Array/nested/vendor datatype이 나오면 raw가 유지되고 unsupported로 보고되는지
+  확인한다. 타입 지원 확대는 실제 IODD 근거와 fixture를 추가한 후 수행한다.
+
 ## 적용 범위
 
 - Motion Server
@@ -223,13 +238,14 @@ namespace, feedback 형식, 단위 정책을 변경한 경우에는 이후 ROS B
 
 5. Virtual input simulation 확인 (`mock` 전용)
 
-   - `MOTION_SERVER_SIMULATION_API_ENABLED=1`에서만 IO Control Panel의 Virtual Input Simulation
-     영역이 표시되는지 확인한다.
+   - `04 Virtual I/O Simulation` Dashboard에서 Refresh를 눌렀을 때
+     `MOTION_SERVER_SIMULATION_API_ENABLED=1`과 `mock` 조건에서 API가 available로 표시되는지 확인한다.
    - DI checkbox, AI raw integer와 IO-Link hexadecimal payload를 설정한다.
    - 설정 직후 다음 PDO cycle의 기존 I/O feedback에 동일 값이 표시되는지 확인한다.
    - Reset Module은 선택 module만, Reset Station은 해당 station 전체 입력을 초기화하는지 확인한다.
    - command authority를 다른 client가 보유해도 simulation input 변경이 가능한지 확인한다.
-   - API 비활성 또는 `pysoem` backend에서는 Simulation 영역이 숨겨지고 API가 거부되는지 확인한다.
+   - API 비활성 또는 `pysoem` backend에서는 Dashboard가 not available을 표시하고 API가 거부되는지
+     확인한다.
 
 6. EtherCAT parameter 확인
 
@@ -406,14 +422,31 @@ Mock Motion Server smoke test:
 
 1. `.env`에서 `MOTION_SERVER_BACKEND=mock`으로 서버를 시작한다.
 2. Python client로 `system/server/status` Success와 `system/feedback` 수신을 확인한다.
-3. Node-RED에 package를 설치하고 `01_connection_and_status.json`을 먼저 import한다.
-4. 공통 authority가 필요하면 `02_command_authority.json`, 기능별 검증이 필요하면 `03`~`06` Flow를
-   추가 import한다. 모든 Motion Server node가 `01`의 같은 Connection Config를 참조하는지 확인한다.
-5. Connection Status가 connected로 바뀌고 read-only status Inject 응답이 첫 번째 Request 출력으로
+3. Node-RED에 package를 설치하고 `01_connection_and_authority.json`을 먼저 import한다.
+4. Dashboard `/dashboard/server`의 compact server control bar에서 Host/Port를 입력하고 Connect를
+   누른다. 연결 상태가 connected로 바뀌는지 확인하고 Disconnect 후 자동 재연결되지 않는지 확인한다.
+5. 기능별 검증이 필요하면 `02`~`05` Flow를 추가 import한다. 모든 Motion Server node와 Dashboard
+   Page가 `01`의 같은 Connection Config 및 Dashboard Base/Theme을 참조하는지 확인한다.
+6. read-only status Inject 응답이 첫 번째 Request 출력으로
    전달되는지 확인한다.
-6. Authority는 명시적 Inject로 요청하고 재연결 후 자동 복원되지 않는지 확인한다.
-7. Axis flow의 position/velocity chart가 축별 series를 표시하고 disconnect에서 초기화되는지 확인한다.
-8. 상태 변경, motion 및 output command가 deploy만으로 실행되지 않는지 확인한다.
+7. Dashboard에서 Authority를 명시적으로 요청/해제하고 Bus Reconnect, Server Fault Reset과 Server
+   Restart가 각각 대응 API를 호출하는지 확인한다. authority 및 Motion Server Status 표시가 feedback에
+   따라 변경되고 재연결 후 authority가 자동 복원되지 않는지도 확인한다.
+8. Axis flow의 position/velocity chart가 선택 축만 표시하고 축 선택 변경 및 disconnect에서
+   초기화되는지 확인한다. 선택 축의 Profile parameters, Motion Limits와 Software Position Limits가
+   status 값과 단위로 초기화되는지 확인하고 command authority 획득 후 각각 적용한다. 성공 후 장치
+   readback 값으로 다시 표시되는지 확인한다. 선택 축의 parameter catalog/read/write/save도 확인한다.
+9. I/O flow에서 device/module 상태와 Raw Image를 확인하고 command authority 획득 후 Digital Output을
+   적용한다. EC/AP/IO-Link parameter read/write와 catalog를 확인하되 Virtual Input Simulation 항목이나
+   `system/simulation/io/*` 요청이 포함되지 않았는지 확인한다.
+10. Virtual I/O Dashboard에서 Refresh 후 Mock station/module 목록이 표시되는지 확인한다. 선택 module의
+    DI, AI 또는 IO-Link 입력을 적용하고 현재 상태 표와 일반 I/O feedback에 반영되는지 확인한다.
+    Module Reset과 Station Reset도 확인하며 command authority 없이 동작하는지 검증한다.
+11. Sample Motion Sequence Flow가 별도 Sequence node 없이 기존 Request/Feedback node와 단계별
+    Function node로 구성되어 있는지 확인한다. 각 단계의 임의 축·위치·속도와 I/O target을 시험 환경에
+    맞게 수정한 뒤 Start한다. 각 완료 gate가 feedback 조건을 만족할 때만 다음 명령을 보내며 Stop이
+    기존 `system/axes/stop` 요청을 전송하는지 확인한다.
+12. 상태 변경, motion 및 output command가 deploy만으로 실행되지 않는지 확인한다.
 
 실장치에서 Axis/I/O 명령 flow를 사용할 때는 target과 parameter를 먼저 검토하고 수동 Inject로만
 실행한다. Python client와 Node-RED Connection 모두 단절 시 pending request를 실패 처리하며 자동

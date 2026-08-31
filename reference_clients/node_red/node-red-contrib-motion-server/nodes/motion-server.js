@@ -15,6 +15,7 @@ module.exports = function registerMotionServerNodes(RED) {
             config.requestTimeout,
             5000,
         );
+        node.desiredConnected = config.autoConnect !== false;
         node.connected = false;
         node.lastError = "";
         node.socket = null;
@@ -26,6 +27,12 @@ module.exports = function registerMotionServerNodes(RED) {
         node.requestSequence = 0;
         node.reconnectTimer = null;
         node.stopped = false;
+
+        node.endpointSnapshot = () => ({
+            host: node.host,
+            port: node.port,
+            desired_connected: node.desiredConnected,
+        });
 
         node.connectionSnapshot = () => ({
             connected: node.connected,
@@ -143,6 +150,52 @@ module.exports = function registerMotionServerNodes(RED) {
             }
         };
 
+        node.cancelReconnect = () => {
+            if (node.reconnectTimer !== null) {
+                clearTimeout(node.reconnectTimer);
+                node.reconnectTimer = null;
+            }
+        };
+
+        node.controlConnection = (message) => {
+            if (!isPlainObject(message)) {
+                throw new Error("msg.payload must be an object");
+            }
+            const action = message.action;
+            if (action === "disconnect") {
+                node.desiredConnected = false;
+                node.cancelReconnect();
+                node.disconnect("Disconnected by user");
+                return node.endpointSnapshot();
+            }
+            if (action !== "connect") {
+                throw new Error("msg.payload.action must be connect or disconnect");
+            }
+
+            const host = String(message.host || "").trim();
+            const port = Number(message.port);
+            if (!host) {
+                throw new Error("msg.payload.host must not be empty");
+            }
+            if (!Number.isInteger(port) || port < 1 || port > 65535) {
+                throw new Error("msg.payload.port must be an integer in 1..65535");
+            }
+
+            const endpointChanged = node.host !== host || node.port !== port;
+            node.host = host;
+            node.port = port;
+            node.desiredConnected = true;
+            node.cancelReconnect();
+            if (node.socket !== null && !endpointChanged) {
+                return node.endpointSnapshot();
+            }
+            if (node.socket !== null) {
+                node.disconnect("Motion Server endpoint changed");
+            }
+            node.connect();
+            return node.endpointSnapshot();
+        };
+
         node.routeMessage = (message) => {
             if (message.type === "system/feedback" && !("request_id" in message)) {
                 for (const listener of node.feedbackListeners) {
@@ -191,7 +244,12 @@ module.exports = function registerMotionServerNodes(RED) {
         };
 
         node.scheduleReconnect = () => {
-            if (node.stopped || node.reconnectTimer !== null) {
+            if (
+                node.stopped
+                || !node.desiredConnected
+                || node.connected
+                || node.reconnectTimer !== null
+            ) {
                 return;
             }
             node.reconnectTimer = setTimeout(() => {
@@ -201,10 +259,17 @@ module.exports = function registerMotionServerNodes(RED) {
         };
 
         node.connect = () => {
-            if (node.stopped || node.socket !== null) {
+            if (node.stopped || !node.desiredConnected || node.socket !== null) {
                 return;
             }
-            const socket = net.createConnection({ host: node.host, port: node.port });
+            let socket;
+            try {
+                socket = net.createConnection({ host: node.host, port: node.port });
+            } catch (error) {
+                node.lastError = error.message;
+                node.scheduleReconnect();
+                return;
+            }
             node.socket = socket;
             socket.setNoDelay(true);
             socket.on("connect", () => {
@@ -213,6 +278,7 @@ module.exports = function registerMotionServerNodes(RED) {
                     return;
                 }
                 node.buffer = Buffer.alloc(0);
+                node.cancelReconnect();
                 node.setConnectionState(true, "");
             });
             socket.on("data", (chunk) => {
@@ -236,17 +302,44 @@ module.exports = function registerMotionServerNodes(RED) {
 
         node.on("close", (removed, done) => {
             node.stopped = true;
-            if (node.reconnectTimer !== null) {
-                clearTimeout(node.reconnectTimer);
-                node.reconnectTimer = null;
-            }
+            node.cancelReconnect();
             node.disconnect("Motion Server connection stopped");
             node.feedbackListeners.clear();
             node.statusListeners.clear();
             done();
         });
 
-        node.connect();
+        if (node.desiredConnected) {
+            node.connect();
+        }
+    }
+
+    function MotionServerConnectionControlNode(config) {
+        RED.nodes.createNode(this, config);
+        const node = this;
+        node.connection = RED.nodes.getNode(config.connection);
+        if (!node.connection) {
+            node.status({ fill: "red", shape: "ring", text: "missing connection" });
+            return;
+        }
+        const sendEndpoint = (endpoint) => node.send({
+            topic: "motion-server/endpoint",
+            payload: endpoint,
+        });
+        const unsubscribe = node.connection.subscribeStatus((status) => {
+            setNodeConnectionStatus(node, status);
+        });
+        setImmediate(() => sendEndpoint(node.connection.endpointSnapshot()));
+        node.on("input", (msg, send, done) => {
+            try {
+                const endpoint = node.connection.controlConnection(msg.payload);
+                sendEndpoint(endpoint);
+                done();
+            } catch (error) {
+                done(error);
+            }
+        });
+        node.on("close", unsubscribe);
     }
 
     function MotionServerRequestNode(config) {
@@ -319,6 +412,10 @@ module.exports = function registerMotionServerNodes(RED) {
     }
 
     RED.nodes.registerType("motion-server-connection", MotionServerConnectionNode);
+    RED.nodes.registerType(
+        "motion-server-connection-control",
+        MotionServerConnectionControlNode,
+    );
     RED.nodes.registerType("motion-server-request", MotionServerRequestNode);
     RED.nodes.registerType("motion-server-feedback", MotionServerFeedbackNode);
     RED.nodes.registerType(

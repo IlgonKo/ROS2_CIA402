@@ -2,6 +2,10 @@ from device.cpx_ap_i_ec.ap_module_idents import (
     CONFIGURED_MODULE_LIST_INDEX,
     DETECTED_MODULE_LIST_INDEX,
 )
+from device.cpx_ap_i_ec.isdu_gateway import (
+    ISDU_ACCESS_BASE_INDEX,
+    resolved_isdu_access_index,
+)
 from device.cpx_ap_i_ec.module_resolver import (
     expected_module_idents,
     module_display_name,
@@ -204,6 +208,8 @@ class VirtualCpxOdModel(VirtualOdModel):
 def resolved_module_index(index, slot, depend_on_slot):
     if not depend_on_slot:
         return int(index)
+    if int(index) == ISDU_ACCESS_BASE_INDEX:
+        return resolved_isdu_access_index(index, slot)
     return int(index) + int(slot) * 0x10
 
 

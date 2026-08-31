@@ -3,6 +3,7 @@ from dataclasses import dataclass
 from typing import Mapping
 
 from device.cpx_ap_i_ec.module_resolver import module_display_name
+from device.io_link.process_data import decode_process_data
 from device.cpx_ap_i_ec.pdo import (
     flattened_analog_inputs,
     flattened_analog_outputs,
@@ -16,6 +17,9 @@ from motion_server.control.axis_units import (
 )
 from motion_server.failure import Failure, OperationException, PartialFailure, map_exception
 from motion_server.failure.codes import FailureCode
+
+
+MAX_CLIENT_OUTPUT_BUFFER_BYTES = 4 * 1024 * 1024
 
 
 @dataclass(frozen=True)
@@ -92,7 +96,15 @@ def _add_request_id(response, context):
 
 
 def send_client_message(client, message):
-    client["conn"].sendall((json.dumps(message) + "\n").encode("utf-8"))
+    payload = (json.dumps(message) + "\n").encode("utf-8")
+    output_buffer = client.get("output_buffer")
+    if output_buffer is None:
+        client["conn"].sendall(payload)
+        return
+
+    if len(output_buffer) + len(payload) > MAX_CLIENT_OUTPUT_BUFFER_BYTES:
+        raise ConnectionError("client output buffer limit exceeded")
+    output_buffer.extend(payload)
 
 
 def status_data(message):
@@ -221,7 +233,7 @@ def public_axis_homing_state(state, axis_index):
     return homing
 
 
-def io_device_snapshot(device, include_raw=False):
+def io_device_snapshot(device, include_raw=False, *, process_data_valid=True):
     slave = device["slave"]
     rxpdo = slave.rxpdo
     txpdo = slave.txpdo
@@ -237,7 +249,7 @@ def io_device_snapshot(device, include_raw=False):
         "analog_inputs": flattened_analog_inputs(txpdo),
         "analog_outputs": flattened_analog_outputs(rxpdo),
         "modules": [
-            io_module_snapshot(module, rxpdo, txpdo)
+            io_module_snapshot(module, rxpdo, txpdo, process_data_valid=process_data_valid)
             for module in config.layout.modules
         ],
     }
@@ -247,17 +259,17 @@ def io_device_snapshot(device, include_raw=False):
     return snapshot
 
 
-def io_module_snapshot(module, rxpdo, txpdo):
+def io_module_snapshot(module, rxpdo, txpdo, *, process_data_valid=True):
     data = module.to_dict()
     data["name"] = module_display_name(module)
     if module.input_bytes:
-        data["inputs"] = io_module_input_values(module, txpdo)
+        data["inputs"] = io_module_input_values(module, txpdo, process_data_valid=process_data_valid)
     if module.output_bytes:
         data["outputs"] = io_module_output_values(module, rxpdo)
     return data
 
 
-def io_module_input_values(module, txpdo):
+def io_module_input_values(module, txpdo, *, process_data_valid=True):
     values = {}
     module_data = txpdo.module_inputs[module.slot]
     if module.digital_inputs:
@@ -267,15 +279,8 @@ def io_module_input_values(module, txpdo):
     if module.module_type == "iol":
         payload = bytes(module_data["io_link"])
         values["io_link"] = payload.hex()
-        values["io_link_channels"] = io_link_channel_payloads(
-            payload,
-            module.io_link_ports,
-            module.io_link_input_data_bytes,
-        )
-        values["io_link_qualifiers"] = io_link_qualifiers(
-            payload,
-            module.io_link_input_data_bytes,
-            module.io_link_ports,
+        values["io_link_channels"] = io_link_input_channels(
+            payload, module, txpdo.config, process_data_valid=process_data_valid,
         )
     return values
 
@@ -315,12 +320,25 @@ def io_link_channel_payloads(payload, ports, data_bytes):
     return channels
 
 
-def io_link_qualifiers(payload, data_bytes, ports):
-    data_bytes = int(data_bytes)
-    ports = int(ports)
-    return [
-        int(payload[data_bytes + port])
-        if data_bytes + port < len(payload)
-        else 0
-        for port in range(ports)
-    ]
+def io_link_input_channels(payload, module, config, *, process_data_valid=True):
+    ports = module.io_link_ports
+    data_bytes = module.io_link_input_data_bytes
+    channels = io_link_channel_payloads(payload, ports, data_bytes)
+    profiles = {
+        binding.port: binding.process_data_profile
+        for binding in config.io_link_devices if binding.module == module.slot
+    }
+    bytes_per_port = data_bytes // ports if ports else 0
+    for channel in channels:
+        port = channel["port"]
+        qualifier_offset = data_bytes + port
+        qualifier = payload[qualifier_offset] if qualifier_offset < len(payload) else None
+        start = port * bytes_per_port
+        # CPX-AP-I-4IOL: PQ bit 7=input valid, DevCom bit 5=device communicating.
+        # DevErr bit 6 is reported raw; it does not by itself invalidate input.
+        valid = process_data_valid and qualifier is not None and qualifier & 0xA0 == 0xA0
+        status, decoded = decode_process_data(
+            profiles.get(port), payload[start:start + bytes_per_port], data_valid=valid,
+        )
+        channel.update(qualifier=qualifier, decode_status=status, decoded=decoded)
+    return channels

@@ -70,8 +70,8 @@ Node-RED 같은 low-code 환경과 최소 Python 코드에서 Control Panel 없�
   독립된 installable package로 구성한다.
 - Dashboard와 graph는 유지 관리되는 `@flowfuse/node-red-dashboard`의 `ui-chart`를 사용한다.
   legacy `node-red-dashboard`는 지원 대상과 dependency에 포함하지 않는다.
-- 초기 Custom Node는 `Motion Server Connection`, `Motion Server Request`, `Motion Server Feedback`,
-  `Motion Server Connection Status`의 4종으로 구성한다.
+- Custom Node는 `Motion Server Connection`, `Motion Server Connection Control`,
+  `Motion Server Request`, `Motion Server Feedback`, `Motion Server Connection Status`의 5종으로 구성한다.
 - Connection은 Node-RED Config Node로 구현하고 endpoint, 하나의 TCP 연결, 연결 lifecycle, 1초
   재연결과 request correlation을 소유한다. Request는
   API message를 전송하고 response를 출력하며 Feedback과 Connection Status는 각각 주기 feedback과
@@ -79,8 +79,12 @@ Node-RED 같은 low-code 환경과 최소 Python 코드에서 Control Panel 없�
 - 같은 Connection Config를 선택한 모든 Request, Feedback과 Connection Status node는 같은 TCP 연결,
   command authority, request counter와 재연결 상태를 공유한다. Motion Server가 여러 대이면 서버마다
   별도 Connection Config를 생성한다.
-- Connection Config는 Name, Host(기본 `127.0.0.1`), Port(기본 `15000`)와 Default Request
-  Timeout(기본 5초)을 설정한다. 확정된 1초 재연결 주기는 UI 설정으로 노출하지 않는다.
+- Connection Control은 Dashboard 등 외부 Flow에서 `connect`와 `disconnect`를 명시적으로 요청하고
+  connect 시 Host/Port를 갱신한다. 수동 disconnect는 재연결을 중지하며 다음 connect 이후의 통신
+  단절부터 다시 1초 자동 재연결을 적용한다.
+- Connection Config는 Name, Host(기본 `127.0.0.1`), Port(기본 `15000`), Auto Connect와 Default Request
+  Timeout(기본 5초)을 설정한다. 확정된 1초 재연결 주기는 UI 설정으로 노출하지 않는다. 기존 일반
+  사용은 Auto Connect를 기본 활성화하고 공통 Dashboard Flow는 명시적 Connect를 위해 비활성화한다.
 - Request Node는 Name, Connection Config와 optional Request Timeout을 설정한다. timeout이 비어 있으면
   Config 기본값을 사용하고 값이 있으면 해당 Node에서만 override한다. timeout은 `msg` property로 받지
   않는다. Feedback과 Connection Status Node는 Name과 Connection Config만 설정한다.
@@ -119,28 +123,46 @@ Node-RED 같은 low-code 환경과 최소 Python 코드에서 Control Panel 없�
 
 ## 공통 및 Scenario Flow 구성
 
-- 공통 기반 Flow는 `01_connection_and_status.json`과 `02_command_authority.json`으로 구성한다.
-- `01_connection_and_status.json`은 유일한 공통 Connection Config와 connection lifecycle,
-  server/axes/I/O status 및 주기 feedback을 제공한다.
-- `02_command_authority.json`은 공통 Connection Config를 재사용하여 authority
-  request/status/release와 재연결 후 명시적 재요청을 제공한다.
-- 기능 Scenario Flow는 다음 `03`~`06`으로 구성한다.
-- `03_axis_control.json`: axis enable/disable, absolute/relative move, stop, status와 Fail 처리를 제공한다.
-  Axis Control Panel과 유사하게 feedback으로 모든 축의 actual position과 actual velocity를 시간축
-  graph로 표시하고 axis별 series를 구분한다. 모든 feedback을 사용하고 각 series는 최근 500개
-  sample을 유지한다. 연결 단절 시 graph를 초기화하고 재연결 후 새 feedback부터 다시 표시한다.
+- 공통 기반은 하나의 `01_connection_and_authority.json`으로 구성한다. 이 Flow가 유일한 Connection
+  Config, Dashboard Base/Theme, connection lifecycle, server/axes/I/O status, 주기 feedback과
+  authority request/status/release를 함께 제공한다.
+- 공통 Dashboard는 기존 Control Panel 상단과 유사한 compact 제어 바로 구성한다. Host/Port,
+  Connect/Disconnect, 연결·authority 상태, Request/Release Authority, Bus Reconnect, Server Fault Reset,
+  Server Restart와 feedback 기반 Motion Server Status 요약을 제공한다. Deploy 시 자동 연결하거나
+  authority를 요청하지 않는다.
+- 기능 Scenario Flow는 다음 `02`~`05`로 구성한다.
+- `02_axis_control.json`: axis enable/disable, absolute move, stop, status와 Fail 처리를 제공한다.
+  Axis Control Panel과 유사하게 feedback 중 선택 축의 actual position과 actual velocity만 시간축
+  graph로 표시한다. 모든 feedback을 사용하고 최근 500개 sample을 유지한다. 축 선택 변경과 연결
+  단절 시 graph를 초기화하고 이후 새 feedback부터 다시 표시한다.
   축 수는 첫 feedback 배열 길이로 확정하며 axis status의 이름을 사용하고 이름이 없으면
   `Axis 0`, `Axis 1` 형식으로 표시한다.
-- `04_io_control.json`: input read, output write와 I/O status를 제공한다.
-- `05_parameter_access.json`: Axis EtherCAT 및 I/O EtherCAT/AP/IO-Link parameter access와 지원하지
-  않는 요청의 Fail 처리를 제공한다.
-- `06_virtual_io_simulation.json`: Simulation API availability, DI/AI/IO-Link input write/read/reset과
-  기존 I/O feedback 반영을 보여준다.
+  단일 축 Dashboard는 유효 범위 내 축 선택, 16-bit Statusword Lamp와 CiA402 상태명, 현재/목표
+  위치와 현재 속도, 목표 위치와 Profile Velocity 입력을 제공한다. Enable, Disable, Run, Stop,
+  Homing, Fault Reset과 Refresh는 선택 축 API에 연결하며 Jog −/+는 pointer down에서 시작한다.
+  pointer up뿐 아니라 pointer leave와 pointer cancel에서도 정지하여 데스크톱 Panel의 Jog release/leave
+  안전 동작을 유지한다. 첫 feedback은 축 선택 목록과 실시간 표시만 초기화하며 목표 위치와 Profile
+  Velocity 입력값은 선택 축의 `system/axis/status` 응답만 반영한다.
+  Axis parameter catalog/read/write/save도 선택 축 Dashboard가 직접 제공한다.
+  Profile parameters, Motion Limits와 Software Position Limits는 선택 축 `system/axis/status`의 현재값과
+  단위를 표시하고 command authority 보유 시 기존 설정 API로 적용한다. 성공 후 status를 다시 조회하여
+  장치 readback 값으로 화면을 갱신한다.
+- `03_io_control.json`: 기존 I/O Control Panel과 유사한 Dashboard로 I/O device/module 상태, Raw Image,
+  Digital Output, EC/AP/IO-Link parameter catalog 및 read/write를 제공한다. Virtual Input Simulation은
+  포함하지 않고 `04_virtual_io_simulation.json`만 담당한다.
+- `04_virtual_io_simulation.json`: Simulation API availability, DI/AI/IO-Link input write/read/reset과
+  현재 Virtual CPX station/module 상태를 별도 Dashboard에서 제공한다. station/module 선택, DI boolean,
+  AI raw integer, IO-Link hexadecimal process data 입력과 module/station reset을 지원하며 command
+  authority는 요구하지 않는다.
+- `05_sample_motion_sequence.json`: `01`~`04`에서 제공한 기존 Request/Feedback 및 I/O 사용 방식을
+  표준 Node-RED Function node로 연결하는 application-level 예제다. 전용 Sequence node나 하나의 통합
+  상태 머신을 추가하지 않고 각 이동 명령, feedback 완료 조건, 외부 출력과 입력 조건을 독립된 node로
+  노출한다. 포함된 4축·I/O 값은 사용자가 Flow에서 교체할 수 있는 임의 예제값이다.
 - 각 파일은 별도로 관리하고 필요한 기능만 선택하여 import할 수 있게 유지한다. 다만 `01`을 먼저
-  import하며 `02`~`06`은 `01`이 소유한 하나의 Connection Config를 참조한다. 이를 통해 여러 Flow를
-  함께 사용할 때 중복 TCP 연결과 command authority 충돌을 방지한다.
-- 상태 변경, motion과 output command는 수동 Inject/Button으로만 실행한다. flow import 또는 deploy로
-  자동 실행하지 않으며 연결과 feedback 구독만 자동으로 시작한다.
+  import하며 `02`~`05`는 `01`이 소유한 하나의 Connection Config와 Dashboard Base/Theme을 참조한다.
+  이를 통해 여러 Flow를 함께 사용할 때 중복 TCP 연결, Dashboard와 command authority 충돌을 방지한다.
+- 연결, authority, 상태 변경, motion과 output command는 수동 Button/Inject로만 실행한다. Flow import
+  또는 deploy로 자동 실행하지 않으며 공통 Dashboard의 상태 구독만 준비한다.
 
 ## 검증 계획
 
@@ -162,13 +184,14 @@ Node-RED 같은 low-code 환경과 최소 Python 코드에서 Control Panel 없�
   유지되는지 검증한다.
 - 기본 queue 크기 100개와 생성 인자로 지정한 크기가 각각 적용되는지 검증한다.
 - Node-RED scenario flow가 공통 연결/request/feedback node를 재사용하는지 검증한다.
-- `01`만 Connection Config를 소유하고 `02`~`06`이 이를 공통으로 참조하며, 모든 Flow가 deploy만으로
+- `01`만 Connection Config와 Dashboard Base/Theme을 소유하고 `02`~`05`가 이를 공통으로 참조하며,
+  모든 Flow가 deploy만으로
   상태 변경 명령을 실행하지 않는지 검증한다.
-- Axis flow가 feedback의 전체 축 actual position/velocity를 axis별 graph series로 표시하는지 검증한다.
-- graph의 500 sample 제한, disconnect 초기화, reconnect 재시작과 axis name fallback을 검증한다.
+- Axis flow가 feedback에서 선택 축의 actual position/velocity만 graph로 표시하는지 검증한다.
+- graph의 500 sample 제한, 축 선택/disconnect 초기화, reconnect 재시작과 axis name fallback을 검증한다.
 - clean Node-RED 환경에서 FlowFuse Dashboard dependency 설치 후 Axis chart가 추가 수작업 없이
   구성되는지 검증한다.
-- 4종 공통 Custom Node의 lifecycle, correlation과 message routing을 자동 또는 Node-RED test helper로
+- 5종 공통 Custom Node의 lifecycle, correlation과 message routing을 자동 또는 Node-RED test helper로
   검증한다.
 - 같은 Config를 사용하는 node의 단일 socket/authority 공유와 서로 다른 Config 사이의 연결·상태
   격리를 검증한다.
@@ -213,13 +236,16 @@ Node-RED 같은 low-code 환경과 최소 Python 코드에서 Control Panel 없�
 - Request, Feedback, Connection Status의 runtime 및 editor UI를 구현한다.
 - 두 Request 출력, caller property/topic 보존, client error payload와 initial/change-only connection status를
   검증한다.
+- Dashboard는 Connection Status의 초기/change-only 알림과 함께 정상적인 주기 `system/feedback`
+  수신을 연결됨의 근거로 사용한다. 따라서 Dashboard가 늦게 열려 초기 상태 알림을 놓쳐도 다음
+  feedback에서 실제 socket 상태와 동기화되며, close/error/명시적 Disconnect 시에는 미연결로 전환한다.
 
 ### S05 공통/Scenario Flow 및 Dashboard
 
-- 공통 기반 `01`·`02`와 기능 Scenario `03`~`06`을 별도 example flow로 작성하되 하나의
-  Connection Config를 공유한다.
-- Axis flow에 FlowFuse Dashboard 기반 전체 축 position/velocity 500-sample graph와 disconnect reset을
-  구현한다.
+- 연결·제어권 Dashboard를 포함한 공통 기반 `01`과 기능 Scenario `02`~`05`를 별도 example flow로
+  작성하되 하나의 Connection Config와 Dashboard Base/Theme을 공유한다.
+- Axis flow에 FlowFuse Dashboard 기반 선택 축 position/velocity 500-sample graph와 축 선택/disconnect
+  reset을 구현한다.
 
 ### S06 설치 및 Smoke 검증
 
@@ -237,14 +263,16 @@ Node-RED 같은 low-code 환경과 최소 Python 코드에서 Control Panel 없�
 
 - 독립 Python package에 thread-safe request correlation, feedback queue, timeout, 연결 단절 및 1초
   재연결을 구현하고 자동 테스트 8개를 추가했다.
-- 독립 Node-RED package에 Connection Config, Request, Feedback, Connection Status 4종을 구현하고
-  lifecycle/correlation/routing 자동 테스트 6개를 추가했다.
-- `01` connection/status와 `02` authority는 공통 기반 Flow로, `03`~`06`은 기능 Scenario Flow로
-  구성했다. `01`만 Connection Config를 소유하고 나머지 Flow는 이를 공유한다.
-- Axis Flow에 첫 feedback 기준 축 수 고정, 축별 actual position/velocity series, 500 sample 제한과
-  연결 단절 시 graph 초기화를 구현했다.
+- 독립 Node-RED package에 Connection Config, Connection Control, Request, Feedback, Connection Status
+  5종을 구현하고 lifecycle/correlation/routing 자동 테스트 7개를 추가했다.
+- connection/status와 authority를 하나의 `01` 공통 Flow 및 Dashboard로 통합하고 `02`~`05`는 기능
+  Scenario Flow로 구성했다. `01`만 Connection Config와 Dashboard Base/Theme을 소유하고 나머지
+  Flow는 이를 공유한다.
+- Axis Flow에 첫 feedback 기준 축 수 고정, 선택 축 actual position/velocity series, 500 sample 제한과
+  축 선택 및 연결 단절 시 graph 초기화를 구현했다. 데스크톱 Axis Control Panel과 유사한 축 선택, Statusword
+  Lamp, 운전 버튼, 위치/속도 입력과 press-and-hold Jog 제어도 Dashboard에 구현했다.
 - mock Motion Server에서 Python client의 `system/server/status` Success와 `system/feedback` 수신을
   확인했다.
-- 전체 Python unittest 327개와 Node-RED test 6개가 통과했고 production dependency audit 결과는
+- 전체 Python unittest 329개와 Node-RED test 7개가 통과했고 production dependency audit 결과는
   취약점 0개였다. Python wheel과 Node-RED tarball을 각각 깨끗한 대상 폴더에 설치하여 import/install을
   확인했으며 source compile, Node syntax와 whitespace 검사도 통과했다.

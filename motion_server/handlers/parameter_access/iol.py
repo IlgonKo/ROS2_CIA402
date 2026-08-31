@@ -1,6 +1,7 @@
 import struct
 import time
 
+from device.cpx_ap_i_ec.isdu_gateway import isdu_access_object_index
 from motion_server.api.validator import parse_int
 from motion_server.failure import (
     DeviceAccessException,
@@ -13,8 +14,6 @@ from motion_server.failure import (
 )
 
 
-ISDU_ACCESS_BASE_INDEX = 0x2001
-ISDU_ACCESS_INDEX_STEP = 0x10
 ISDU_DIRECTION_READ = 0
 ISDU_DIRECTION_WRITE = 1
 ISDU_MAX_DATA_BYTES = 238
@@ -247,10 +246,6 @@ def validate_isdu_target(runtime, request):
         raise ResourceNotFoundException("io", request["io"]) from exception
 
 
-def isdu_access_object_index(module):
-    return ISDU_ACCESS_BASE_INDEX + int(module) * ISDU_ACCESS_INDEX_STEP
-
-
 def validate_isdu_request_against_iodd(runtime, request, access):
     binding = iodd_binding_for_request(runtime, request)
     variable = iodd_variable_for_index(binding, request["index"])
@@ -323,7 +318,38 @@ def validate_iodd_subindex(variable, request):
 
 
 def isdu_sdo_step(step, request, operation, *args, **kwargs):
-    return operation(*args, **kwargs)
+    try:
+        return operation(*args, **kwargs)
+    except DeviceRejectedException as exception:
+        raise DeviceRejectedException(
+            operation=exception.operation,
+            device_code=exception.device_code,
+            isdu_step=step,
+            sdo_index=sdo_index_arg(args),
+            sdo_subindex=sdo_subindex_arg(args),
+            sdo_value=sdo_value_arg(args),
+        ) from exception
+
+
+def sdo_index_arg(args):
+    if len(args) < 2:
+        return None
+    return f"0x{int(args[1]):04X}"
+
+
+def sdo_subindex_arg(args):
+    if len(args) < 3:
+        return None
+    return int(args[2])
+
+
+def sdo_value_arg(args):
+    if len(args) < 4:
+        return None
+    value = args[3]
+    if isinstance(value, (bytes, bytearray)):
+        return bytes(value).hex()
+    return int(value)
 
 
 def read_isdu_data_payload(runtime, slave_index, request, read_length):

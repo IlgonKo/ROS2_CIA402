@@ -165,7 +165,7 @@ class CPXApModule:
 class CPXApLayout:
     modules: tuple[CPXApModule, ...]
     station_input_bytes: int = 0
-    station_output_bytes: int = 1
+    station_output_bytes: int = 0
 
     @property
     def input_bytes(self):

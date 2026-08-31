@@ -303,7 +303,9 @@ class CMMTDeviceProfile:
     def validate_pdo_mapping(self, slave_index, label, expected, actual):
         expected = list(expected)
         actual = list(actual)
-        if actual == expected:
+        if self.normalized_pdo_mapping_entries(actual) == (
+            self.normalized_pdo_mapping_entries(expected)
+        ):
             return
 
         raise RuntimeError(
@@ -312,6 +314,27 @@ class CMMTDeviceProfile:
             f"Actual {label}:\n{self.format_pdo_entries(actual)}\n"
             "Configure the drive PDO mapping before starting Motion Server."
         )
+
+    @classmethod
+    def normalized_pdo_mapping_entries(cls, entries):
+        return [
+            0x00000000 | cls.pdo_mapping_bit_length(entry)
+            if cls.is_pdo_padding_entry(entry)
+            else int(entry)
+            for entry in entries
+        ]
+
+    @staticmethod
+    def is_pdo_padding_entry(entry):
+        entry = int(entry)
+        index = (entry >> 16) & 0xFFFF
+        subindex = (entry >> 8) & 0xFF
+        bit_length = entry & 0xFF
+        return index < 0x0010 and subindex == 0 and bit_length > 0
+
+    @staticmethod
+    def pdo_mapping_bit_length(entry):
+        return int(entry) & 0xFF
 
     @staticmethod
     def format_pdo_entries(entries):

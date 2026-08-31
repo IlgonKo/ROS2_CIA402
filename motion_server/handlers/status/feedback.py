@@ -48,7 +48,10 @@ def system_feedback_message(runtime, state, client_id=None):
     if devices:
         message["io"] = {
             "devices": [
-                io_device_snapshot(device, include_raw=False)
+                io_device_snapshot(
+                    device, include_raw=False,
+                    process_data_valid=message["process_data_valid"],
+                )
                 for device in devices
             ],
         }

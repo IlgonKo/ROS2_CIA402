@@ -68,6 +68,7 @@ from motion_server.failure import CommunicationException
 from motion_server.app.client_transport import (
     allocate_client_id,
     close_client,
+    flush_client_output,
     send_feedback_if_due,
     service_client,
 )
@@ -268,6 +269,7 @@ def run_server_loop(
                     "addr": addr,
                     "conn": conn,
                     "buffer": "",
+                    "output_buffer": bytearray(),
                     "last_feedback_time": 0.0,
                 }
                 clients.append(client)
@@ -289,6 +291,7 @@ def run_server_loop(
                     state,
                     server_config.feedback_period,
                 )
+                flush_client_output(client)
             except OSError as exc:
                 print(
                     f"Client connection error: id={client['id']} error={exc}",
@@ -328,6 +331,7 @@ def run_bus_disconnected_loop(
                     "addr": addr,
                     "conn": conn,
                     "buffer": "",
+                    "output_buffer": bytearray(),
                     "last_feedback_time": 0.0,
                 }
             )
@@ -346,6 +350,7 @@ def run_bus_disconnected_loop(
                     state,
                     feedback_period,
                 )
+                flush_client_output(client)
             except OSError:
                 close_client(client, runtime, state)
                 clients.remove(client)
@@ -381,6 +386,7 @@ def run_degraded_server_loop(
                 "conn": conn,
                 "addr": addr,
                 "buffer": "",
+                "output_buffer": bytearray(),
                 "last_feedback_time": 0.0,
             }
             clients.append(client)
@@ -403,6 +409,7 @@ def run_degraded_server_loop(
                         else 0.05
                     ),
                 )
+                flush_client_output(client)
             except (ConnectionError, OSError, json.JSONDecodeError) as exc:
                 print(
                     f"Client error: id={client['id']} error={exc}",

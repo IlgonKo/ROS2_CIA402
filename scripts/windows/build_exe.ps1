@@ -12,6 +12,7 @@ $ProjectRoot = Resolve-Path (Join-Path $ScriptDir "..\..")
 $PackageRoot = Join-Path $ProjectRoot "dist\Motion Server"
 $ToolsRoot = Join-Path $PackageRoot "Tools"
 $PanelToolRoot = Join-Path $ToolsRoot "axis_control_panel"
+$IoPanelToolRoot = Join-Path $ToolsRoot "io_control_panel"
 $ManualRoot = Join-Path $PackageRoot "Manual"
 $MotionServerIconPng = Join-Path $ProjectRoot "Reference\Motion Server.png"
 $MotionServerIconIco = Join-Path $ProjectRoot "packaging\motion_server.ico"
@@ -31,7 +32,6 @@ function Copy-WindowsConfig {
     $content = Get-Content -LiteralPath $Source -Raw
     $content = $content.Replace("device/cmmt/.env", "device/cmmt/config.txt")
     $content = $content.Replace("device/cpx_ap_i_ec/.env", "device/cpx_ap_i_ec/config.txt")
-    $content = $content.Replace("device/virtual_servo_drive/.env", "device/virtual_servo_drive/config.txt")
     Set-Content -LiteralPath $Destination -Value $content -NoNewline
 }
 
@@ -79,23 +79,29 @@ try {
         throw "axis_control_panel PyInstaller build failed"
     }
 
+    & $Python -B -m PyInstaller "packaging\io_control_panel.spec" --noconfirm --distpath "dist\pyinstaller" --workpath "build\pyinstaller"
+    if ($LASTEXITCODE -ne 0) {
+        throw "io_control_panel PyInstaller build failed"
+    }
+
     New-Item -ItemType Directory -Force $PackageRoot | Out-Null
     Copy-Item -Recurse -Force "dist\pyinstaller\motion_server\*" $PackageRoot
 
     New-Item -ItemType Directory -Force (Join-Path $PackageRoot "device\cmmt") | Out-Null
     New-Item -ItemType Directory -Force (Join-Path $PackageRoot "device\cpx_ap_i_ec") | Out-Null
-    New-Item -ItemType Directory -Force (Join-Path $PackageRoot "device\virtual_servo_drive") | Out-Null
     New-Item -ItemType Directory -Force (Join-Path $PackageRoot "Reference") | Out-Null
     New-Item -ItemType Directory -Force $ManualRoot | Out-Null
     New-Item -ItemType Directory -Force $ToolsRoot | Out-Null
     New-Item -ItemType Directory -Force $PanelToolRoot | Out-Null
+    New-Item -ItemType Directory -Force $IoPanelToolRoot | Out-Null
     Copy-Item -Recurse -Force "dist\pyinstaller\axis_control_panel\*" $PanelToolRoot
+    Copy-Item -Recurse -Force "dist\pyinstaller\io_control_panel\*" $IoPanelToolRoot
 
     Copy-WindowsConfig ".env.example" (Join-Path $PackageRoot "config.example.txt")
     Copy-WindowsConfig "device\cmmt\.env.example" (Join-Path $PackageRoot "device\cmmt\config.example.txt")
     Copy-WindowsConfig "device\cpx_ap_i_ec\.env.example" (Join-Path $PackageRoot "device\cpx_ap_i_ec\config.example.txt")
-    Copy-WindowsConfig "device\virtual_servo_drive\.env.example" (Join-Path $PackageRoot "device\virtual_servo_drive\config.example.txt")
     Copy-WindowsConfig "control_panel\axis_control_panel\.env.example" (Join-Path $PanelToolRoot "config.example.txt")
+    Copy-WindowsConfig "control_panel\io_control_panel\.env.example" (Join-Path $IoPanelToolRoot "config.example.txt")
     Copy-Item -Force "Reference\cmmt_error_catalog.json" (Join-Path $PackageRoot "Reference\cmmt_error_catalog.json")
     $manualFiles = Get-ChildItem -Path "docs" -File -Filter "Motion_Server_*_Manual*"
     foreach ($manualFile in $manualFiles) {
@@ -121,11 +127,11 @@ try {
         if (Test-Path "device\cpx_ap_i_ec\.env") {
             Copy-WindowsConfig "device\cpx_ap_i_ec\.env" (Join-Path $PackageRoot "device\cpx_ap_i_ec\config.txt")
         }
-        if (Test-Path "device\virtual_servo_drive\.env") {
-            Copy-WindowsConfig "device\virtual_servo_drive\.env" (Join-Path $PackageRoot "device\virtual_servo_drive\config.txt")
-        }
         if (Test-Path "control_panel\axis_control_panel\.env") {
             Copy-WindowsConfig "control_panel\axis_control_panel\.env" (Join-Path $PanelToolRoot "config.txt")
+        }
+        if (Test-Path "control_panel\io_control_panel\.env") {
+            Copy-WindowsConfig "control_panel\io_control_panel\.env" (Join-Path $IoPanelToolRoot "config.txt")
         }
     }
 

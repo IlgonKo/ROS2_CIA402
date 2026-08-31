@@ -172,6 +172,37 @@ class IoModuleConfig:
 class IoLinkPortConfig:
     selector: str
     device_name: str
+    process_data_profile: int | None = None
+
+    @classmethod
+    def from_declaration(cls, declaration):
+        parts = [part.strip() for part in declaration.split(":")]
+        if (
+            len(parts) not in (2, 3)
+            or not parts[0]
+            or (len(parts) == 3 and not parts[2])
+        ):
+            raise ValueError(
+                f"Invalid IO-Link port declaration {declaration!r}; expected "
+                "<port>:<iodd_key>[:<process_data_profile>]"
+            )
+        profile = None
+        if len(parts) == 3:
+            try:
+                profile = int(parts[2], 10)
+            except ValueError as exc:
+                raise ValueError("IO-Link process data profile must be a numeric Condition value") from exc
+            if profile < 0:
+                raise ValueError("IO-Link process data profile must be non-negative")
+        if profile is not None and parts[1].lower() in {"", "none", "null", "-"}:
+            raise ValueError("IO-Link process data profile requires an IODD device")
+        return cls(parts[0], parts[1], profile)
+
+    def to_declaration(self):
+        declaration = f"{self.selector}:{self.device_name}"
+        if self.process_data_profile is not None:
+            declaration += f":{self.process_data_profile}"
+        return declaration
 
 
 @dataclass(frozen=True)

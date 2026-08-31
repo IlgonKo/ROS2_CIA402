@@ -31,7 +31,7 @@ class CPXApIEcDeviceProfile:
             for module in device_config.modules
         )
         raw_ports = ",".join(
-            f"{port.selector}:{port.device_name}"
+            port.to_declaration()
             for port in device_config.io_link_ports
         )
         try:
@@ -65,24 +65,24 @@ class CPXApIEcDeviceProfile:
         txpdo = master.slaves[slave_index].txpdo
         configure_io_link_variants(master, slave_index, self.config)
         configure_ap_module_idents(master, slave_index, self.config)
-        device_output_bytes = self.process_image_bytes(
-            master,
+        output_entries = master.read_assigned_pdo_mapping_entries(
             slave_index,
             0x1C12,
         )
-        device_input_bytes = self.process_image_bytes(
-            master,
+        input_entries = master.read_assigned_pdo_mapping_entries(
             slave_index,
             0x1C13,
         )
 
-        self.pdo_configuration.validate_actual_process_image(
-            slave_index,
-            device_output_bytes,
-            device_input_bytes,
+        device_output_bytes, device_input_bytes = (
+            self.pdo_configuration.validate_actual_process_image(
+                slave_index,
+                output_entries,
+                input_entries,
+            )
         )
-        rxpdo.resize(self.pdo_configuration.output_bytes)
-        txpdo.resize(self.pdo_configuration.input_bytes)
+        rxpdo.resize(device_output_bytes)
+        txpdo.resize(device_input_bytes)
         print(
             "Slave "
             f"{slave_index}: CPX-AP-I-EC process image "
@@ -93,14 +93,6 @@ class CPXApIEcDeviceProfile:
             f"DO={self.config.digital_outputs} AO={self.config.analog_outputs}",
             flush=True,
         )
-
-    def process_image_bytes(self, master, slave_index, assignment_index):
-        entries = master.read_assigned_pdo_mapping_entries(
-            slave_index,
-            assignment_index,
-        )
-        total_bits = sum(int(entry) & 0xFF for entry in entries)
-        return (total_bits + 7) // 8
 
     def configure_sync_parameters(
         self,

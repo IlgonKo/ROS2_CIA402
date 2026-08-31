@@ -153,7 +153,14 @@ EXCEPTION_FAILURE_MAPPINGS = {
     DeviceRejectedException: ExceptionFailureMapping(
         FailureCode.DEVICE_REJECTED,
         "The device rejected the request.",
-        (("operation", "operation"), ("device_code", "device_code")),
+        (
+            ("operation", "operation"),
+            ("device_code", "device_code"),
+            ("isdu_step", "isdu_step"),
+            ("sdo_index", "sdo_index"),
+            ("sdo_subindex", "sdo_subindex"),
+            ("sdo_value", "sdo_value"),
+        ),
     ),
     SdoObjectNotFoundException: ExceptionFailureMapping(
         FailureCode.RESOURCE_NOT_FOUND,

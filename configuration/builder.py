@@ -319,10 +319,7 @@ def build_cpx_config(values, bus_device):
     raw_ports = value(values, f"MOTION_SERVER_IO_{logical_id}_IOL_PORTS", "")
     ports = []
     for declaration in split_config_list(raw_ports):
-        if ":" not in declaration:
-            raise ValueError(f"Invalid IO-Link port declaration: {declaration!r}")
-        selector, device_name = declaration.split(":", 1)
-        ports.append(IoLinkPortConfig(selector.strip(), device_name.strip()))
+        ports.append(IoLinkPortConfig.from_declaration(declaration))
     return CpxApIEcDeviceConfig(
         profile_name=bus_device.profile,
         logical_id=logical_id,

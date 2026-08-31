@@ -10,10 +10,12 @@ from motion_server.failure import (
     OperationTimeoutException,
     ResourceNotFoundException,
 )
+from motion_server.failure.mapping import map_exception
 from motion_server.handlers.parameter_access.iol import (
     ISDU_STATUS_BUSY,
     _read_iol_parameter,
     _write_iol_parameter,
+    isdu_access_object_index,
     read_iol_parameter,
 )
 
@@ -22,16 +24,27 @@ class FakeSdo:
     def __init__(self, status=0, exception=None):
         self.status = status
         self.exception = exception
+        self.calls = []
 
     def _check(self):
         if self.exception is not None:
             raise self.exception
 
-    def write_uint8(self, *args): self._check()
-    def write_uint16(self, *args): self._check()
-    def read_uint8(self, *args): self._check(); return 2
+    def write_uint8(self, *args):
+        self._check()
+        self.calls.append(("write_uint8", args))
+
+    def write_uint16(self, *args):
+        self._check()
+        self.calls.append(("write_uint16", args))
+
+    def read_uint8(self, *args):
+        self._check()
+        self.calls.append(("read_uint8", args))
+        return 2
     def read_uint16(self, slave, index, subindex):
         self._check()
+        self.calls.append(("read_uint16", (slave, index, subindex)))
         return self.status
 
 
@@ -98,16 +111,25 @@ def message(**updates):
 
 
 class IolParameterHandlerTest(unittest.TestCase):
+    def test_isdu_access_object_index_uses_first_module_base_object(self):
+        self.assertEqual(isdu_access_object_index(1), 0x2001)
+        self.assertEqual(isdu_access_object_index(2), 0x2011)
+
     def test_isdu_read_returns_structured_data(self):
-        data = _read_iol_parameter(message(), runtime())
+        active = runtime()
+        data = _read_iol_parameter(message(), active)
         self.assertEqual(data["value"], 42)
-        self.assertEqual(data["object_index"], "0x2011")
+        self.assertEqual(data["object_index"], "0x2001")
+        used_indices = [call[1][1] for call in active.ethercat_master.sdo.calls]
+        self.assertTrue(used_indices)
+        self.assertEqual(set(used_indices), {0x2001})
 
     def test_isdu_write_returns_payload_metadata(self):
         active = runtime()
         data = _write_iol_parameter(
             message(type="system/io/iol/param_write", value=43), active,
         )
+        self.assertEqual(data["object_index"], "0x2001")
         self.assertEqual(data["data"], "2b00")
         self.assertEqual(len(active.ethercat_master.raw_writes[0]), 238)
 
@@ -141,6 +163,18 @@ class IolParameterHandlerTest(unittest.TestCase):
         with self.assertRaises(DeviceRejectedException) as caught:
             _read_iol_parameter(message(), runtime(status=0x1234))
         self.assertEqual(caught.exception.device_code, 0x1234)
+
+    def test_sdo_reject_includes_isdu_step_details(self):
+        rejected = DeviceRejectedException("sdo_write", device_code=0x06090030)
+        with self.assertRaises(DeviceRejectedException) as caught:
+            _read_iol_parameter(message(), runtime(exception=rejected))
+        failure = map_exception(caught.exception)
+        self.assertEqual(failure.details["operation"], "sdo_write")
+        self.assertEqual(failure.details["device_code"], 0x06090030)
+        self.assertEqual(failure.details["isdu_step"], "write port")
+        self.assertEqual(failure.details["sdo_index"], "0x2001")
+        self.assertEqual(failure.details["sdo_subindex"], 2)
+        self.assertEqual(failure.details["sdo_value"], 1)
 
     def test_backend_exception_is_not_wrapped(self):
         expected = CommunicationTimeoutException("sdo_write")

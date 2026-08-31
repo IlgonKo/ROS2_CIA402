@@ -79,7 +79,7 @@ class VirtualCpxPdoConfigurationTest(unittest.TestCase):
     def test_selects_smallest_fixed_esi_process_image(self):
         profile = cpx_profile((1, "do:8"), (2, "di:8"))
 
-        self.assertEqual(profile.config.output_bytes, 2)
+        self.assertEqual(profile.config.output_bytes, 1)
         self.assertEqual(profile.config.input_bytes, 1)
         self.assertEqual(profile.pdo_configuration.output_bytes, 16)
         self.assertEqual(profile.pdo_configuration.input_bytes, 16)
@@ -90,17 +90,17 @@ class VirtualCpxPdoConfigurationTest(unittest.TestCase):
             1,
         )
 
-    def test_selects_larger_block_when_layout_crosses_boundary(self):
+    def test_output_boundary_is_not_inflated_by_station_byte(self):
         profile = cpx_profile(
             (1, "iol:4:in8:out8"),
             (2, "iol:4:in8:out8"),
         )
 
-        self.assertEqual(profile.config.output_bytes, 17)
+        self.assertEqual(profile.config.output_bytes, 16)
         self.assertEqual(profile.config.input_bytes, 24)
-        self.assertEqual(profile.pdo_configuration.output_bytes, 32)
+        self.assertEqual(profile.pdo_configuration.output_bytes, 16)
         self.assertEqual(profile.pdo_configuration.input_bytes, 32)
-        self.assertEqual(profile.pdo_configuration.rxpdo_info.index, 0x1711)
+        self.assertEqual(profile.pdo_configuration.rxpdo_info.index, 0x1710)
         self.assertEqual(profile.pdo_configuration.txpdo_info.index, 0x1B11)
 
 
@@ -254,7 +254,7 @@ class VirtualCpxGatewayTest(unittest.TestCase):
         profile = cpx_profile((1, "iol:4:in8:out8"))
         master, device = virtual_cpx_master(profile, isdu_gateway=gateway)
         master.connect(target_state="preop")
-        index = 0x2011
+        index = 0x2001
 
         master.sdo.write_uint8(0, index, 2, 3)
         master.sdo.write_uint16(0, index, 3, 0x20)

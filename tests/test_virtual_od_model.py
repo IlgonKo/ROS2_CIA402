@@ -83,6 +83,31 @@ class VirtualOdModelTest(unittest.TestCase):
     def test_required_non_pdo_contract_does_not_own_runtime_default(self):
         self.assertNotIn("default", {field.name for field in fields(RequiredNonPdoOdRole)})
 
+    def test_cmmt_pdo_validation_accepts_vendor_padding_object(self):
+        profile = CMMTASDeviceProfile(axis_index=0, slave_index=0)
+        actual = list(profile.expected_rxpdo_mapping_entries())
+        actual[-1] = 0x000C0008
+
+        profile.validate_pdo_mapping(
+            0,
+            "RxPDO",
+            profile.expected_rxpdo_mapping_entries(),
+            actual,
+        )
+
+    def test_cmmt_pdo_validation_still_rejects_real_field_mismatch(self):
+        profile = CMMTASDeviceProfile(axis_index=0, slave_index=0)
+        actual = list(profile.expected_rxpdo_mapping_entries())
+        actual[2] = 0x607B0020
+
+        with self.assertRaisesRegex(RuntimeError, "RxPDO mapping mismatch"):
+            profile.validate_pdo_mapping(
+                0,
+                "RxPDO",
+                profile.expected_rxpdo_mapping_entries(),
+                actual,
+            )
+
     def test_esi_catalog_and_profile_metadata_build_one_od_model(self):
         profile = CMMTASDeviceProfile(axis_index=0, slave_index=0)
         od = VirtualObjectDictionary(profile)

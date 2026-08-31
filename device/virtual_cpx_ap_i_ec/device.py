@@ -1,3 +1,4 @@
+from device.cpx_ap_i_ec.isdu_gateway import isdu_access_object_index
 from device.virtual_cpx_ap_i_ec.module import VirtualApModule
 from device.virtual_cpx_ap_i_ec.od_model import VirtualCpxOdModel
 
@@ -86,7 +87,7 @@ class VirtualCpxApDevice:
         for slot, module in self.modules.items():
             if module.module.module_type != "iol":
                 continue
-            index = 0x2001 + slot * 0x10
+            index = isdu_access_object_index(slot)
             if key == (index, 1):
                 self._dispatch_isdu_request(slot, index)
                 return

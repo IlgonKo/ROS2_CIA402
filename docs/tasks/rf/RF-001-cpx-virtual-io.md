@@ -71,6 +71,11 @@ Virtual module input state
 - DO-DI, AO-AI와 IO-Link output-input을 자동 loopback하지 않는다.
 - IO-Link process data는 port별 raw byte buffer로만 처리하고 크기는 현재 IODD 및 선택된 module
   variant를 사용한다. IODD variable 의미에 따른 device 반응은 RF-001 범위가 아니다.
+- `IOL_PORTS`의 선택적 세 번째 항목은 IODD `Condition value`의 0 이상 십진 정수다.
+  이름이나 배열 순번이 아니며 미정의/중복 번호는 거부한다. 생략하면 문서 순서의 첫
+  profile을 선택하고, 포트별 binding에 보관된 profile의 크기로 module variant와 catalog를
+  구성한다. 존재하지 않는 profile과 명시적 module 용량 초과는 거부한다. 기존 두 항목 문법,
+  다중 module selector와 `none`은 유지한다. 실제 IO-Link 장치의 mode 전환은 수행하지 않는다.
 
 ## 선행 책임 경계
 
@@ -141,3 +146,17 @@ Virtual module input state
   혼합 runtime 회귀 테스트에서 같은 응답 계약을 검증했다.
 - 실제 CPX와의 통신 sequence 비교는 기존 CPX DeviceProfile 및 codec을 그대로 재사용하는 것으로
   확보했다. firmware timing, 실제 I/O 전기 신호와 parameter device 반응은 위 표의 제외 범위다.
+
+### 2026-08-31 PDO 크기 회귀 수정
+
+- 위 공통 코드 재사용 및 가상 readback 시험은 실장치 PDO 매핑 일치의 독립 검증이 아니었다.
+  Variant 32 실장치 출력 128바이트에 대해 station 출력 1바이트를 더하고 fixed block으로
+  올림하여 256바이트를 요구하는 회귀를 확인했다.
+- station 크기는 interface module ESI를 사용한다. PRE-OP readback은 ESI의 slot별 module
+  mapping 또는 선택된 static mapping과 객체, 순서, bit 길이 및 padding까지 일치해야 한다.
+  양방향 검증 후 Master PDO buffer를 실제 mapping 크기로 확정한다.
+- Virtual CPX의 16-byte OD block 모델은 유지한다. Variant 32의 modular image는 출력 128,
+  입력 132바이트이고, virtual static image는 출력 128, 입력 256바이트다.
+- 독립적인 Variant 32 mapping fixture와 IODD 자동 산정, 잘못된 주소/순서/크기 거부,
+  실제 길이 codec 및 virtual transport 시험을 포함하여 전체 unittest 341개가 통과했다.
+  실장치 재연결 검증은 Windows 패키지 교체 후 별도로 수행해야 한다.

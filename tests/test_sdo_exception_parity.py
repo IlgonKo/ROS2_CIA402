@@ -78,6 +78,28 @@ class FakePysoemSlave:
         self.written = bytes(payload)
 
 
+class FlakyPysoemSlave:
+    def __init__(self, exception, *, failures_before_success=1, payload=b"\x2A\x00"):
+        self.exception = exception
+        self.failures_before_success = int(failures_before_success)
+        self.payload = payload
+        self.read_attempts = 0
+        self.write_attempts = 0
+        self.written = None
+
+    def sdo_read(self, index, subindex, *, size):
+        self.read_attempts += 1
+        if self.read_attempts <= self.failures_before_success:
+            raise self.exception
+        return self.payload[:size]
+
+    def sdo_write(self, index, subindex, payload):
+        self.write_attempts += 1
+        if self.write_attempts <= self.failures_before_success:
+            raise self.exception
+        self.written = bytes(payload)
+
+
 class FailingTransport:
     def __init__(self, exception=None, payload=b"\x2A\x00"):
         self.exception = exception
@@ -109,7 +131,10 @@ def pysoem_master(slave):
     master._pysoem = SimpleNamespace(
         SdoError=FakeSdoError,
         MailboxError=FakeMailboxError,
+        PacketError=FakeMailboxError,
     )
+    master.sdo_communication_retry_count = 3
+    master.sdo_communication_retry_delay_s = 0
     return master
 
 
@@ -198,6 +223,28 @@ class SdoExceptionParityTest(unittest.TestCase):
                         caught.exception,
                         CommunicationTimeoutException,
                     )
+
+    def test_pysoem_retries_transient_sdo_communication_failures(self):
+        for operation in ("read", "write"):
+            slave = FlakyPysoemSlave(
+                FakeMailboxError("transient mailbox"),
+                failures_before_success=2,
+            )
+            master = pysoem_master(slave)
+
+            self.assertEqual(invoke_raw(master, operation), None if operation == "write" else b"\x2A\x00")
+            self.assertEqual(slave.read_attempts if operation == "read" else slave.write_attempts, 3)
+
+    def test_pysoem_still_fails_after_sdo_retry_budget(self):
+        slave = FlakyPysoemSlave(
+            FakeMailboxError("persistent mailbox"),
+            failures_before_success=3,
+        )
+        master = pysoem_master(slave)
+
+        with self.assertRaises(CommunicationException):
+            invoke_raw(master, "read")
+        self.assertEqual(slave.read_attempts, 3)
 
     def test_unexpected_exception_is_not_hidden(self):
         for operation in ("read", "write"):

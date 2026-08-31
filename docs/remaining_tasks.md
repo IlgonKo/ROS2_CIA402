@@ -200,6 +200,19 @@ Tech Debt 상태 값은 `open`, `in_progress`, `complete`를 사용한다.
   - Control Panel과 외부 reference client 시나리오 및 자동 테스트가 통과한다.
 - 상세: [RF-014 기능 명세](tasks/rf/RF-014-virtual-device-simulation-api.md)
 
+### RF-015 IO-Link IODD 기반 Feedback 디코딩
+
+- 상태: `complete`
+- 우선순위: 보통
+- 요약: IO-Link 포트별 raw 데이터와 qualifier를 유지하면서 선택된 IODD profile의 측정값·단위·상태 bit 해석 결과를 Feedback에 제공한다.
+- 검증: 디코딩 16개 포함 전체 unittest 374개 통과. 4-port snapshot/JSON 약 0.15ms·14KB. 실센서 대조와 EXE 재빌드는 미수행.
+- 완료 조건:
+  - 포트별 raw/qualifier/decoded 응답 구조, 필드 식별자와 데이터 유효성 정책이 확정되고 API 문서에 반영된다.
+  - 숫자로 선택한 profile 및 생략 시 첫 profile의 IODD metadata로 측정값과 상태 bit를 정확히 해석한다.
+  - 미설정 IODD, 미지원 형식과 무효 입력을 정상 측정값과 구분하며 raw 데이터와 나머지 Feedback은 유지한다.
+  - 독립 raw fixture, 다중 포트 격리, real/mock parity와 주기 Feedback 성능 회귀 검증이 통과한다.
+- 상세: [RF-015 기능 명세](tasks/rf/RF-015-io-link-feedback-decoding.md)
+
 ## Tech Debt
 
 ### TD-003 Axis Server 과거 명칭 잔존
@@ -547,3 +560,28 @@ Tech Debt 상태 값은 `open`, `in_progress`, `complete`를 사용한다.
     readback을 검증한 뒤 실제 mapping을 MasterPdoRuntime에 적용한다.
   - `DEC-034`, TD-029와 RF-001 문서가 최종 책임 구조와 일치한다.
 - 상세: [TD-030 기술 명세](tasks/td/TD-030-mock-pdo-transport-parity.md)
+
+### TD-031 Bus 단절 중 장치 조회 차단 및 요청 오류 격리
+
+- 상태: `open`
+- 우선순위: 높음
+- 요약: Bus 단절 중 장치 통신이 필요한 조회를 차단하고 요청 오류가 서버 전체 중단으로 이어지지 않도록 예외 경계를 정리한다.
+- 완료 조건:
+  - 단절 중 AP/IOL/EtherCAT 장치 접근 조회가 SDO 호출 전에 기존 Fail로 거부되고 상태/Feedback/recovery는 유지된다.
+  - 조회 검증 이후 transport가 닫혀도 통신 Fail로 처리되며 일반 RuntimeError로 오분류하지 않는다.
+  - malformed request와 client 오류가 listener/다른 client를 종료하지 않고 normal/disconnected/degraded loop 회귀가 통과한다.
+  - 동일 TCP의 후속 상태 조회와 reconnect 후 파라미터 조회를 검증하고, 실제 다운 신고와 최초 단절 원인의 확인/미확인 근거를 기록한다.
+- 상세: [TD-031 기술 명세](tasks/td/TD-031-disconnected-request-isolation.md)
+
+### TD-032 CPX IO-Link ISDU Parameter Read/Write 실패
+
+- 상태: `open`
+- 우선순위: 높음
+- 요약: 실장치 CPX-AP-I-4IOL-M12에서 IO-Link parameter read/write가 ISDU gateway의 port 선택 단계에서 거부되는 원인을 확정하고 request sequence를 수정한다.
+- 완료 조건:
+  - CPX-AP-I-EC ESI와 공개 Festo/IO-Link master 문서 근거로 `0x2001` ISDU access object의 module/port/index/subindex/direction 계약을 확정한다.
+  - 실장치 기준 `system/io/iol/param_read`와 `system/io/iol/param_write`가 설정된 IO-Link port에서 성공한다.
+  - 실패 시 어느 ISDU 단계, SDO index/subindex/value, device abort/status에서 거부되었는지 API Fail details에 남긴다.
+  - process data가 유효한 port와 acyclic ISDU 접근 가능 상태를 혼동하지 않도록 문서와 테스트를 보완한다.
+  - Mock/Virtual CPX gateway 회귀 테스트가 실장치 sequence 변경과 같은 계약을 검증한다.
+- 상세: [TD-032 기술 명세](tasks/td/TD-032-cpx-iol-isdu-parameter-access.md)

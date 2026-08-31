@@ -136,8 +136,21 @@ class DeviceAccessException(DeviceException):
 
 
 class DeviceRejectedException(DeviceException):
-    def __init__(self, operation=None, device_code=None):
+    def __init__(
+        self,
+        operation=None,
+        device_code=None,
+        *,
+        isdu_step=None,
+        sdo_index=None,
+        sdo_subindex=None,
+        sdo_value=None,
+    ):
         self.device_code = device_code
+        self.isdu_step = isdu_step
+        self.sdo_index = sdo_index
+        self.sdo_subindex = sdo_subindex
+        self.sdo_value = sdo_value
         super().__init__(operation)
 
 

@@ -4,21 +4,190 @@
 날짜는 기본적으로 Git commit 날짜를 기준으로 정리했고, 아직 commit되지 않은 작업은 현재 작업일 기준으로 별도 기록한다.
 미완료 기능과 기술 부채는 [Remaining Tasks](remaining_tasks.md)에서 별도로 관리한다.
 
+## 2026-08-31
+
+### TD-032 CPX IO-Link ISDU Parameter Read/Write 실패 등록
+
+- 실장치 CPX-AP-I-4IOL-M12에서 IO-Link process value는 확인되지만
+  `system/io/iol/param_read/write`가 ISDU gateway의 port 선택 단계에서 거부되는 문제를
+  TD-032로 등록했다.
+- 현재 실패 지점은 `0x2001:02 = 1` SDO write이며, API Fail detail에
+  `isdu_step=write port`, `sdo_index=0x2001`, `sdo_subindex=2`, `sdo_value=1`,
+  device abort `0x06090030`이 기록되었다.
+- 사용자 확인에 따라 센서는 두 번째 물리 포트에 연결되어 있고 `port=1`은 0-base 채널 번호로
+  유지한다. process value가 확인되므로 포트 비활성 가설은 낮추고, acyclic ISDU gateway
+  sequence와 port의 ISDU service 상태를 별도로 검증하기로 했다.
+- 웹 검색으로 Festo CPX-FB36 ISDU Access Object, ifm EtherCAT IO-Link acyclic command와
+  Beckhoff IO-Link parameter access 설명을 확인했다. CPX-AP-I-EC의 `0x2001` SDO write 순서는
+  직접 확정되지 않았으므로 TD-032에서 ESI/문서/실장치 단계별 검증으로 확정한다.
+
+### IO-Link ISDU gateway 주소 계산 수정
+
+- 실장치 읽기 진단 결과와 사용자 승인에 따라 IO-Link ISDU access object 계산을 module 1
+  `0x2001`, module 2 `0x2011` 기준으로 수정했다.
+- 실제 request handler, parameter catalog 응답, Virtual CPX gateway dispatch와 Virtual CPX
+  ISDU OD 생성 규칙을 같은 기준으로 맞췄다.
+
+### IO-Link gateway 실장치 읽기 진단 완료
+
+- 사용자가 현재 축 상태에서 진행을 승인하고 제어권을 해제한 뒤, 기존 API로 authority를 얻어
+  server/restart를 수행했다. PID 14184 → 6172, 15000 listener 재기동을 확인했다.
+- 동일 Master의 io0/slave 1에서 `0x2001:02` uint8 read는 값 0으로 성공,
+  `0x2021:02` read는 원래 SDO Abort `0x06020000`으로 실패했다.
+- 결과는 `.runtime/iol-gateway-probe-result.json`과 `docs/diagnostic/iol_gateway_probe.md`에 기록했다.
+  probe 자체는 OD read만 수행했으며 재시작의 기존 device initialization 외에 gateway write나
+  센서 ISDU 실행은 하지 않았다. 실제 gateway 주소 계산 변경은 별도 판단으로 남겼다.
+- 실행 marker가 소비된 것을 확인하고 server.py의 임시 startup hook을 제거했다.
+
+### IO-Link gateway 일회성 읽기 진단 준비
+
+- 사용자 승인에 따라 기존 Master로 `io0`의 `0x2001:02`, `0x2021:02`만 읽는 임시 진단을
+  `scripts/diagnostics/iol_gateway_probe.py`에 추가했다. 일반 EC API 차단은 유지하며
+  marker가 있어야 startup에서 한 번 실행한다. 원래 SDO Abort code를 원인 체인에서 기록한다.
+- `tests/test_iol_gateway_probe.py` 3개 포함 전체 unittest 377개 및 whitespace 검사 통과.
+  테스트 출력의 성공 값은 fake 응답이며 실장치 결과가 아니다.
+- 실제 서버 사전 조회에서 Axis 0이 Enable(statusword 0x8637), client 1이 authority 보유 상태였다.
+  축 Disable/제어권 해제를 요청했으며 marker 생성과 서버 재시작, 실제 probe는 아직 수행하지 않았다.
+- 진단 범위/제약은 `docs/diagnostic/iol_gateway_probe.md`에 기록했다. 완료 후 임시 startup hook을
+  제거하며, 실장치 검증 전 gateway 주소를 수정하지 않는다.
+
+### TD-031 Bus 단절 중 장치 조회 및 서버 오류 격리 등록
+
+- 사용자가 AP parameter 20071 읽기 중 RuntimeError traceback과 서버 다운 증상을 보고하여
+  status 분류의 transport gating 누락, 미연결 PySOEM SDO의 일반 RuntimeError와 client 오류
+  경계를 조사하고 TD-031을 `open`/높음으로 등록했다.
+- 오프라인 재현에서 AP 요청의 RuntimeError는 router가 잡아 INTERNAL_FAILURE Fail로 반환했다.
+  해당 traceback만으로 실제 프로세스 종료를 확정하지 않았다. 조사 시점에는 PID 14184와
+  15000 listener가 존재했지만 이전 재기동 여부/당시 응답성/최초 단절 원인은 미확정으로 남겼다.
+- 별도로 JSONDecodeError가 disconnected loop의 OSError-only 경계 밖으로 전파되는
+  실제 종료 가능 경로를 재현했다. 이번 AP 요청이 malformed JSON이었다는 의미는 아니다.
+- 상세 TD에 원인별 근거, 수정 순서, API/transport/client 경계와 회귀 완료 조건을 기록했다.
+  구현 코드 수정, 실장치 접근/설정 변경과 commit/push는 수행하지 않았다.
+
+### RF-015 IO-Link Feedback 디코딩 구현 완료
+
+- 사용자 합의에 따라 DEC-038과 RF-015/API 문서에 포트별 raw/qualifier/decoded 및
+  `ok`/`not_configured`/`unsupported`/`invalid_data` 계약을 확정했다.
+- `iodd_process_data.py`에서 IODD 기본 숫자/Boolean/flat Record/DatatypeRef와 고정 scale/offset을
+  immutable metadata로 준비하고 `process_data.py`가 공통 디코딩한다. 이름/단위는 IODD 및
+  공식 표를 사용하고 미지원 구조나 단위를 센서 이름으로 추정하지 않는다.
+- `encoder.py`의 input channel을 확장하고 별도 qualifier 배열을 제거했다. feedback/status/
+  input-read/output-write snapshot에 공통 process-data 유효성을 전달하여 Bus 단절 시 stale
+  값을 정상 측정값으로 보내지 않는다. raw와 output 계약, Virtual Device/Master 경계는 유지했다.
+- `tests/test_io_link_decoding.py` 16개와 전체 unittest 374개, whitespace 검사 통과.
+  독립 big-endian IEEE754 fixture, 상태 bit/단위, invalid/unsupported, 포트·module·station 격리,
+  실장치용 codec과 mock injection parity, XML 재파싱 없음, 조회 API 정합성을 검증했다.
+- 4-port snapshot+decode+JSON 로컬 측정 약 0.15ms, UTF-8 14,306 bytes. 동일 fixture에
+  5ms/32KiB 회귀 기준을 추가했다. 실센서 대조, 대규모 부하 및 EXE 재빌드는 하지 않았다.
+- `.env` 변경, 실장치 mode/ISDU 쓰기, 신규 Dashboard와 commit/push는 하지 않았다.
+
+### RF-015 IO-Link Feedback 디코딩 등록
+
+- 포트별 raw 데이터와 qualifier에 선택된 IODD profile의 측정값·단위·상태 bit를 추가하는
+  RF-015를 `planned`로 등록했다. 숫자 profile, 필드 식별자, bit offset과 무효 데이터 처리
+  제안 및 구현 전 미확정 사항을 상세 명세에 기록했다.
+- IODD metadata → decoder → API encoder 책임 경계를 정리했다. 이번 변경은 문서 등록만이며
+  runtime 코드와 Feedback 응답은 변경하지 않았다.
+
+### IO-Link process data profile 선택
+
+- `MOTION_SERVER_IO_<io>_IOL_PORTS`에 선택적 세 번째 항목을 추가했다. 사용자 결정에 따라
+  이름 기반 선택을 제거하고 IODD `Condition value`의 숫자로 선택하도록 변경했다.
+  생략 시 IODD 문서 순서의 첫 profile을 선택하고 typed config → 포트 binding → module 크기
+  산정 및 parameter catalog까지 동일한 선택을 전달한다. 기존 `.env` 값은 변경하지 않았다.
+- ESI 이름/ident로 선언한 IO-Link module도 port binding을 인식하도록 보완하고, 알 수 없는
+  profile 및 module 용량 초과를 거부한다. 실제 장치 mode 자동 쓰기는 구현하지 않았다.
+- 신규 테스트는 두 형식, 문서 순서 기본 선택, 크기가 다른 profile, 포트 간 선택 독립성,
+  잘못된 설정, typed config 전달, catalog와 bundled Balluff IODD를 검증한다.
+- 숫자는 목록 순번이 아니다. Balluff `:2`는 `P_Vibration_Accel`, `:240`은 `P_Custom_Profile`을
+  선택하며, catalog는 숫자와 IODD 이름을 각각 보고한다. 실장치 검증 및 Windows EXE 재빌드는
+  수행하지 않았다.
+- 숫자 선택 회귀 13개를 포함한 전체 unittest 358개와 whitespace 검사가 통과했다.
+
+### CPX PDO 크기 회귀 수정
+
+- 가상 CPX 도입 후 공통 PDO 크기 계산이 실장치에도 fixed block 크기를 강제하고, 기존 station
+  출력 1바이트가 Variant 32의 128바이트 출력을 256바이트로 올리는 원인을 수정했다.
+- station 크기를 ESI에 맞추고, PRE-OP에서 module/static ESI mapping을 readback 객체, 순서,
+  bit 길이 및 padding과 대조한 뒤 실제 PDO 길이로 Master buffer를 확정한다. 임의 크기 허용이나
+  검증 생략, 공개 API 및 가상 OD 모델 변경은 하지 않았다.
+- 독립 Variant 32 fixture, IODD 자동 크기 산정 및 실패 경로를 포함한 신규 10개 회귀 테스트와
+  기존 테스트를 합쳐 341개가 통과했다. 실장치 구동 검증은 수행하지 않았다.
+- Windows Server/Panel 실행 파일을 재빌드하고, frozen Server를 mock CMMT 1축 + IODD 자동
+  산정 Variant 32 구성으로 실행하여 runtime `normal`과 TCP status 응답을 확인했다.
+  `dist/Motion Server`를 교체하면서 기존 config.txt 3개의 해시 일치를 확인했다.
+  이전 패키지는 `backup/Motion Server-before-cpx-pdo-20260831-165836`에 보존했으며
+  배포용 압축 파일은 생성하지 않았다.
+
+## 2026-08-28
+
+### Node-RED Sample Motion Sequence
+
+- `05 Sample Motion Sequence`를 전용 Sequence node 없이 기존 Motion Server Request/Feedback node와
+  표준 Node-RED Function node의 조합으로 추가했다. 각 이동 명령, feedback 완료 gate, DO/AO 출력과
+  DI/AI 조건이 Flow에 독립적으로 노출되어 예제값을 직접 변경할 수 있다.
+- 임의 4축 sequence는 2축 이동 → 다른 2축 이동 → 외부 출력 → 외부 입력 조건 대기 → 3축 이동 →
+  마지막 1축 이동 순서이며, Stop은 기존 `system/axes/stop` API를 사용한다. import/deploy만으로는
+  명령을 실행하지 않는다.
+
 ## 2026-08-27
 
 ### RF-002 구현 완료
 
+- `02 Axis Control` Dashboard에 데스크톱 Axis Control Panel과 동일한 선택 축 Profile parameters,
+  Motion Limits와 Software Position Limits 설정 영역을 추가했다. 현재값과 단위는 axis status로
+  초기화하고 command authority 보유 시에만 적용하며, 성공 후 status readback으로 다시 동기화한다.
+  위치·속도·활성 목표 표시와 status에서 읽은 세 설정 영역의 실수는 소수점 둘째 자리까지 반올림해
+  표시하며 제어 및 chart 원본 데이터는 변경하지 않는다.
+- `04 Virtual I/O Simulation`을 Inject 예제에서 전용 Dashboard로 전환했다. 공유 연결 상태와 API
+  availability를 표시하고 Mock CPX station/module 선택, DI/AI/IO-Link 입력 주입, module/station reset,
+  현재 virtual input 상태 확인을 한 화면에서 제공한다.
+- CMMT Axis Parameter Catalog JSON이 약 1.14~1.23 MB로 기존 client output buffer 상한 1 MB를
+  초과하여 정상 요청의 연결이 종료되던 문제를 수정했다. 느린 client에 대한 누적 방어는 유지하면서
+  정상 catalog 응답을 수용하도록 명시적인 상한을 4 MB로 조정하고 경계 테스트를 추가했다.
+- Node-RED Dashboard가 Connection Status node의 초기/change-only 알림을 놓치면 실제 TCP socket은
+  연결되어 있어도 미연결로 표시되던 문제를 수정했다. 정상적인 `system/feedback` 수신도 현재 연결의
+  확정 근거로 사용하고, socket close/error 및 명시적 Disconnect는 미연결의 확정 근거로 유지한다.
+- `01` Dashboard를 기존 Control Panel 상단과 유사한 compact server control bar로 재구성했다.
+  Authority toggle, Bus Reconnect, Server Fault Reset, Server Restart, Host/Port, Connect/Disconnect,
+  연결 상태와 feedback 기반 Motion Server Status 요약을 한 영역에 통합했다.
+- 공통 Flow 통합으로 비어 있던 02번부터 기능 Flow 번호를 연속 배치했다. 최종 구성은 Axis Control 02,
+  I/O Control 03, Virtual I/O Simulation 04다.
+- `03 I/O Control`을 기존 I/O Control Panel과 유사한 Dashboard로 확장했다. I/O device/module 상태,
+  Raw Image, Digital Output, EC/AP/IO-Link catalog와 parameter read/write를 제공하며 Virtual Input
+  Simulation 명령은 제외하여 `04 Virtual I/O Simulation`과 책임을 분리했다.
+- 별도 Parameter Access Flow를 제거했다. Axis parameter catalog/read/write/save는 `02 Axis Control`로,
+  I/O EC/AP/IO-Link parameter는 `03 I/O Control`로 통합하고 Virtual I/O Simulation은 04번으로 변경했다.
+- Windows non-blocking socket의 `WSAEWOULDBLOCK(10035)`을 연결 단절로 오인하지 않도록 수신 대기와
+  송신 backpressure를 분리했다. 송신 데이터는 client별 buffer에 보존하고 부분 전송을 다음 server
+  cycle에 이어서 처리한다.
+- Axis Dashboard를 데스크톱 Axis Control Panel의 단일 축 화면과 유사하게 확장했다. 첫 feedback의
+  축 수로 선택 목록을 제한하고 16-bit Statusword Lamp/CiA402 상태, 현재·목표 위치, 현재 속도,
+  목표 위치와 Profile Velocity 입력을 표시한다. Enable, Disable, Run, Stop, Homing, Fault Reset,
+  Refresh 및 누르는 동안만 동작하는 Jog −/+를 기존 Axis API에 연결했다. 위치·속도 graph는 선택한
+  축만 표시하고 축 선택 변경 시 이전 축의 graph 이력을 초기화한다.
+  Jog는 버튼 release, pointer leave와 pointer cancel에서 모두 정지하도록 구성했다.
+  Target Position과 Profile Velocity 입력값은 feedback의 임시값이나 고정 fallback을 사용하지 않고
+  선택 축의 `system/axis/status` 응답만 반영하도록 책임을 분리했다.
+- connection/status와 authority Flow를 하나의 공통 Flow로 통합하고 IP/Port, Connect/Disconnect,
+  Request/Release Authority, 연결 및 authority 상태를 표시하는 FlowFuse Dashboard를 추가했다.
+  Connection Control node를 추가하여 수동 Disconnect 후에는 다음 Connect까지 자동 재연결을 중지한다.
+  공통 Flow가 Dashboard Base/Theme을 소유하고 Axis Flow가 이를 재사용하도록 정리했으며 Node-RED
+  자동 테스트 7개를 통과했다.
+- Axis example Flow에 명시적인 FlowFuse Dashboard Theme을 추가하고 Page가 Base와 Theme,
+  Group이 Page, Chart가 Group을 참조하는 전체 구성 관계를 자동 테스트로 고정했다.
 - 독립 `reference_clients` 아래에 재사용 가능한 최소 Python client와 Node-RED package를 구현했다.
   Python client는 thread-safe correlation, raw Success/Fail 반환, bounded feedback queue, timeout,
   disconnect pending 실패, 1초 재연결과 authority 비복원 계약을 제공한다.
-- Node-RED에는 Connection Config, Request, Feedback, Connection Status 4종의 공통 node를 구현했다.
-  `01` connection/status와 `02` authority는 공통 기반 Flow로, `03`~`06` Axis/I/O/parameter/Virtual I/O는
-  기능 Scenario Flow로 구성했다. `01`만 Connection Config를 소유하고 다른 모든 Flow가 이를 공유하여
+- Node-RED에는 Connection Config, Connection Control, Request, Feedback, Connection Status 5종의
+  공통 node를 구현했다. `01` connection/authority는 공통 기반 Flow로, `02`~`04`
+  Axis/I/O/parameter/Virtual I/O는 기능 Scenario Flow로 구성했다. `01`만 Connection Config와
+  Dashboard Base/Theme을 소유하고 다른 모든 Flow가 이를 공유하여
   여러 Flow를 함께 사용해도 TCP 연결과 command authority가 중복되지 않는다.
-- Axis Dashboard에는 첫 feedback 기준으로 고정한 전체 축 actual position/velocity series, 축 이름
-  fallback, series당 500 sample 제한과 연결 단절 시 초기화를 반영했다.
+- Axis Dashboard에는 첫 feedback 기준으로 축 범위를 고정하고 선택 축 actual position/velocity,
+  축 이름 fallback, 500 sample 제한과 축 선택/연결 단절 시 초기화를 반영했다.
 - mock Motion Server를 대상으로 Python `system/server/status`와 `system/feedback` smoke test를
-  통과했다. 전체 Python unittest 327개, Node-RED test 6개, production dependency audit 0건,
+  통과했다. 전체 Python unittest 329개, Node-RED test 7개, production dependency audit 0건,
   Python wheel/Node-RED tarball clean install, source compile, Node syntax와 whitespace 검사를 통과하여
   `RF-002`를 완료 처리했다.
 
@@ -49,7 +218,8 @@
   feedback queue를 비우고 재연결 후 새 feedback만 제공하며 연결 상태와 마지막 오류는
   `is_connected`와 `last_error`로 별도 조회한다. 서버 `Fail`은 정상 API response로 반환하고 Python
   exception은 client 자체의 연결, timeout과 사용 실패에만 사용하며 Failure code별 exception 계층은
-  만들지 않는다. Node-RED Custom Node는 Connection, Request, Feedback, Connection Status 4종으로
+  만들지 않는다. Node-RED Custom Node는 Connection, Connection Control, Request, Feedback,
+  Connection Status 5종으로
   제한하고 상태 조회, authority, Axis, I/O, parameter와 simulation은 scenario Subflow/Flow로
   구성한다. API command마다 Custom Node를 만들지 않고 반복 사용성이 확인된 Subflow만 추후 승격한다.
   Request node는 `msg.payload.cmd`만 command 식별자로 사용하고 caller topic/property를 보존하며,
@@ -61,14 +231,15 @@
   Node만 optional timeout override를 가지며 1초 재연결 주기는 UI에 노출하지 않는다.
   Connection Status는 초기 snapshot과 connected 값 변경 시에만 connected/last_error를 출력하고 반복
   재연결 시도는 event로 내보내지 않는다.
-  Example은 connection/status와 authority를 공통 기반 Flow로, Axis, I/O, parameter와 Virtual I/O
-  simulation을 기능 Scenario Flow로 제공한다. connection/status Flow만 공통 Connection Config를
-  소유하고 나머지 Flow가 이를 참조하여 함께 import해도 TCP 연결과 authority가 중복되지 않게 한다.
-  Axis flow에는 모든 축의 actual position/velocity graph를 포함하고 상태 변경
+  Example은 connection/status와 authority를 하나의 공통 기반 Flow로, Axis, I/O, parameter와
+  Virtual I/O simulation을 기능 Scenario Flow로 제공한다. 공통 Flow만 Connection Config와 Dashboard
+  Base/Theme을 소유하고 나머지 Flow가 이를 참조하여 함께 import해도 TCP 연결, Dashboard와 authority가
+  중복되지 않게 한다.
+  Axis flow에는 선택 축의 actual position/velocity graph를 포함하고 상태 변경
   명령은 수동 입력으로만 실행한다. Dashboard는 `@flowfuse/node-red-dashboard`의 `ui-chart`를 사용하고
-  legacy dashboard package는 지원하지 않는다. Axis graph는 모든 feedback을 사용해 series당 최근
-  500개 sample을 유지하고 단절 시 초기화하며 첫 feedback의 축 수와 status name/fallback으로 series를
-  구성한다.
+  legacy dashboard package는 지원하지 않는다. Axis graph는 모든 feedback에서 선택 축 값만 사용해
+  최근 500개 sample을 유지하고 축 선택 변경과 단절 시 초기화하며 첫 feedback의 축 수와 status
+  name/fallback으로 선택 범위를 구성한다.
 - `TD-030` 검토 중 Mock CMMT가 선택된 `PDO_Configuration`을 Master runtime, OD Model과 Bridge에
   직접 주입하여 cyclic PDO 변환은 수행하지만, 실축의 PRE-OP PDO assignment/mapping SDO write와
   readback 검증을 우회하는 것을 확인했다. `PDO_Configuration` 주입은 변환 규칙일 뿐 device

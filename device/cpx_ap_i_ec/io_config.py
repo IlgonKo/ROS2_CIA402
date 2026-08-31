@@ -1,6 +1,7 @@
 from dataclasses import dataclass
 
 from configuration import split_indexed_config_list
+from configuration.models import IoLinkPortConfig
 from device.cpx_ap_i_ec.module_resolver import (
     layout_with_esi_pdo_sizes,
     validate_layout_against_esi,
@@ -8,8 +9,9 @@ from device.cpx_ap_i_ec.module_resolver import (
 from device.cpx_ap_i_ec.module_layout import (
     CPXApLayout,
     parse_cpx_ap_modules,
+    parse_explicit_cpx_ap_module,
 )
-from device.io_link.iodd_catalog import IoddDeviceInfo, iodd_device_info
+from device.io_link.iodd_catalog import IoddDeviceInfo, IoddProcessDataInfo, iodd_device_info
 
 
 IO_LINK_VARIANT_BYTES_PER_PORT = (2, 4, 8, 16, 32)
@@ -21,9 +23,14 @@ class IoLinkDeviceBinding:
     module: int
     port: int
     device: IoddDeviceInfo
+    process_data_profile: IoddProcessDataInfo
+
+    @property
+    def process_data_size(self):
+        return self.process_data_profile.input_bytes, self.process_data_profile.output_bytes
 
     def to_dict(self):
-        input_bytes, output_bytes = self.device.process_data_size
+        input_bytes, output_bytes = self.process_data_size
         return {
             "module": self.module,
             "port": self.port,
@@ -33,6 +40,8 @@ class IoLinkDeviceBinding:
             "device_id": self.device.device_id,
             "vendor_name": self.device.vendor_name,
             "device_name": self.device.device_name,
+            "process_data_profile": self.process_data_profile.condition_value,
+            "process_data_profile_id": self.process_data_profile.profile_id,
             "input_bytes": input_bytes,
             "output_bytes": output_bytes,
         }
@@ -130,7 +139,7 @@ def parse_io_link_device_bindings_from_value(raw_ports, io_id, io_link_modules):
     bindings = []
     seen = set()
     for item in split_env_list(raw_ports):
-        selector, device_key = parse_io_link_port_item(item, io_link_modules)
+        selector, device_key, profile_number = parse_io_link_port_item(item, io_link_modules)
         if selector in seen:
             raise ValueError(
                 f"Duplicate IO-Link port declaration for {selector[0]}.{selector[1]}"
@@ -138,28 +147,25 @@ def parse_io_link_device_bindings_from_value(raw_ports, io_id, io_link_modules):
         seen.add(selector)
         if normalized_none_key(device_key):
             continue
+        device = iodd_device_info(device_key)
         bindings.append(IoLinkDeviceBinding(
             module=selector[0],
             port=selector[1],
-            device=iodd_device_info(device_key),
+            device=device,
+            process_data_profile=device.select_process_data_profile(profile_number),
         ))
     return bindings
 
 
 def parse_io_link_port_item(item, io_link_modules):
-    if ":" not in item:
-        raise ValueError(
-            f"Invalid IO-Link port declaration {item!r}; "
-            "expected <port>:<iodd_key>"
-        )
-    selector_text, device_key = item.split(":", 1)
-    module, port_text = parse_io_link_selector(selector_text, item, io_link_modules)
+    declaration = IoLinkPortConfig.from_declaration(item)
+    module, port_text = parse_io_link_selector(declaration.selector, item, io_link_modules)
     port = parse_non_negative_int(port_text, item)
     if module < 1:
         raise ValueError(
             f"Invalid IO-Link module {module}; CPX AP module numbering starts at 1"
         )
-    return (module, port), device_key.strip()
+    return (module, port), declaration.device_name, declaration.process_data_profile
 
 
 def parse_io_link_selector(selector_text, item, io_link_modules):
@@ -191,6 +197,11 @@ def parse_io_link_selector(selector_text, item, io_link_modules):
 def io_link_module_refs(raw_modules):
     refs = []
     for slot, raw_module in split_indexed_config_list(raw_modules, default_start=1):
+        explicit = parse_explicit_cpx_ap_module(slot, raw_module)
+        if explicit is not None:
+            if explicit.module_type == "iol":
+                refs.append(IoLinkModuleRef(len(refs), slot, explicit.io_link_ports))
+            continue
         parts = [
             part.strip().lower()
             for part in str(raw_module).split(":")
@@ -215,7 +226,7 @@ def inferred_io_link_module_sizes(bindings):
     sizes = {}
     required_bytes_by_module = {}
     for binding in bindings:
-        input_bytes, output_bytes = binding.device.process_data_size
+        input_bytes, output_bytes = binding.process_data_size
         required = max(input_bytes, output_bytes)
         current = required_bytes_by_module.get(binding.module, 0)
         required_bytes_by_module[binding.module] = max(current, required)
@@ -261,6 +272,15 @@ def validate_io_link_bindings(config):
             raise ValueError(
                 f"IO-Link port {binding.port} is outside module {binding.module} "
                 f"port range 0..{module.io_link_ports - 1}"
+            )
+        input_bytes, output_bytes = binding.process_data_size
+        if (
+            input_bytes * module.io_link_ports > module.spec.input_data_bytes
+            or output_bytes * module.io_link_ports > module.spec.output_data_bytes
+        ):
+            raise ValueError(
+                f"IO-Link process data profile {binding.process_data_profile.profile_id!r} "
+                f"does not fit module {binding.module} port {binding.port}"
             )
 
 

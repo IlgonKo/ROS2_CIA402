@@ -457,6 +457,52 @@ system/io/iol/param_read
 system/io/iol/param_write
 ```
 
+### IO-Link Input Decoding (RF-015)
+
+`system/feedback.io.devices[]`, `system/io/status.devices[]`, `system/io/input_read`의
+`modules[].inputs.io_link_channels[]`는 다음 형태이다. `output_write` 응답의 input도 동일하다.
+
+```json
+{
+  "port": 0,
+  "data": "3f800000c00000003f000000000000004080000040a0000041d6666600800000",
+  "qualifier": 160,
+  "decode_status": "ok",
+  "decoded": {
+    "profile": 1,
+    "profile_name": "Vibration Velocity",
+    "values": [
+      {"subindex": 1, "name": "PD v-RMS X", "value": 1.0, "unit": "mm/s"}
+    ],
+    "status_bits": [
+      {"subindex": 16, "bit_offset": 23, "name": "Severity Zone A", "active": true}
+    ]
+  }
+}
+```
+
+위 예시는 values/status_bits를 축약했다. 실제 응답은 inactive bit도 포함한 전체 지원 field를 제공한다.
+`profile`은 설정의 숫자 Condition value이며 무조건부 profile은 null이다. scalar subindex는 0,
+RecordItem은 IODD subindex를 사용한다. field 식별에는 IO id/module slot/port/subindex를 조합한다.
+
+| decode_status | 의미 |
+|---|---|
+| `ok` | 선택된 profile의 기본 숫자/Boolean/flat Record 디코딩 성공 |
+| `not_configured` | 해당 포트에 IODD binding 없음 |
+| `unsupported` | 지원하지 않는 datatype/구조 또는 해석할 수 없는 metadata |
+| `invalid_data` | 공통 process-data 무효, qualifier 무효/누락, 길이 부족 또는 비정상 float |
+
+`ok`가 아니면 decoded는 null이고 raw/qualifier는 유지된다. 미설정 포트는 데이터 유효성과 관계없이
+not_configured이다. 설정된 포트는 데이터 유효성 검사 후 지원 여부를 판정한다.
+CPX PQ(bit7), DevCom(bit5)가 모두 1이어야 유효하며 DevErr(bit6)만으로 무효화하지 않는다.
+qualifier byte 자체가 없으면 null이다. Bus 단절 시에는 stale 값이 정상 측정값으로 제공되지 않는다.
+
+raw `data`는 variant padding을 포함하지만 decoder는 IODD 유효 길이만 사용한다.
+`inputs.io_link` module raw는 유지하며 별도 `inputs.io_link_qualifiers` 배열은 제거했다.
+outputs의 `io_link_channels`는 기존 port/data 형식 그대로이다.
+단위는 확인된 표에 없으면 null이며 값은 반올림하지 않는다. 타입/단위 지원 범위는
+[RF-015](tasks/rf/RF-015-io-link-feedback-decoding.md)를 참조한다.
+
 ### Virtual I/O Simulation
 
 Virtual CPX 입력 주입은 일반 I/O 명령과 분리된 개발·시험용 namespace를 사용한다.
@@ -631,6 +677,8 @@ system/io/iol/param_write
 
 `module`은 IOL module 번호, `port`는 해당 module 안의 IO-Link port 번호다.
 `port`는 0부터 시작한다.
+CPX-AP-I-EC 내부 ISDU access object는 module 1 기준 `0x2001`을 사용하며,
+다음 IOL module부터 `0x10`씩 증가한다.
 
 ## Server and Bus Management
 

@@ -89,8 +89,8 @@ def layout_with_esi_pdo_sizes(layout):
     ]
     return CPXApLayout(
         tuple(assign_process_image_offsets(modules)),
-        station_input_bytes=layout.station_input_bytes,
-        station_output_bytes=layout.station_output_bytes,
+        station_input_bytes=interface_module_info().txpdo_bytes,
+        station_output_bytes=interface_module_info().rxpdo_bytes,
     )
 
 

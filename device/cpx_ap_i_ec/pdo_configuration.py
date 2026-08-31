@@ -1,6 +1,9 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
-from device.cpx_ap_i_ec.esi_module_catalog import esi_module_catalog
+from device.cpx_ap_i_ec.esi_module_catalog import (
+    esi_module_catalog,
+    interface_module_info,
+)
 from device.cpx_ap_i_ec.module_resolver import (
     module_info,
     validate_layout_against_esi,
@@ -100,21 +103,24 @@ class CPXPdoConfiguration:
         validate_layout_against_esi(self.config.layout)
         validate_io_link_required_od(self.config.layout)
 
-    def validate_actual_process_image(self, slave_index, output_bytes, input_bytes):
-        validate_process_image_size(
+    def validate_actual_process_image(self, slave_index, output_entries, input_entries):
+        output_bytes = validate_process_image_mapping(
             "RxPDO/output",
             slave_index,
-            configured_bytes=self.output_bytes,
-            device_bytes=output_bytes,
+            module_entries=module_mapping_entries(self.config.layout, "rxpdos"),
+            fixed_entries=self.rxpdo_mapping_entries(),
+            device_entries=output_entries,
             io_id=self.config.io_id,
         )
-        validate_process_image_size(
+        input_bytes = validate_process_image_mapping(
             "TxPDO/input",
             slave_index,
-            configured_bytes=self.input_bytes,
-            device_bytes=input_bytes,
+            module_entries=module_mapping_entries(self.config.layout, "txpdos"),
+            fixed_entries=self.txpdo_mapping_entries(),
+            device_entries=input_entries,
             io_id=self.config.io_id,
         )
+        return output_bytes, input_bytes
 
 
 def cpx_pdo_configuration(config):
@@ -186,19 +192,40 @@ def module_object_info(module, index, subindex):
     return None
 
 
-def validate_process_image_size(
+def module_mapping_entries(layout, direction):
+    entries = []
+    modules = [(0, interface_module_info())]
+    modules.extend((module.slot, module_info(module)) for module in layout.modules)
+    for slot, info in modules:
+        for pdo in getattr(info, direction):
+            for entry in pdo.entries:
+                if entry.depend_on_slot and entry.index:
+                    entry = replace(entry, index=entry.index + int(slot))
+                entries.append(entry.mapping_entry())
+    return entries
+
+
+def process_image_size(entries):
+    return (sum(int(entry) & 0xFF for entry in entries) + 7) // 8
+
+
+def validate_process_image_mapping(
     label,
     slave_index,
-    configured_bytes,
-    device_bytes,
+    module_entries,
+    fixed_entries,
+    device_entries,
     io_id,
 ):
-    configured_bytes = int(configured_bytes)
-    device_bytes = int(device_bytes)
-    if configured_bytes != device_bytes:
-        raise RuntimeError(
-            f"CPX {label} size mismatch on slave {slave_index}. "
-            f"Configured={configured_bytes} bytes, "
-            f"device PDO={device_bytes} bytes. "
-            f"Check MOTION_SERVER_IO_{io_id}_MODULES."
-        )
+    actual = [int(entry) for entry in device_entries]
+    # Modular PDOs and fixed station blocks are different ESI layouts, not padding guesses.
+    if actual == module_entries or actual == fixed_entries:
+        return process_image_size(actual)
+    raise RuntimeError(
+        f"CPX {label} mapping mismatch on slave {slave_index}. "
+        f"ESI module layout={process_image_size(module_entries)} bytes, "
+        f"fixed layout={process_image_size(fixed_entries)} bytes, "
+        f"device PDO={process_image_size(actual)} bytes. "
+        f"Actual entries={[f'0x{entry:08X}' for entry in actual]}. "
+        f"Check MOTION_SERVER_IO_{io_id}_MODULES and PDO assignment/mapping."
+    )

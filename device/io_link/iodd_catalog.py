@@ -3,6 +3,9 @@ from functools import lru_cache
 from pathlib import Path
 import xml.etree.ElementTree as ET
 
+from device.io_link.iodd_process_data import IoddProcessDataCompiler
+from device.io_link.process_data import ProcessDataLayout
+
 from device.io_link.file_matching import (
     find_unique_xml_file,
     normalized_file_key,
@@ -17,6 +20,8 @@ class IoddProcessDataInfo:
     profile_id: str
     input_bytes: int
     output_bytes: int
+    condition_value: int | None = None
+    input_layout: ProcessDataLayout | None = None
 
 
 @dataclass(frozen=True)
@@ -43,20 +48,31 @@ class IoddDeviceInfo:
 
     @property
     def process_data_size(self):
-        sizes = {
-            (profile.input_bytes, profile.output_bytes)
-            for profile in self.process_data_profiles
-        }
-        if len(sizes) != 1:
-            profiles = ", ".join(
-                f"{profile.profile_id}:in{profile.input_bytes}/out{profile.output_bytes}"
+        profile = self.select_process_data_profile()
+        return profile.input_bytes, profile.output_bytes
+
+    def select_process_data_profile(self, profile_number=None):
+        if not self.process_data_profiles:
+            raise ValueError(f"IODD {self.key!r} has no process data profiles")
+        if profile_number is None:
+            return self.process_data_profiles[0]
+        if type(profile_number) is not int or profile_number < 0:
+            raise ValueError("IO-Link process data profile must be a non-negative integer")
+        matches = [
+            profile for profile in self.process_data_profiles
+            if profile.condition_value == profile_number
+        ]
+        if len(matches) != 1:
+            available = ", ".join(
+                f"{profile.condition_value} ({profile.profile_id})"
                 for profile in self.process_data_profiles
-            )
+                if profile.condition_value is not None
+            ) or "none (omit the profile to select the first ProcessData)"
             raise ValueError(
-                f"IODD {self.key!r} has multiple process data sizes: {profiles}. "
-                "Explicit IO-Link process data profile selection is not supported yet."
+                f"IODD {self.key!r} process data profile {profile_number!r} "
+                f"must match exactly one Condition value; available: {available}"
             )
-        return next(iter(sizes))
+        return matches[0]
 
 
 def iodd_device_info(device_key):
@@ -91,13 +107,18 @@ def parse_iodd_file(path, device_key):
 
 def parse_process_data_profiles(root):
     profiles = []
+    compiler = IoddProcessDataCompiler(root)
     for process_data in elements_by_local_name(root, "ProcessData"):
         input_el = first_child_by_local_name(process_data, "ProcessDataIn")
         output_el = first_child_by_local_name(process_data, "ProcessDataOut")
+        condition = first_child_by_local_name(process_data, "Condition")
+        condition_value = attribute(condition, "value")
         profiles.append(IoddProcessDataInfo(
             profile_id=attribute(process_data, "id"),
             input_bytes=bits_to_bytes(attribute(input_el, "bitLength")),
             output_bytes=bits_to_bytes(attribute(output_el, "bitLength")),
+            condition_value=int(condition_value, 10) if condition_value else None,
+            input_layout=compiler.compile(input_el, attribute(process_data, "id")),
         ))
     return tuple(profiles)
 

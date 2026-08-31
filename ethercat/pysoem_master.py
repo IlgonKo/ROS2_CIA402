@@ -23,6 +23,8 @@ AL_STATUS_DESCRIPTIONS = {
 }
 SDO_OBJECT_NOT_FOUND_ABORT_CODES = frozenset({0x06020000, 0x06090011})
 SDO_TIMEOUT_ABORT_CODES = frozenset({0x05040000})
+SDO_COMMUNICATION_RETRY_COUNT = 3
+SDO_COMMUNICATION_RETRY_DELAY_S = 0.02
 
 
 class PySOEMMaster:
@@ -66,6 +68,8 @@ class PySOEMMaster:
         self._master = None
         self._emergency_callbacks = []
         self.emergency_messages = []
+        self.sdo_communication_retry_count = SDO_COMMUNICATION_RETRY_COUNT
+        self.sdo_communication_retry_delay_s = SDO_COMMUNICATION_RETRY_DELAY_S
 
         self.slaves = [
             MasterPdoRuntime(device_profile)
@@ -231,19 +235,54 @@ class PySOEMMaster:
 
     def write_sdo(self, slave_index, index, subindex, payload):
         self._require_connected()
-        try:
-            self._master.slaves[slave_index].sdo_write(index, subindex, payload)
-        except Exception as exception:
-            self._raise_sdo_exception(exception, "sdo_write", index, subindex)
+        self._with_sdo_communication_retry(
+            "sdo_write",
+            index,
+            subindex,
+            lambda: self._master.slaves[slave_index].sdo_write(
+                index,
+                subindex,
+                payload,
+            ),
+        )
 
     def read_sdo(self, slave_index, index, subindex, size):
         self._require_connected()
-        try:
-            return self._master.slaves[slave_index].sdo_read(
-                index, subindex, size=size
-            )
-        except Exception as exception:
-            self._raise_sdo_exception(exception, "sdo_read", index, subindex)
+        return self._with_sdo_communication_retry(
+            "sdo_read",
+            index,
+            subindex,
+            lambda: self._master.slaves[slave_index].sdo_read(
+                index,
+                subindex,
+                size=size,
+            ),
+        )
+
+    def _with_sdo_communication_retry(self, operation, index, subindex, action):
+        attempts = max(
+            1,
+            int(getattr(self, "sdo_communication_retry_count", 1)),
+        )
+        for attempt in range(1, attempts + 1):
+            try:
+                return action()
+            except Exception as exception:
+                if not self._is_sdo_communication_exception(exception):
+                    self._raise_sdo_exception(exception, operation, index, subindex)
+                if attempt >= attempts:
+                    self._raise_sdo_exception(exception, operation, index, subindex)
+                time.sleep(
+                    max(
+                        0.0,
+                        float(getattr(
+                            self,
+                            "sdo_communication_retry_delay_s",
+                            0.0,
+                        )),
+                    )
+                )
+        raise CommunicationException(operation)
 
     def _raise_sdo_exception(self, exception, operation, index, subindex):
         if isinstance(exception, MotionServerException):
@@ -263,6 +302,13 @@ class PySOEMMaster:
                 device_code=abort_code,
             ) from exception
 
+        if self._is_sdo_communication_exception(exception):
+            raise CommunicationException(operation) from exception
+        if isinstance(exception, (ConnectionError, OSError)):
+            raise CommunicationException(operation) from exception
+        raise exception
+
+    def _is_sdo_communication_exception(self, exception):
         communication_types = tuple(
             exception_type
             for name in (
@@ -276,11 +322,7 @@ class PySOEMMaster:
                 type,
             )
         )
-        if isinstance(exception, communication_types):
-            raise CommunicationException(operation) from exception
-        if isinstance(exception, (ConnectionError, OSError)):
-            raise CommunicationException(operation) from exception
-        raise exception
+        return isinstance(exception, communication_types)
 
     def _register_emergency_callbacks(self):
         self._emergency_callbacks = []

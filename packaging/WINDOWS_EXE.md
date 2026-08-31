@@ -27,8 +27,6 @@ dist\Motion Server
   device\cmmt\config.txt
   device\cmmt\config.example.txt
   device\cpx_ap_i_ec\config.example.txt
-  device\virtual_servo_drive\config.txt
-  device\virtual_servo_drive\config.example.txt
   Manual\Motion_Server_Installation_Manual_*.*
   Manual\Motion_Server_User_Manual_*.*
   Reference\cmmt_error_catalog.json
@@ -47,9 +45,13 @@ files manually:
 dist\Motion Server\config.txt
 dist\Motion Server\device\cmmt\config.txt
 dist\Motion Server\device\cpx_ap_i_ec\config.txt
-dist\Motion Server\device\virtual_servo_drive\config.txt
 dist\Motion Server\Tools\axis_control_panel\config.txt
 ```
+
+Mock and real devices use the same profile configuration files. Virtual CMMT
+axes use `device/cmmt/config.txt`; there is no separate virtual servo config.
+ESI, IODD and the CMMT error catalog are bundled under `_internal` for runtime
+loading, including when the package is launched outside the source checkout.
 
 ## Run With Mock Axes
 

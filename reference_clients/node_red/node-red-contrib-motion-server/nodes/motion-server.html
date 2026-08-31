@@ -5,6 +5,7 @@ RED.nodes.registerType("motion-server-connection", {
         name: { value: "" },
         host: { value: "127.0.0.1", required: true },
         port: { value: 15000, required: true, validate: RED.validators.number() },
+        autoConnect: { value: true },
         requestTimeout: { value: 5, required: true, validate: function(value) {
             return Number.isFinite(Number(value)) && Number(value) > 0;
         }}
@@ -12,6 +13,20 @@ RED.nodes.registerType("motion-server-connection", {
     label: function() {
         return this.name || `${this.host}:${this.port}`;
     }
+});
+
+RED.nodes.registerType("motion-server-connection-control", {
+    category: "network",
+    color: "#86c7e8",
+    defaults: {
+        name: { value: "" },
+        connection: { value: "", type: "motion-server-connection", required: true }
+    },
+    inputs: 1,
+    outputs: 1,
+    outputLabels: ["endpoint state"],
+    icon: "bridge.svg",
+    label: function() { return this.name || "Motion Server Connection Control"; }
 });
 
 RED.nodes.registerType("motion-server-request", {
@@ -63,6 +78,12 @@ RED.nodes.registerType("motion-server-connection-status", {
     <div class="form-row"><label for="node-config-input-host">Host</label><input type="text" id="node-config-input-host"></div>
     <div class="form-row"><label for="node-config-input-port">Port</label><input type="number" id="node-config-input-port"></div>
     <div class="form-row"><label for="node-config-input-requestTimeout">Default Request Timeout (s)</label><input type="number" step="0.1" id="node-config-input-requestTimeout"></div>
+    <div class="form-row"><label for="node-config-input-autoConnect">Connect Automatically</label><input type="checkbox" id="node-config-input-autoConnect" style="width:auto"></div>
+</script>
+
+<script type="text/html" data-template-name="motion-server-connection-control">
+    <div class="form-row"><label for="node-input-name">Name</label><input type="text" id="node-input-name"></div>
+    <div class="form-row"><label for="node-input-connection">Connection</label><input type="text" id="node-input-connection"></div>
 </script>
 
 <script type="text/html" data-template-name="motion-server-request">
@@ -83,6 +104,10 @@ RED.nodes.registerType("motion-server-connection-status", {
 
 <script type="text/html" data-help-name="motion-server-request">
     <p>Sends <code>msg.payload</code> as a Motion Server request. The first output carries raw server Success/Fail responses. The second carries client connection or timeout failures.</p>
+</script>
+
+<script type="text/html" data-help-name="motion-server-connection-control">
+    <p>Accepts <code>connect</code> and <code>disconnect</code> actions for the selected shared connection. A connect action also supplies the host and port.</p>
 </script>
 
 <script type="text/html" data-help-name="motion-server-feedback">

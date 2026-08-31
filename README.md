@@ -31,9 +31,12 @@ Install the Node-RED package from the Node-RED user directory and restart Node-R
 npm install C:\path\to\motion-server\reference_clients\node_red\node-red-contrib-motion-server
 ```
 
-The Node-RED package provides a shared Connection Config Node plus Request, Feedback and Connection Status
-nodes. Import only the required scenario from its `examples/flows` directory. Motion and output-changing
-examples use manual Inject nodes and never run automatically on deploy.
+The Node-RED package provides shared Connection/Connection Control, Request, Feedback and Connection Status
+nodes. Import `01_connection_and_authority.json` first for the common server/authority Dashboard, then import
+only the required functional flows from its `examples/flows` directory. Motion and output-changing examples
+use manual controls and never run automatically on deploy.
+The common Dashboard combines endpoint, connection, authority, bus/server recovery controls and the compact
+Motion Server status summary in one control-panel-style area.
 
 ## Mock path
 
@@ -158,6 +161,22 @@ MOTION_SERVER_IO_io0_MODULES=di:16,do:16,aio:2:1
 
 The configured byte size from `MOTION_SERVER_IO_<id>_MODULES` is compared with
 the actual PDO byte size before `config_map()`.
+
+`MOTION_SERVER_IO_<io>_IOL_PORTS` accepts `<port>:<iodd_key>` or
+`<port>:<iodd_key>:<process_data_profile>`. Omitting the profile selects the first
+`ProcessData` element in IODD document order, so existing two-field entries need
+no edits. An explicit profile uses the IODD `Condition value` as a non-negative
+decimal integer, not an array index or profile name. For example,
+`0:Balluff_BCM_R16E_004_CI01:2` selects `P_Vibration_Accel`; `:240` selects
+`P_Custom_Profile`. Unknown or ambiguous numbers are rejected. A profile without
+a Condition can be selected only by omitting the setting (if it is first).
+Existing `iol<ordinal>.<port>` and `<module-slot>.<port>` selectors remain supported
+for multiple IO-Link modules, as do `none` entries for unused ports.
+The selected profile determines per-port input/output sizes, automatic module
+variant sizing and catalog metadata (`process_data_profile` is the numeric value,
+or null for an unconditional profile; `process_data_profile_id` is its IODD name). This selects server
+metadata only; it does not write an IO-Link device parameter to switch its mode.
+The physical device must already use the matching process data profile.
 
 The CPX object dictionary is based on the CPX-AP-I-EC manual. Fixed objects
 such as `0x27F0`, `0x27F1`, `0xF000`, and `0xF980` are declared directly.

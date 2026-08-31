@@ -118,6 +118,14 @@
   - CMMT는 ESI로 identity, OD catalog와 PDO support를 확인하고 별도 PDO configuration에 따라 drive를 remap한다.
   - CPX-AP-I-EC는 ESI로 module ident, EtherCAT OD와 PDO size를 검증한다.
   - IO-Link device는 IODD로 port별 parameter catalog를 제공하며 catalog가 지원하지 않는 ISDU parameter를 거부한다.
+  - 2026-08-31 확정: `MOTION_SERVER_IO_<io>_IOL_PORTS`는 `<port>:<iodd_key>`와
+    `<port>:<iodd_key>:<process_data_profile>`을 지원한다. 생략 시 IODD 문서 순서의 첫
+    `ProcessData`를 선택하고 명시값은 IODD `Condition value`의 0 이상 십진 정수로 검증한다.
+    이름 또는 배열 순번으로 선택하지 않는다. 미정의/중복 번호는 거부하며 Condition이 없는
+    profile은 첫 항목일 때 생략 방식으로만 선택할 수 있다.
+    선택은 포트 binding에 보관하여 같은 IODD를 사용하는 포트끼리 서로 영향을 주지 않는다.
+    크기 산정과 catalog는 선택한 profile을 사용하며 기존 `.env` 값의 일괄 변경은 하지 않는다.
+    실제 장치 mode/ISDU 자동 설정과 runtime profile 전환은 이 변경의 범위가 아니다.
 - 이유: device/firmware별 metadata를 코드에 중복 기입하거나 추측하지 않고 vendor artifact에 근거해
   startup validation과 사용자 parameter access를 제공해야 한다.
 - 영향: ESI/IODD version 선택, parsing failure와 unsupported metadata는 명시적인 startup/API 오류로 처리한다.
@@ -812,8 +820,9 @@ Device Profile + ESI
 - 결정일: 2026-08-27
 - 결정: RF-002의 Python reference client는 재사용 가능한 최소 통신 모듈만 제공하고 scenario별
   Python script를 만들지 않는다. 사용자 scenario는 Node-RED의 공통 연결/request/feedback node를
-  조합한 flow로 제공한다. 초기 Custom Node는 Connection, Request, Feedback, Connection Status의
-  4종으로 제한하고 기능별 API 사용법은 scenario Subflow/Flow로 제공한다. Connection은 Config Node로
+  조합한 flow로 제공한다. Custom Node는 Connection, Connection Control, Request, Feedback,
+  Connection Status의 5종으로 제한하고 기능별 API 사용법은 scenario Subflow/Flow로 제공한다.
+  Connection은 Config Node로
   구현하여 이를 선택한 모든 node가 하나의 TCP 연결과 authority/correlation 상태를 공유한다. 두
   결과물은 새 `reference_clients` 폴더 아래의 독립 Python 및 Node-RED package로 구성한다.
 - 이유: 단일 예제마다 통신 코드를 복제하지 않으면서도 모든 API를 전용 method로 감싸는 대형 SDK와
@@ -855,16 +864,49 @@ Device Profile + ESI
   제공하고 Feedback/Connection Status Node는 Name과 Config 선택만 가진다.
   기존 Control Panel용 `motion_server_client`, Axis/IO client와 장비 자료용 `Reference` 폴더는
   변경하지 않는다. 기존 client 이관은 새 package 안정화 후 별도 TD에서 검토한다.
-  Node-RED example의 connection/status와 authority는 공통 기반 Flow로 제공하고 Axis, I/O,
-  parameter access, Virtual I/O simulation은 기능 Scenario Flow로 제공한다. connection/status Flow만
-  하나의 Connection Config를 소유하고 나머지 모든 Flow가 이를 참조하여 중복 socket과 authority
-  충돌을 방지한다. 각 Flow는 별도 파일로 관리하되 connection/status Flow를 먼저 import한다.
-  Axis flow는 전체 축의 actual position과 actual velocity를 axis별 graph
-  series로 표시한다. graph는 `@flowfuse/node-red-dashboard`의 `ui-chart`를 사용하고 legacy
-  `node-red-dashboard`는 지원하지 않는다. 모든 feedback을 반영하되 series당 최근 500개 sample만
-  유지하고 연결 단절 시 graph를 초기화한다. 첫 feedback으로 축 수를 정하고 status의 axis name 또는
-  `Axis N` fallback을 사용한다. 상태 변경 명령은 수동 입력으로만 실행하고 deploy 시 자동 실행하지
-  않는다.
+  Node-RED example의 connection/status와 authority는 하나의 공통 기반 Flow 및 Dashboard로 제공하고
+  Axis, I/O, parameter access, Virtual I/O simulation은 기능 Scenario Flow로 제공한다. 공통 Flow만
+  하나의 Connection Config와 Dashboard Base/Theme을 소유하고 나머지 모든 Flow가 이를 참조하여
+  중복 socket, Dashboard와 authority 충돌을 방지한다. 공통 Dashboard는 기존 Control Panel 상단과
+  유사한 compact 제어 바로 구성하고 Host/Port, connect/disconnect, authority toggle, Bus Reconnect,
+  Server Fault Reset, Server Restart와 feedback 기반 Motion Server Status를 한 영역에 표시한다. 수동
+  disconnect는 다음 connect까지 자동 재연결을 중지한다. 각 기능 Flow는 별도 파일로 관리하되 공통
+  Flow를 먼저 import한다.
+  Axis flow는 선택 축의 actual position과 actual velocity만 graph로 표시한다. graph는
+  `@flowfuse/node-red-dashboard`의 `ui-chart`를 사용하고 legacy `node-red-dashboard`는 지원하지 않는다.
+  모든 feedback을 반영하되 최근 500개 sample만 유지하고 축 선택 변경과 연결 단절 시 graph를
+  초기화한다. 첫 feedback으로 축 수를 정하고 status의 axis name 또는 `Axis N` fallback을 사용한다.
+  상태 변경 명령은 수동 입력으로만 실행하고 deploy 시 자동 실행하지 않는다.
+  I/O flow는 기존 I/O Control Panel에서 Virtual Input Simulation을 제외한 device/module 상태, Raw Image,
+  Digital Output과 EC/AP/IO-Link parameter 기능을 Dashboard로 제공한다. Virtual Input Simulation은 별도
+  Flow만 소유하고 I/O Control Flow에는 `system/simulation/io/*` 요청을 포함하지 않는다. Axis parameter는
+  Axis Control Dashboard가, I/O parameter는 I/O Control Dashboard가 각각 소유하므로 별도 Parameter
+  Access Flow는 두지 않는다.
+  `05 Sample Motion Sequence`는 새 Sequence custom node나 하나의 통합 상태 머신을 제공하지 않는다.
+  `01`~`04`의 기존 Request/Feedback 및 I/O 계약을 표준 Node-RED node로 조합하는 방법을 보여주는
+  application example로 유지하고, 명령과 완료 조건은 단계별 node로 노출하여 사용자가 직접 변경한다.
+
+## DEC-038 IO-Link input은 IODD 기반 공통 디코더로 해석
+
+- 상태: `accepted`
+- 결정일: 2026-08-31
+- 결정:
+  - 포트별 `inputs.io_link_channels[]`에 raw `data`, `qualifier`, `decode_status`, `decoded`를 제공한다.
+    별도 qualifier 배열은 제거하고 module 전체 raw와 output 응답은 유지한다.
+  - IODD의 기본 숫자/Boolean 타입 및 flat Record/DatatypeRef를 공통으로 해석한다.
+    센서별 하드코딩은 하지 않으며 미지원 구조는 `unsupported`와 `decoded: null`로 표시한다.
+  - 숫자 Condition value/표시 이름, subindex 식별자, 값·단위·inactive 포함 상태 bit를 매 응답에 제공한다.
+    알 수 없는 단위는 null, 원시 데이터는 padding까지 보존한다. 표시 반올림은 하지 않는다.
+  - IODD metadata는 모델 구성 시 준비하며 주기 경로는 유효 길이의 raw bytes만 처리한다.
+    미설정은 `not_configured`, 무효 qualifier/공통 process-data/길이 부족/비정상 float는
+    `invalid_data`로 구분한다. 한 포트의 문제로 다른 포트나 Feedback을 중단하지 않는다.
+  - status/input-read 등 공통 snapshot에 동일하게 적용한다. 출력 encoding, 장치 profile 자동 변경,
+    센서 bit의 Diagnostic 자동 승격, 신규 UI와 AP/ISDU 동작 모델은 포함하지 않는다.
+- 이유: Client마다 IODD 해석을 중복하지 않고 실장치/가상장치 모두 같은 raw 해석 경로를 사용하기 위해서다.
+- 영향: DEC-011의 unsupported metadata 정책 중 RF-015 input decoding은 startup을 실패시키지 않고
+  포트 상태로 보고한다. DEC-009의 lightweight 정책에도 불구하고 초기 RF-015는 이름·단위를 함께
+  보내는 계약을 선택하며 payload/처리 시간은 회귀 검사한다. 상세 타입·유효성·단위 계약은
+  [RF-015](tasks/rf/RF-015-io-link-feedback-decoding.md)에 기록한다.
 
 ## 새 결정 작성 양식
 

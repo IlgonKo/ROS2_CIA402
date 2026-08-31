@@ -1,13 +1,14 @@
 from motion_server.api.decoder import selected_io_device
 from motion_server.api.encoder import io_device_snapshot
 from motion_server.failure import ResourceNotFoundException, ServerNotReadyException
+from motion_server.handlers.status.server_health import process_data_is_valid
 
 
 def input_read(message, runtime, state, client):
-    return input_read_data(message, runtime)
+    return input_read_data(message, runtime, process_data_valid=process_data_is_valid(state))
 
 
-def input_read_data(message, runtime):
+def input_read_data(message, runtime, *, process_data_valid=True):
     selector = message.get("io", message.get("id"))
     try:
         device = selected_io_device(
@@ -23,6 +24,7 @@ def input_read_data(message, runtime):
     response = io_device_snapshot(
         device,
         include_raw=bool(message.get("raw", False)),
+        process_data_valid=process_data_valid,
     )
     response.pop("type", None)
     response.pop("ok", None)

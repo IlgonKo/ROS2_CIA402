@@ -1,5 +1,6 @@
 from motion_server.api.decoder import selected_io_device
 from motion_server.api.encoder import io_device_snapshot
+from motion_server.handlers.status.server_health import process_data_is_valid
 from motion_server.failure import (
     DeviceAccessException,
     InvalidArgumentException,
@@ -22,6 +23,7 @@ def output_write(message, runtime, state, client):
     response = io_device_snapshot(
         result["device"],
         include_raw=bool(message.get("raw", False)),
+        process_data_valid=process_data_is_valid(state),
     )
     return response
 

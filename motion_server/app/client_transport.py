@@ -12,7 +12,10 @@ def service_client(client, runtime, state, dispatch_message):
     if not readable:
         return True
 
-    chunk = conn.recv(4096)
+    try:
+        chunk = conn.recv(4096)
+    except BlockingIOError:
+        return True
     if not chunk:
         return False
 
@@ -23,6 +26,21 @@ def service_client(client, runtime, state, dispatch_message):
             dispatch_message(json.loads(line), runtime, state, client)
 
     return True
+
+
+def flush_client_output(client):
+    output_buffer = client.get("output_buffer")
+    if not output_buffer:
+        return
+
+    try:
+        sent = client["conn"].send(output_buffer)
+    except BlockingIOError:
+        return
+
+    if sent == 0:
+        raise ConnectionError("client connection closed while sending")
+    del output_buffer[:sent]
 
 
 def send_feedback_if_due(client, runtime, state, feedback_period):

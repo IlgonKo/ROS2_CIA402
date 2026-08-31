@@ -1,0 +1,233 @@
+[
+  {
+    "id": "tab-io",
+    "type": "tab",
+    "label": "03 I/O Control",
+    "disabled": false,
+    "info": "I/O Control Panel-style Dashboard for device status, output control and EC/AP/IO-Link parameters. Virtual input simulation remains in Flow 04."
+  },
+  {
+    "id": "io-page",
+    "type": "ui-page",
+    "name": "I/O Control",
+    "ui": "dashboard-ui",
+    "path": "/io",
+    "icon": "device_hub",
+    "layout": "grid",
+    "theme": "dashboard-theme",
+    "breakpoints": [
+      {
+        "name": "Default",
+        "px": 0,
+        "cols": 3
+      },
+      {
+        "name": "Tablet",
+        "px": 576,
+        "cols": 6
+      },
+      {
+        "name": "Small Desktop",
+        "px": 768,
+        "cols": 9
+      },
+      {
+        "name": "Desktop",
+        "px": 1024,
+        "cols": 12
+      }
+    ],
+    "order": 3,
+    "className": "",
+    "visible": "true",
+    "disabled": "false"
+  },
+  {
+    "id": "io-control-group",
+    "type": "ui-group",
+    "name": "I/O Control Panel",
+    "page": "io-page",
+    "width": 12,
+    "height": 1,
+    "order": 1,
+    "showTitle": false,
+    "className": "",
+    "visible": true,
+    "disabled": false,
+    "groupType": "default"
+  },
+  {
+    "id": "io-control-panel",
+    "type": "ui-template",
+    "z": "tab-io",
+    "group": "io-control-group",
+    "page": "",
+    "ui": "",
+    "name": "I/O Control Panel",
+    "order": 1,
+    "width": 12,
+    "height": 12,
+    "head": "",
+    "format": "<template>\n  <div class=\"ms-io-panel\">\n    <div class=\"ms-io-toolbar\">\n      <strong>I/O Control Panel</strong>\n      <button @click=\"refresh\" :disabled=\"!connected\">Refresh</button>\n      <label><input type=\"checkbox\" v-model=\"rawImage\" @change=\"refresh\"> Raw Image</label>\n      <span>Authority: {{ authorityText }}</span>\n      <span>{{ serverText }}</span>\n      <span>{{ connectionText }}</span>\n    </div>\n\n    <fieldset>\n      <legend>Digital Output</legend>\n      <div class=\"ms-form-row\">\n        <label>I/O <select v-model=\"selectedIo\" @change=\"syncOutputSlot\"><option v-for=\"device in devices\" :key=\"device.id\" :value=\"device.id\">{{ device.id }}</option></select></label>\n        <label>Module <select v-model.number=\"outputSlot\"><option v-for=\"slot in outputSlots\" :key=\"slot\" :value=\"slot\">{{ slot }}</option></select></label>\n        <label>Channel <input type=\"number\" min=\"0\" v-model.number=\"outputChannel\"></label>\n        <label><input type=\"checkbox\" v-model=\"outputValue\"> ON</label>\n        <button @click=\"applyDigitalOutput\" :disabled=\"!canWriteOutput\">Apply</button>\n        <span :class=\"{failed:lastFailed}\">{{ lastResult }}</span>\n      </div>\n    </fieldset>\n\n    <div class=\"ms-parameter-tabs\">\n      <button v-for=\"tab in ['status','ec','ap','iol']\" :key=\"tab\" :class=\"{active:activeTab===tab}\" @click=\"activeTab=tab\">{{ {status:'I/O Status',ec:'EC Parameter',ap:'AP Parameter',iol:'IOL Parameter'}[tab] }}</button>\n    </div>\n\n    <section v-if=\"activeTab==='status'\" class=\"ms-tab-body\">\n      <div v-if=\"!devices.length\">No I/O devices reported.</div>\n      <details v-for=\"device in devices\" :key=\"device.id\" open>\n        <summary><strong>{{ device.id }}</strong> · {{ device.profile }} · inputs {{ device.input_bytes }} bytes · outputs {{ device.output_bytes }} bytes</summary>\n        <table><thead><tr><th>Module</th><th>Name</th><th>Channel</th><th>Inputs</th><th>Outputs</th></tr></thead><tbody>\n          <tr v-for=\"row in statusRows(device)\" :key=\"row.key\"><td>{{ row.module }}</td><td>{{ row.name }}</td><td>{{ row.channel }}</td><td>{{ channelValue(row.inputs) }}</td><td>{{ channelValue(row.outputs) }}</td></tr>\n        </tbody></table>\n        <div v-if=\"rawImage && (device.input_image || device.output_image)\" class=\"ms-raw\">Input image: {{ device.input_image || '-' }}<br>Output image: {{ device.output_image || '-' }}</div>\n      </details>\n    </section>\n\n    <section v-if=\"activeTab==='ec'\" class=\"ms-tab-body\">\n      <div class=\"ms-form-row\">\n        <label>Catalog <select v-model=\"ecCatalogIndex\" @change=\"applyEcCatalog\"><option value=\"\">manual</option><option v-for=\"(item,index) in ecCatalog\" :key=\"index\" :value=\"index\">{{ item.label }}</option></select></label>\n        <button @click=\"loadEcCatalog\" :disabled=\"!selectedIo\">Load Catalog</button>\n      </div>\n      <div class=\"ms-form-row\"><label>I/O <select v-model=\"selectedIo\"><option v-for=\"device in devices\" :key=\"device.id\" :value=\"device.id\">{{ device.id }}</option></select></label><label>Index <input v-model=\"ec.index\"></label><label>Sub <input v-model=\"ec.subindex\"></label><label>Type <select v-model=\"ec.data_type\"><option v-for=\"type in ecTypes\" :key=\"type\">{{ type }}</option></select></label><label>Length <input v-model=\"ec.length\"></label><label>Value <input v-model=\"ec.value\"></label><button @click=\"ecParameter(false)\">Read</button><button @click=\"ecParameter(true)\" :disabled=\"!authorityOwned\">Write</button></div>\n      <div class=\"ms-result\" :class=\"{failed:ecFailed}\">{{ ecResult }}</div>\n    </section>\n\n    <section v-if=\"activeTab==='ap'\" class=\"ms-tab-body\">\n      <div class=\"ms-form-row\"><label>I/O <select v-model=\"selectedIo\"><option v-for=\"device in devices\" :key=\"device.id\" :value=\"device.id\">{{ device.id }}</option></select></label><label>Module <input v-model=\"ap.module\"></label><label>Parameter ID <input v-model=\"ap.parameter_id\"></label><label>Instance <input v-model=\"ap.instance\"></label><label>Length <input v-model=\"ap.length\"></label><label>Type <select v-model=\"ap.data_type\"><option v-for=\"type in apTypes\" :key=\"type\">{{ type }}</option></select></label><label>Value <input v-model=\"ap.value\"></label><button @click=\"apParameter(false)\">Read</button><button @click=\"apParameter(true)\" :disabled=\"!authorityOwned\">Write</button></div>\n      <div class=\"ms-result\" :class=\"{failed:apFailed}\">{{ apResult }}</div>\n    </section>\n\n    <section v-if=\"activeTab==='iol'\" class=\"ms-tab-body\">\n      <div class=\"ms-form-row\"><label>Catalog <select v-model=\"iolCatalogIndex\" @change=\"applyIolCatalog\"><option value=\"\">manual</option><option v-for=\"(item,index) in iolCatalog\" :key=\"index\" :value=\"index\">{{ item.label }}</option></select></label><button @click=\"loadIolCatalog\" :disabled=\"!selectedIo\">Load Catalog</button></div>\n      <div class=\"ms-form-row\"><label>I/O <select v-model=\"selectedIo\"><option v-for=\"device in devices\" :key=\"device.id\" :value=\"device.id\">{{ device.id }}</option></select></label><label>Module <input v-model=\"iol.module\"></label><label>Port <input v-model=\"iol.port\"></label><label>Index <input v-model=\"iol.index\"></label><label>Sub <input v-model=\"iol.subindex\"></label><label>Length <input v-model=\"iol.length\"></label><label>Type <select v-model=\"iol.data_type\"><option v-for=\"type in iolTypes\" :key=\"type\">{{ type }}</option></select></label><label>Value <input v-model=\"iol.value\"></label><button @click=\"iolParameter(false)\">Read</button><button @click=\"iolParameter(true)\" :disabled=\"!authorityOwned\">Write</button></div>\n      <div class=\"ms-result\" :class=\"{failed:iolFailed}\">{{ iolResult }}</div>\n    </section>\n  </div>\n</template>\n<script>\nexport default {\n  data() { return { connected:false, connectionError:'', authorityOwned:false, authorityAvailable:false, authorityOwner:null, serverHealth:null, processDataValid:false, rawImage:false, devices:[], selectedIo:'', outputSlot:null, outputChannel:0, outputValue:false, activeTab:'status', lastResult:'', lastFailed:false, ecTypes:['uint8','int8','uint16','int16','int32','uint32','float32','char','string'], apTypes:['bytes','char','uint8','int8','uint16','int32','uint32','float32'], iolTypes:['bytes','char','uint8','int8','uint16','int16','int32','uint32','float32'], ec:{index:'0x1000',subindex:'0x00',data_type:'uint32',length:'',value:''}, ap:{module:'1',parameter_id:'0x00000001',instance:'0',length:'1',data_type:'uint8',value:''}, iol:{module:'1',port:'0',index:'16',subindex:'0',length:'2',data_type:'bytes',value:''}, ecCatalog:[], ecCatalogIndex:'', iolCatalog:[], iolCatalogIndex:'', ecResult:'',ecFailed:false,apResult:'',apFailed:false,iolResult:'',iolFailed:false } },\n  computed:{\n    selectedDevice(){ return this.devices.find(device=>device.id===this.selectedIo)||null },\n    outputSlots(){ return this.selectedDevice ? (this.selectedDevice.modules||[]).filter(module=>Number(module.digital_outputs||0)>0).map(module=>Number(module.slot)) : [] },\n    canWriteOutput(){ return this.connected && this.authorityOwned && this.selectedIo && this.outputSlots.includes(Number(this.outputSlot)) && Number.isInteger(Number(this.outputChannel)) && Number(this.outputChannel)>=0 },\n    authorityText(){ if(!this.connected)return 'not available'; if(this.authorityOwned)return 'owned by this client'; if(this.authorityAvailable)return 'available'; return this.authorityOwner==null?'unavailable':`owned by client ${this.authorityOwner}` },\n    connectionText(){ return this.connected?'Connected':(this.connectionError?`Disconnected: ${this.connectionError}`:'Disconnected') },\n    serverText(){ const h=this.serverHealth; if(!h)return 'Server: waiting for feedback'; return `Server: ${h.runtime_state} | initialized ${h.initialized?'yes':'no'} | ${h.diagnostic_level} (faults ${h.fault_count||0}, alarms ${h.alarm_count||0}) | ${this.processDataValid?'process data valid':'process data invalid'}` }\n  },\n  watch:{ msg:{deep:true,immediate:true,handler(message){ if(!message||!message.topic)return; const value=message.payload||{}; if(message.topic==='io/connection'){this.connected=value.connected===true;this.connectionError=value.last_error||'';if(!this.connected){this.authorityOwned=false;this.serverHealth=null;this.devices=[]}} else if(message.topic==='io/feedback'){const authority=value.command_authority||{};this.authorityOwned=authority.owned_by_this_client===true;this.authorityAvailable=authority.available===true;this.authorityOwner=authority.owner;this.serverHealth=value.server_health||null;this.processDataValid=value.process_data_valid===true;this.updateDevices(value.devices||[])} else if(message.topic==='io/response'){this.handleResponse(value)} else if(message.topic==='io/error'){this.lastResult=`CLIENT ERROR: ${value.code||value.message||'UNKNOWN'}`;this.lastFailed=true} } } },\n  methods:{\n    sendRequest(payload){this.send({payload})}, compact(value){return value?JSON.stringify(value):'-'},\n    channelValue(value){if(value===undefined||value===null||value==='')return '-';if(typeof value==='boolean')return value?'ON':'OFF';if(typeof value==='object'){if(value.data!==undefined&&value.qualifier!==undefined)return `${value.data} (PQI ${value.qualifier})`;if(value.data!==undefined)return value.data;return JSON.stringify(value)}return String(value)},\n    statusRows(device){const rows=[];for(const module of device.modules||[]){const inputs=module.inputs||{};const outputs=module.outputs||{};this.appendChannelRows(rows,module,'Digital',inputs.digital,outputs.digital);this.appendChannelRows(rows,module,'Analog',inputs.analog,outputs.analog);this.appendIoLinkRows(rows,module,inputs,outputs);if(!rows.some(row=>row.module===module.slot)){rows.push({key:`${module.slot}:summary`,module:module.slot,name:module.name||module.type||'Module',channel:'-',inputs:inputs,outputs:outputs})}}return rows},\n    appendChannelRows(rows,module,name,inputValues,outputValues){const input=Array.isArray(inputValues)?inputValues:[];const output=Array.isArray(outputValues)?outputValues:[];const count=Math.max(input.length,output.length);for(let channel=0;channel<count;channel++)rows.push({key:`${module.slot}:${name}:${channel}`,module:module.slot,name:`${module.name||module.type||'Module'} ${name}`,channel,inputs:input[channel],outputs:output[channel]})},\n    appendIoLinkRows(rows,module,inputs,outputs){const inputChannels=Array.isArray(inputs.io_link_channels)?inputs.io_link_channels:[];const outputChannels=Array.isArray(outputs.io_link_channels)?outputs.io_link_channels:[];const qualifiers=Array.isArray(inputs.io_link_qualifiers)?inputs.io_link_qualifiers:[];const count=Math.max(inputChannels.length,outputChannels.length);for(let index=0;index<count;index++){const input=inputChannels[index]?{data:inputChannels[index].data,qualifier:qualifiers[index]??0}:null;const output=outputChannels[index]?{data:outputChannels[index].data}:null;rows.push({key:`${module.slot}:IOL:${index}`,module:module.slot,name:`${module.name||module.type||'Module'} IO-Link`,channel:inputChannels[index]?.port??outputChannels[index]?.port??index,inputs:input,outputs:output})}},\n    refresh(){if(this.connected)this.sendRequest({cmd:'system/io/status',raw:this.rawImage})},\n    updateDevices(devices){const rawById=Object.fromEntries(this.devices.map(device=>[device.id,{input_image:device.input_image,output_image:device.output_image}]));this.devices=devices.map(device=>{const previous=rawById[device.id]||{};return {...device,input_image:device.input_image??previous.input_image,output_image:device.output_image??previous.output_image}});if(!this.devices.some(device=>device.id===this.selectedIo))this.selectedIo=this.devices[0]?.id||'';this.syncOutputSlot()},\n    syncOutputSlot(){this.$nextTick(()=>{if(!this.outputSlots.includes(Number(this.outputSlot)))this.outputSlot=this.outputSlots[0]??null})},\n    applyDigitalOutput(){if(!this.canWriteOutput)return;this.sendRequest({cmd:'system/io/output_write',io:this.selectedIo,slot:Number(this.outputSlot),kind:'digital',channel:Number(this.outputChannel),value:this.outputValue,raw:this.rawImage})},\n    optional(target,key,value){if(String(value??'').trim()!=='')target[key]=value},\n    ecParameter(write){const payload={cmd:`system/io/param_${write?'write':'read'}`,io:this.selectedIo,index:this.ec.index,subindex:this.ec.subindex,data_type:this.ec.data_type};this.optional(payload,'length',this.ec.length);if(write)payload.value=this.ec.value;this.sendRequest(payload)},\n    apParameter(write){const payload={cmd:`system/io/ap/param_${write?'write':'read'}`,io:this.selectedIo,module:this.ap.module,parameter_id:this.ap.parameter_id,instance:this.ap.instance,data_type:this.ap.data_type};this.optional(payload,'length',this.ap.length);if(write)payload.value=this.ap.value;this.sendRequest(payload)},\n    iolParameter(write){const payload={cmd:`system/io/iol/param_${write?'write':'read'}`,io:this.selectedIo,module:this.iol.module,port:this.iol.port,index:this.iol.index,subindex:this.iol.subindex,data_type:this.iol.data_type};this.optional(payload,'length',this.iol.length);if(write)payload.value=this.iol.value;this.sendRequest(payload)},\n    loadEcCatalog(){this.sendRequest({cmd:'system/io/ethercat/param_catalog',io:this.selectedIo})}, loadIolCatalog(){this.sendRequest({cmd:'system/io/iol/param_catalog',io:this.selectedIo,module:this.iol.module,port:this.iol.port})},\n    catalogType(value,bits){const text=String(value||'').toLowerCase();for(const type of this.ecTypes)if(text.includes(type))return type;if(Number(bits)===8)return 'uint8';if(Number(bits)===16)return 'uint16';if(Number(bits)===32)return 'uint32';return 'bytes'},\n    buildEcCatalog(data){const entries=[];for(const object of data.objects||[]){const subs=object.subitems||[];if(subs.length){for(const sub of subs)entries.push({label:`${object.index_hex||object.index}:0x${Number(sub.subindex||0).toString(16).padStart(2,'0')} ${sub.name||object.name||''}`,index:object.index_hex||object.index,subindex:`0x${Number(sub.subindex||0).toString(16).padStart(2,'0')}`,data_type:this.catalogType(sub.data_type,sub.bit_size),length:Number(sub.bit_size||0)/8||''})}else entries.push({label:`${object.index_hex||object.index}:0x00 ${object.name||''}`,index:object.index_hex||object.index,subindex:'0x00',data_type:this.catalogType(object.data_type,object.bit_size),length:Number(object.bit_size||0)/8||''})}this.ecCatalog=entries;this.ecCatalogIndex=entries.length?'0':'';this.applyEcCatalog()},\n    applyEcCatalog(){const item=this.ecCatalog[Number(this.ecCatalogIndex)];if(!item)return;Object.assign(this.ec,{index:item.index,subindex:item.subindex,data_type:item.data_type,length:item.length})},\n    buildIolCatalog(data){const entries=[];for(const module of data.modules||[])for(const device of module.devices||[])for(const variable of device.variables||[]){const subs=variable.subindices||[];if(subs.length){for(const sub of subs)entries.push({label:`M${module.module} P${device.port} ${variable.index}:${sub.subindex} ${sub.name||variable.name||''}`,module:module.module,port:device.port,index:variable.index,subindex:sub.subindex,data_type:this.catalogType(sub.data_type,sub.bit_size),length:Number(sub.bit_size||0)/8||''})}else entries.push({label:`M${module.module} P${device.port} ${variable.index}:0 ${variable.name||''}`,module:module.module,port:device.port,index:variable.index,subindex:0,data_type:this.catalogType(variable.data_type,variable.bit_size),length:Number(variable.bit_size||0)/8||''})}this.iolCatalog=entries;this.iolCatalogIndex=entries.length?'0':'';this.applyIolCatalog()},\n    applyIolCatalog(){const item=this.iolCatalog[Number(this.iolCatalogIndex)];if(!item)return;Object.assign(this.iol,{module:item.module,port:item.port,index:item.index,subindex:item.subindex,data_type:item.data_type,length:item.length})},\n    resultText(response){if(response.result!=='success'){const failure=response.failure||{};return {text:`FAIL: ${failure.code||failure.message||'UNKNOWN'}`,failed:true}}const data=response.data||{};const value=data.value!==undefined?` Value=${typeof data.value==='object'?JSON.stringify(data.value):data.value}`:'';const hex=data.hex?` (${data.hex})`:'';const status=data.status!==undefined?` Status=${data.status}`:'';return {text:`${response.type}: SUCCESS${status}${value}${hex}`,failed:false}},\n    handleResponse(response){const result=this.resultText(response);this.lastResult=result.text;this.lastFailed=result.failed;if(response.result==='success'){const data=response.data||{};if(response.type==='system/io/status')this.updateDevices(data.devices||[]);else if(response.type==='system/io/input_read'||response.type==='system/io/output_write')this.updateDevices(this.devices.map(device=>device.id===data.id?data:device));else if(response.type==='system/io/ethercat/param_catalog')this.buildEcCatalog(data);else if(response.type==='system/io/iol/param_catalog')this.buildIolCatalog(data)}if(response.type?.startsWith('system/io/ap/')){this.apResult=result.text;this.apFailed=result.failed}else if(response.type?.startsWith('system/io/iol/')){this.iolResult=result.text;this.iolFailed=result.failed}else if(response.type?.includes('/param_')||response.type==='system/io/ethercat/param_catalog'){this.ecResult=result.text;this.ecFailed=result.failed}}\n  }\n}\n</script>\n<style>\n.ms-io-panel{font-family:Arial,sans-serif;color:#222}.ms-io-toolbar,.ms-form-row{display:flex;align-items:center;gap:10px;flex-wrap:wrap}.ms-io-toolbar{margin-bottom:10px}.ms-io-toolbar strong{font-size:20px;margin-right:8px}.ms-io-panel fieldset,.ms-tab-body{border:1px solid #ccc;padding:10px;margin:8px 0}.ms-io-panel legend{padding:0 5px}.ms-io-panel button{border:1px solid #aaa;border-radius:4px;background:#fff;padding:6px 10px;cursor:pointer}.ms-io-panel button:disabled{color:#999;background:#eee;cursor:default}.ms-io-panel input,.ms-io-panel select{border:1px solid #bbb;background:#fff;padding:5px;max-width:180px}.ms-form-row label{display:flex;align-items:center;gap:4px;white-space:nowrap}.ms-parameter-tabs{display:flex;gap:4px;margin-top:10px}.ms-parameter-tabs button.active{border-color:#0078d4;color:#0067b8;font-weight:700}.ms-tab-body table{width:100%;border-collapse:collapse;margin:8px 0}.ms-tab-body th,.ms-tab-body td{border:1px solid #ddd;padding:5px;text-align:left;vertical-align:top}.ms-tab-body pre{margin:0;white-space:pre-wrap;word-break:break-all}.ms-raw{font-family:monospace;word-break:break-all}.ms-result{margin-top:8px;color:#176d29}.failed{color:#b3261e!important}@media(max-width:800px){.ms-form-row label{flex:1 1 45%}.ms-io-toolbar>*{flex:1 1 auto}.ms-io-toolbar strong{flex-basis:100%}}\n</style>",
+    "storeOutMessages": true,
+    "passthru": false,
+    "resendOnRefresh": true,
+    "templateScope": "local",
+    "className": "",
+    "x": 990,
+    "y": 250,
+    "wires": [
+      [
+        "io-request"
+      ]
+    ]
+  },
+  {
+    "id": "io-feedback",
+    "type": "motion-server-feedback",
+    "z": "tab-io",
+    "name": "I/O Feedback",
+    "connection": "cfg-status",
+    "x": 170,
+    "y": 140,
+    "wires": [
+      [
+        "format-io-feedback",
+        "io-feedback-debug"
+      ]
+    ]
+  },
+  {
+    "id": "format-io-feedback",
+    "type": "function",
+    "z": "tab-io",
+    "name": "Format I/O Feedback",
+    "func": "const feedback=msg.payload||{};return [[{topic:'io/feedback',payload:{devices:Array.isArray(feedback.io?.devices)?feedback.io.devices:[],command_authority:feedback.command_authority||{},server_health:feedback.server_health||null,process_data_valid:feedback.process_data_valid===true}},{topic:'io/connection',payload:{connected:true,last_error:''}}]];",
+    "outputs": 1,
+    "x": 450,
+    "y": 140,
+    "wires": [
+      [
+        "io-control-panel"
+      ]
+    ]
+  },
+  {
+    "id": "io-connection",
+    "type": "motion-server-connection-status",
+    "z": "tab-io",
+    "name": "Connection Status",
+    "connection": "cfg-status",
+    "x": 180,
+    "y": 210,
+    "wires": [
+      [
+        "format-io-connection"
+      ]
+    ]
+  },
+  {
+    "id": "format-io-connection",
+    "type": "function",
+    "z": "tab-io",
+    "name": "Format I/O Connection",
+    "func": "const status=msg.payload||{};return {topic:'io/connection',payload:{connected:status.connected===true,last_error:status.last_error||''}};",
+    "outputs": 1,
+    "x": 460,
+    "y": 210,
+    "wires": [
+      [
+        "io-control-panel"
+      ]
+    ]
+  },
+  {
+    "id": "io-request",
+    "type": "motion-server-request",
+    "z": "tab-io",
+    "name": "I/O API",
+    "connection": "cfg-status",
+    "timeout": "15",
+    "x": 210,
+    "y": 310,
+    "wires": [
+      [
+        "format-io-response",
+        "io-response-debug"
+      ],
+      [
+        "format-io-error",
+        "io-error-debug"
+      ]
+    ]
+  },
+  {
+    "id": "format-io-response",
+    "type": "function",
+    "z": "tab-io",
+    "name": "Format I/O Response",
+    "func": "const response=msg.payload||{};if(response.result==='success'&&response.type==='system/io/iol/param_catalog'){const data=response.data||{};const normalize=(value,bits)=>{const text=String(value||'').toLowerCase();const size=Number(bits||0);if(text.includes('string')||text==='char')return 'char';if(text.includes('unsigned'))return size<=8?'uint8':size<=16?'uint16':'uint32';if(text.includes('integer')||text.includes('signed'))return size<=8?'int8':size<=16?'int16':'int32';return value};for(const device of data.devices||[])for(const variable of device.variables||[]){variable.bit_size=variable.bit_size??variable.bit_length;variable.data_type=normalize(variable.data_type,variable.bit_size);for(const sub of variable.subindices||[]){sub.bit_size=sub.bit_size??sub.bit_length;sub.data_type=normalize(sub.data_type,sub.bit_size)}}data.modules=[{module:data.module,devices:data.devices||[]}]}return {topic:'io/response',payload:response};",
+    "outputs": 1,
+    "x": 470,
+    "y": 280,
+    "wires": [
+      [
+        "io-control-panel"
+      ]
+    ]
+  },
+  {
+    "id": "format-io-error",
+    "type": "function",
+    "z": "tab-io",
+    "name": "Format I/O Error",
+    "func": "return {topic:'io/error',payload:msg.payload||{}};",
+    "outputs": 1,
+    "x": 460,
+    "y": 350,
+    "wires": [
+      [
+        "io-control-panel"
+      ]
+    ]
+  },
+  {
+    "id": "io-feedback-debug",
+    "type": "debug",
+    "z": "tab-io",
+    "name": "I/O Feedback",
+    "active": false,
+    "tosidebar": true,
+    "complete": "payload.io",
+    "targetType": "msg",
+    "x": 440,
+    "y": 90,
+    "wires": []
+  },
+  {
+    "id": "io-response-debug",
+    "type": "debug",
+    "z": "tab-io",
+    "name": "I/O Success or Fail",
+    "active": true,
+    "tosidebar": true,
+    "complete": "payload",
+    "targetType": "msg",
+    "x": 480,
+    "y": 400,
+    "wires": []
+  },
+  {
+    "id": "io-error-debug",
+    "type": "debug",
+    "z": "tab-io",
+    "name": "I/O Client Error",
+    "active": true,
+    "tosidebar": true,
+    "complete": "payload",
+    "targetType": "msg",
+    "x": 470,
+    "y": 450,
+    "wires": []
+  }
+]
