@@ -213,6 +213,20 @@ Tech Debt 상태 값은 `open`, `in_progress`, `complete`를 사용한다.
   - 독립 raw fixture, 다중 포트 격리, real/mock parity와 주기 Feedback 성능 회귀 검증이 통과한다.
 - 상세: [RF-015 기능 명세](tasks/rf/RF-015-io-link-feedback-decoding.md)
 
+### RF-016 Hidden Expert Mode
+
+- 상태: `planned`
+- 우선순위: 보통
+- 요약: 개발자 전용 숨김 모드에서 Motion Server의 일부 raw access guard를 우회하여 실장치 진단과 commissioning 조사를 쉽게 한다.
+- 완료 조건:
+  - `MOTION_SERVER_EXPERT_MODE` 단일 숨김 설정이 추가되고 기본값은 off다.
+  - 공개 README, 공개 API 문서, `.env.example`, Control Panel과 Node-RED Dashboard에는 일반 사용자 기능으로 노출하지 않는다.
+  - normal mode에서는 CPX ISDU gateway OD 등 Motion Server가 보호하던 raw access 차단을 유지한다.
+  - expert mode에서는 command authority, runtime 상태 확인, transport 연결 확인, 장치 reject와 fault 처리는 유지한 채 API abstraction guard만 선택적으로 우회한다.
+  - expert mode raw write는 로그에 명확히 남기고, read/write 실패는 기존 Success/Fail 및 typed Exception 계약으로 반환한다.
+  - TD-032 같은 실장치 IO-Link ISDU 조사 절차에서 임시 probe script 없이 필요한 raw SDO 접근을 수행할 수 있다.
+- 상세: [RF-016 기능 명세](tasks/rf/RF-016-hidden-expert-mode.md)
+
 ## Tech Debt
 
 ### TD-003 Axis Server 과거 명칭 잔존

@@ -4,6 +4,19 @@
 날짜는 기본적으로 Git commit 날짜를 기준으로 정리했고, 아직 commit되지 않은 작업은 현재 작업일 기준으로 별도 기록한다.
 미완료 기능과 기술 부채는 [Remaining Tasks](remaining_tasks.md)에서 별도로 관리한다.
 
+## 2026-09-01
+
+### RF-016 Hidden Expert Mode 등록
+
+- 개발자 전용 숨김 `MOTION_SERVER_EXPERT_MODE`를 RF-016으로 등록했다.
+- Expert Mode는 안전 기능 해제가 아니라 Motion Server의 공개 API abstraction guard를 일부 우회하는
+  내부 진단용 통로로 정의했다.
+- 설정은 하나만 사용하고 기본값은 off로 둔다. README, 공개 API 문서, `.env.example`, Control Panel,
+  Node-RED Dashboard에는 일반 사용자 기능으로 노출하지 않는다.
+- command authority, runtime 상태 확인, transport 연결 확인, device reject와 fault 처리는 우회하지
+  않으며, TD-032 같은 CPX IO-Link ISDU gateway 실장치 조사에서 임시 probe script 없이 raw SDO
+  접근을 수행하는 용도로 사용한다.
+
 ## 2026-08-31
 
 ### TD-032 CPX IO-Link ISDU Parameter Read/Write 실패 등록
