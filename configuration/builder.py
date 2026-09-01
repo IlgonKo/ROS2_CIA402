@@ -107,6 +107,11 @@ def build_motion_server_config(
             "MOTION_SERVER_SIMULATION_API_ENABLED",
             False,
         ),
+        expert_mode=boolean(
+            values,
+            "MOTION_SERVER_EXPERT_MODE",
+            False,
+        ),
     )
     cycle = CycleConfig(
         period=choose(cli.cycle_time, number(values, "PYSOEM_CYCLE_TIME", 0.01)),

@@ -35,15 +35,19 @@ class FakeSdo:
     def __init__(self, exception=None):
         self.exception = exception
         self.value = 42
+        self.reads = []
+        self.writes = []
 
     def read_uint16(self, selector, index, subindex):
         if self.exception is not None:
             raise self.exception
+        self.reads.append((selector, index, subindex))
         return self.value
 
     def write_uint16(self, selector, index, subindex, value):
         if self.exception is not None:
             raise self.exception
+        self.writes.append((selector, index, subindex, value))
         self.value = value
 
 
@@ -57,7 +61,7 @@ class FakeIoGroup:
         return 1
 
 
-def runtime(axis_sdo=None, io_sdo=None, io_selectors=("io0",)):
+def runtime(axis_sdo=None, io_sdo=None, io_selectors=("io0",), expert_mode=False):
     axis_sdo = axis_sdo or FakeSdo()
     io_sdo = io_sdo or FakeSdo()
     axis_sdo.io = io_sdo
@@ -65,6 +69,7 @@ def runtime(axis_sdo=None, io_sdo=None, io_selectors=("io0",)):
         slaves=[object()],
         sdo=axis_sdo,
         device_manager=SimpleNamespace(io=FakeIoGroup(io_selectors)),
+        expert_mode=expert_mode,
     )
 
 
@@ -168,6 +173,46 @@ class EthercatParameterHandlerTest(unittest.TestCase):
                 },
                 runtime(),
             )
+
+    def test_expert_mode_allows_direct_iolink_object_read(self):
+        io_sdo = FakeSdo()
+
+        data = _read_io_parameter(
+            {
+                "type": "system/io/param_read",
+                "io": "io0",
+                "index": 0x2001,
+                "subindex": 2,
+                "data_type": "uint16",
+            },
+            runtime(io_sdo=io_sdo, expert_mode=True),
+        )
+
+        self.assertEqual(data["value"], 42)
+        self.assertEqual(io_sdo.reads, [("io0", 0x2001, 2)])
+
+    def test_expert_mode_allows_direct_iolink_object_write_and_logs_it(self):
+        io_sdo = FakeSdo()
+
+        with patch("builtins.print") as print_mock:
+            data = _write_io_parameter(
+                {
+                    "type": "system/io/param_write",
+                    "io": "io0",
+                    "index": 0x2001,
+                    "subindex": 2,
+                    "data_type": "uint16",
+                    "value": 1,
+                },
+                runtime(io_sdo=io_sdo, expert_mode=True),
+                client={"id": 7},
+            )
+
+        self.assertEqual(data["value"], 1)
+        self.assertEqual(io_sdo.writes, [("io0", 0x2001, 2, 1)])
+        print_mock.assert_called_once()
+        self.assertIn("Expert raw SDO write", print_mock.call_args.args[0])
+        self.assertIn("client=7", print_mock.call_args.args[0])
 
     def test_missing_write_value_is_invalid_argument(self):
         with self.assertRaises(InvalidArgumentException):

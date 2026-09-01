@@ -96,10 +96,11 @@ ISDU 접근이 단순 process data 활성 여부와 별도인 acyclic service �
    - direction trigger
    - status/error read
    - length/data read
-4. 필요한 경우 CPX gateway sequence를 수정하되 `port=1`을 임의로 `port=0`으로 변환하지 않는다.
-5. `param_write`도 같은 sequence 계약으로 정리하고, 실패 단계 detail을 유지한다.
-6. Virtual CPX gateway와 unit test를 실장치 sequence와 같은 계약으로 갱신한다.
-7. API 문서와 test procedure에 process data 확인과 ISDU 접근 성공을 별도 확인 항목으로 분리한다.
+4. 단계별 raw SDO 확인은 RF-016 Hidden Expert Mode를 사용하며, 공개 API guard를 영구 제거하지 않는다.
+5. 필요한 경우 CPX gateway sequence를 수정하되 `port=1`을 임의로 `port=0`으로 변환하지 않는다.
+6. `param_write`도 같은 sequence 계약으로 정리하고, 실패 단계 detail을 유지한다.
+7. Virtual CPX gateway와 unit test를 실장치 sequence와 같은 계약으로 갱신한다.
+8. API 문서와 test procedure에 process data 확인과 ISDU 접근 성공을 별도 확인 항목으로 분리한다.
 
 ## 제외 범위
 

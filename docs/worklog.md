@@ -17,6 +17,17 @@
   않으며, TD-032 같은 CPX IO-Link ISDU gateway 실장치 조사에서 임시 probe script 없이 raw SDO
   접근을 수행하는 용도로 사용한다.
 
+### RF-016 Hidden Expert Mode 1차 구현 완료
+
+- `ServerConfig.expert_mode`와 숨김 환경변수 `MOTION_SERVER_EXPERT_MODE`를 추가했다. 기본값은 off이며
+  `.env.example`, README, 공개 API 문서, Control Panel과 Node-RED Dashboard에는 노출하지 않았다.
+- 1차 구현 범위는 `system/io/param_read/write`의 CPX IO-Link ISDU gateway OD 직접 접근 guard 우회로
+  제한했다. 장기적으로는 같은 설정으로 모든 parameter access safeguard 우회 구조로 확장한다.
+- normal mode에서는 기존 차단을 유지하고, expert mode에서는 `0x2001`, `0x2011`, ... gateway OD의
+  raw SDO read/write를 허용한다. write는 기존 command authority 계약을 그대로 따른다.
+- expert mode raw write는 `Expert raw SDO write` console log로 식별 가능하게 했다.
+- `tests.test_ethercat_parameter_handlers`, `tests.test_typed_configuration` 및 전체 unittest 382개 통과.
+
 ## 2026-08-31
 
 ### TD-032 CPX IO-Link ISDU Parameter Read/Write 실패 등록

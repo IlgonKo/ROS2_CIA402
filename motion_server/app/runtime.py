@@ -11,11 +11,13 @@ class AxisRuntime:
         motion_controller,
         diagnostic_manager=None,
         runtime_logger=None,
+        expert_mode=False,
     ):
         self.device_manager = device_manager
         self.motion_controller = motion_controller
         self.diagnostic_manager = diagnostic_manager or DiagnosticManager()
         self.logger = runtime_logger
+        self.expert_mode = bool(expert_mode)
         self.axis_parameters = AxisParameterRuntimeCache(
             self.motion_controller.axis_count
         )

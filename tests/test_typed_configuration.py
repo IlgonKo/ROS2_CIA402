@@ -112,6 +112,7 @@ class TypedConfigurationTest(unittest.TestCase):
         self.assertEqual(config.server.bus_reconnect_timeout, 10.0)
         self.assertEqual(config.server.axis_restart_timeout, 30.0)
         self.assertFalse(config.server.simulation_api_enabled)
+        self.assertFalse(config.server.expert_mode)
         self.assertIsInstance(config.devices[0].device, CmmtDeviceConfig)
         self.assertIsInstance(config.devices[1].device, CpxApIEcDeviceConfig)
         self.assertEqual(
@@ -134,6 +135,15 @@ class TypedConfigurationTest(unittest.TestCase):
             )
 
         self.assertTrue(config.server.simulation_api_enabled)
+
+    def test_expert_mode_requires_hidden_explicit_configuration(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            config = self.load_typed(
+                temp_dir,
+                "MOTION_SERVER_EXPERT_MODE=1\n",
+            )
+
+        self.assertTrue(config.server.expert_mode)
 
     def test_device_profiles_consume_typed_instance_configuration(self):
         with tempfile.TemporaryDirectory() as temp_dir:

@@ -54,6 +54,7 @@ class ServerConfig:
     bus_reconnect_timeout: float
     axis_restart_timeout: float
     simulation_api_enabled: bool = False
+    expert_mode: bool = False
 
 
 @dataclass(frozen=True)

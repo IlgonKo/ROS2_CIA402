@@ -544,6 +544,7 @@ def build_initialized_server_state(
     motion_config,
     axis_count_value,
 ):
+    runtime.expert_mode = bool(getattr(server_config, "expert_mode", False))
     runtime.last_diagnostics = default_diagnostics(
         axis_count_value,
         "Panel SDO read pending",

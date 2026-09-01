@@ -215,9 +215,10 @@ Tech Debt 상태 값은 `open`, `in_progress`, `complete`를 사용한다.
 
 ### RF-016 Hidden Expert Mode
 
-- 상태: `planned`
+- 상태: `complete`
 - 우선순위: 보통
 - 요약: 개발자 전용 숨김 모드에서 Motion Server의 일부 raw access guard를 우회하여 실장치 진단과 commissioning 조사를 쉽게 한다.
+- 검증: 전체 unittest 382개 통과.
 - 완료 조건:
   - `MOTION_SERVER_EXPERT_MODE` 단일 숨김 설정이 추가되고 기본값은 off다.
   - 공개 README, 공개 API 문서, `.env.example`, Control Panel과 Node-RED Dashboard에는 일반 사용자 기능으로 노출하지 않는다.

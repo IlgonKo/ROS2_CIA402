@@ -105,7 +105,7 @@ def read_io_parameter(message, runtime, client):
 
 
 def write_io_parameter(message, runtime, client):
-    return _write_io_parameter(message, runtime)
+    return _write_io_parameter(message, runtime, client)
 
 
 def _read_axis_parameter(message, runtime):
@@ -128,7 +128,7 @@ def _write_axis_parameter(message, runtime):
 def _read_io_parameter(message, runtime):
     io_selector, index, subindex, data_type, length = parse_io_sdo_request(message)
     validate_io_selector(runtime, io_selector)
-    validate_io_parameter_access(index, subindex)
+    validate_io_parameter_access(index, subindex, runtime)
     value = read_sdo_value(
         runtime.sdo.io, io_selector, index, subindex, data_type, length,
     )
@@ -139,11 +139,14 @@ def _read_io_parameter(message, runtime):
     return data
 
 
-def _write_io_parameter(message, runtime):
+def _write_io_parameter(message, runtime, client=None):
     io_selector, index, subindex, data_type, _length = parse_io_sdo_request(message)
     validate_io_selector(runtime, io_selector)
-    validate_io_parameter_access(index, subindex)
+    validate_io_parameter_access(index, subindex, runtime)
     value = required_sdo_write_value(message)
+    log_expert_raw_sdo_write(
+        runtime, client, io_selector, index, subindex, data_type, value,
+    )
     written = write_sdo_value(
         runtime.sdo.io, io_selector, index, subindex, data_type, value,
     )
@@ -273,12 +276,37 @@ def sdo_value_response(data_type, value):
     }
 
 
-def validate_io_parameter_access(index, subindex):
-    if is_cpx_isdu_access_object(index):
+def validate_io_parameter_access(index, subindex, runtime=None):
+    if is_cpx_isdu_access_object(index) and not expert_mode_enabled(runtime):
         raise UnsupportedOperationException(
             "io_ethercat_parameter_access",
             "Use the dedicated IO-Link ISDU command for this object",
         )
+
+
+def expert_mode_enabled(runtime):
+    return bool(getattr(runtime, "expert_mode", False))
+
+
+def log_expert_raw_sdo_write(
+    runtime,
+    client,
+    io_selector,
+    index,
+    subindex,
+    data_type,
+    value,
+):
+    if not (expert_mode_enabled(runtime) and is_cpx_isdu_access_object(index)):
+        return
+    client_id = None if client is None else client.get("id")
+    print(
+        "Expert raw SDO write: "
+        f"client={client_id} io={io_selector} "
+        f"index=0x{int(index):04X} subindex={int(subindex)} "
+        f"data_type={data_type} value={value}",
+        flush=True,
+    )
 
 
 def is_cpx_isdu_access_object(index):

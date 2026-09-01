@@ -2,7 +2,7 @@
 
 ## 상태
 
-- 상태: `planned`
+- 상태: `complete`
 - 우선순위: 보통
 - 등록일: 2026-09-01
 - 관련 항목: TD-032, TD-031, TD-005
@@ -30,6 +30,22 @@ MOTION_SERVER_EXPERT_MODE=0
 기본값은 항상 off다.
 
 ## 범위
+
+### 1차 구현 범위
+
+- `system/io/param_read`와 `system/io/param_write`에서 CPX IO-Link ISDU gateway OD
+  직접 접근 차단만 우회한다.
+- 대상 gateway OD는 `0x2001`, `0x2011`, ...처럼 CPX IO-Link module별 ISDU access object로
+  계산되는 영역이다.
+- TD-032의 실장치 IO-Link parameter read/write 원인 조사를 우선 지원한다.
+
+### 장기 방향
+
+- 모든 parameter access safeguard를 Expert Mode에서 우회할 수 있는 구조로 확장한다.
+- 단, command authority, runtime 상태 확인, transport 연결 확인, device reject와 fault 처리는
+  계속 우회하지 않는다.
+- 장기 확장은 개별 safeguard 위치를 조사한 뒤 같은 `MOTION_SERVER_EXPERT_MODE` 설정을 사용해
+  일관되게 적용한다.
 
 ### Normal mode
 
@@ -65,14 +81,29 @@ MOTION_SERVER_EXPERT_MODE=0
 
 ## 구현 계획
 
-1. configuration model에 `expert_mode: bool = False`를 추가한다.
-2. raw SDO guard가 필요한 위치에서 `expert_mode`를 확인한다.
-3. normal mode에서는 기존 차단을 유지한다.
-4. expert mode에서는 CPX ISDU gateway OD 직접 접근을 허용한다.
-5. raw write는 command authority를 요구하고 server log에 남긴다.
-6. 실패는 기존 Success/Fail envelope와 typed Exception mapping을 사용한다.
-7. normal/expert mode의 read/write guard 회귀 테스트를 추가한다.
-8. TD-032 진단 절차에서 Expert Mode 사용 경계를 기록한다.
+1. configuration model에 `expert_mode: bool = False`를 추가한다. `complete`
+2. raw SDO guard가 필요한 위치에서 `expert_mode`를 확인한다. `complete`
+3. normal mode에서는 기존 차단을 유지한다. `complete`
+4. expert mode에서는 CPX ISDU gateway OD 직접 접근을 허용한다. `complete`
+5. raw write는 command authority를 요구하고 server log에 남긴다. `complete`
+6. 실패는 기존 Success/Fail envelope와 typed Exception mapping을 사용한다. `complete`
+7. normal/expert mode의 read/write guard 회귀 테스트를 추가한다. `complete`
+8. TD-032 진단 절차에서 Expert Mode 사용 경계를 기록한다. `complete`
+
+## 구현 결과
+
+- `ServerConfig.expert_mode`를 추가하고 `MOTION_SERVER_EXPERT_MODE`에서만 읽는다.
+- 기본값은 off이며 `.env.example`에는 노출하지 않는다.
+- initialized runtime에 `expert_mode`를 전달한다.
+- normal mode에서는 `system/io/param_read/write`의 CPX IO-Link ISDU gateway OD 직접 접근 차단을 유지한다.
+- expert mode에서는 같은 raw SDO 접근을 허용한다.
+- `system/io/param_write`는 기존 API specification의 command authority 요구를 그대로 사용한다.
+- expert mode에서 CPX ISDU gateway OD raw write가 실행되면 console log에 남긴다.
+
+검증:
+
+- `python -m unittest tests.test_ethercat_parameter_handlers tests.test_typed_configuration`
+- `python -m unittest discover tests`
 
 ## 제외 범위
 
