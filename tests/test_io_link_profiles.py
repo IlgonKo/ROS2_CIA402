@@ -129,6 +129,22 @@ class IoLinkProfileTest(unittest.TestCase):
             )
         self.assertEqual([(b.module, b.port) for b in config.io_link_devices], [(1, 0), (3, 2)])
 
+    def test_module_slot_numbers_not_declaration_order_define_layout(self):
+        key = "Balluff_BCM_R16E_004_CI01"
+        config = build_cpx_io_config(
+            "io0",
+            "2:iol:4,1:CPX-AP-I-4AI-U-I-RTD-M12",
+            f"2.1:{key}:2",
+        )
+
+        self.assertEqual([module.slot for module in config.layout.modules], [1, 2])
+        self.assertEqual([module.module_type for module in config.layout.modules], ["ai", "iol"])
+        self.assertEqual([(binding.module, binding.port) for binding in config.io_link_devices], [(2, 1)])
+
+    def test_duplicate_module_slots_are_rejected(self):
+        with self.assertRaisesRegex(ValueError, "Duplicate CPX AP module slot 1"):
+            build_cpx_io_config("io0", "1:di:8,1:do:8")
+
     def test_duplicate_and_out_of_range_ports_remain_rejected(self):
         with patch("device.cpx_ap_i_ec.io_config.iodd_device_info", return_value=sample_device()):
             for raw in ("0:sample,0:sample:240", "4:sample:240"):

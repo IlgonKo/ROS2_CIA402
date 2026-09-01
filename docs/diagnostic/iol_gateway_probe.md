@@ -33,4 +33,8 @@
   실행하지 않았다.
 - 후속 사용자 승인에 따라 Motion Server의 IO-Link ISDU access object 계산은 module 1이
   `0x2001`, module 2가 `0x2011`을 사용하도록 변경했다.
+- 2026-09-01 추가 실장치 확인 결과 `0x2001`은 ISDU gateway가 아니라 IOL module parameter
+  object로 판단한다. `0x2001:00=57`이며 port mode/status와 actual vendor/device/length 정보가
+  이 object에서 정상으로 읽혔다. 따라서 위 probe의 `0x2001:02` 성공은 ISDU access object 존재
+  증거로 사용하지 않는다.
 - 최초 사전 조건의 Disable 요청은 사용자의 후속 '축은 지금 상태로 진행해도 됨' 승인으로 대체되었다.

@@ -33,10 +33,12 @@ MOTION_SERVER_EXPERT_MODE=0
 
 ### 1차 구현 범위
 
-- `system/io/param_read`와 `system/io/param_write`에서 CPX IO-Link ISDU gateway OD
+- `system/io/param_read`와 `system/io/param_write`에서 CPX 내부 조사 후보 OD에 대한
   직접 접근 차단만 우회한다.
-- 대상 gateway OD는 `0x2001`, `0x2011`, ...처럼 CPX IO-Link module별 ISDU access object로
-  계산되는 영역이다.
+- TD-032 조사 과정에서 `0x2001`, `0x2011`, ...을 ISDU access object 후보로 보았으나,
+  추가 실장치 확인 결과 `0x2001`은 IOL module parameter object로 판단한다.
+  Expert Mode는 특정 object가 ISDU gateway라고 확정하지 않고, 개발자가 지정한 raw SDO
+  후보를 확인하기 위한 통로로만 사용한다.
 - TD-032의 실장치 IO-Link parameter read/write 원인 조사를 우선 지원한다.
 
 ### 장기 방향
@@ -50,14 +52,14 @@ MOTION_SERVER_EXPERT_MODE=0
 ### Normal mode
 
 - 기존 보호 동작을 유지한다.
-- CPX IO-Link ISDU gateway OD 같은 내부 access object 직접 접근은 계속 차단한다.
+- CPX 내부 조사 후보 OD 같은 raw access는 계속 차단한다.
 - 일반 사용자 API, Control Panel, Node-RED flow 동작은 변경하지 않는다.
 
 ### Expert mode
 
 - `MOTION_SERVER_EXPERT_MODE=1`일 때만 활성화한다.
 - Motion Server가 공개 API 보호 목적으로 막아둔 일부 raw SDO 접근을 허용한다.
-- TD-032처럼 CPX ISDU gateway object를 직접 read/write해야 하는 실장치 조사에서 사용한다.
+- TD-032처럼 CPX 내부 object를 직접 read/write해야 하는 실장치 조사에서 사용한다.
 - write 동작은 기존 command authority 요구를 유지한다.
 - runtime 상태 확인, transport 연결 확인, device reject, fault/recovery 처리는 우회하지 않는다.
 
@@ -84,7 +86,7 @@ MOTION_SERVER_EXPERT_MODE=0
 1. configuration model에 `expert_mode: bool = False`를 추가한다. `complete`
 2. raw SDO guard가 필요한 위치에서 `expert_mode`를 확인한다. `complete`
 3. normal mode에서는 기존 차단을 유지한다. `complete`
-4. expert mode에서는 CPX ISDU gateway OD 직접 접근을 허용한다. `complete`
+4. expert mode에서는 CPX 내부 조사 후보 OD 직접 접근을 허용한다. `complete`
 5. raw write는 command authority를 요구하고 server log에 남긴다. `complete`
 6. 실패는 기존 Success/Fail envelope와 typed Exception mapping을 사용한다. `complete`
 7. normal/expert mode의 read/write guard 회귀 테스트를 추가한다. `complete`
@@ -95,10 +97,10 @@ MOTION_SERVER_EXPERT_MODE=0
 - `ServerConfig.expert_mode`를 추가하고 `MOTION_SERVER_EXPERT_MODE`에서만 읽는다.
 - 기본값은 off이며 `.env.example`에는 노출하지 않는다.
 - initialized runtime에 `expert_mode`를 전달한다.
-- normal mode에서는 `system/io/param_read/write`의 CPX IO-Link ISDU gateway OD 직접 접근 차단을 유지한다.
+- normal mode에서는 `system/io/param_read/write`의 CPX 내부 조사 후보 OD 직접 접근 차단을 유지한다.
 - expert mode에서는 같은 raw SDO 접근을 허용한다.
 - `system/io/param_write`는 기존 API specification의 command authority 요구를 그대로 사용한다.
-- expert mode에서 CPX ISDU gateway OD raw write가 실행되면 console log에 남긴다.
+- expert mode에서 CPX 내부 조사 후보 OD raw write가 실행되면 console log에 남긴다.
 
 검증:
 
@@ -116,7 +118,7 @@ MOTION_SERVER_EXPERT_MODE=0
 ## 완료 조건
 
 - 기본 실행에서 `expert_mode`는 off이며 기존 raw access guard가 유지된다.
-- `MOTION_SERVER_EXPERT_MODE=1`에서 TD-032 조사에 필요한 CPX ISDU gateway OD 직접 접근이 가능하다.
+- `MOTION_SERVER_EXPERT_MODE=1`에서 TD-032 조사에 필요한 CPX 내부 후보 OD 직접 접근이 가능하다.
 - expert raw write는 command authority 없이 실행되지 않는다.
 - expert raw write는 로그로 식별 가능하다.
 - read/write 실패는 기존 API Fail 계약으로 반환된다.

@@ -9,6 +9,7 @@ from motion_server.failure import (
     PermissionDeniedException,
     OperationTimeoutException,
     ResourceNotFoundException,
+    UnsupportedOperationException,
 )
 from motion_server.failure.mapping import map_exception
 from motion_server.handlers.parameter_access.iol import (
@@ -17,6 +18,7 @@ from motion_server.handlers.parameter_access.iol import (
     _write_iol_parameter,
     isdu_access_object_index,
     read_iol_parameter,
+    write_iol_parameter,
 )
 
 
@@ -183,9 +185,19 @@ class IolParameterHandlerTest(unittest.TestCase):
         self.assertIs(caught.exception, expected)
 
     def test_handler_returns_operation_data(self):
-        data = read_iol_parameter(message(), runtime(), {})
-        self.assertEqual(data["io"], "io0")
-        self.assertNotIn("result", data)
+        with self.assertRaises(UnsupportedOperationException) as caught:
+            read_iol_parameter(message(), runtime(), {})
+        self.assertEqual(caught.exception.operation, "io_link_isdu_parameter_access")
+        self.assertIn("not exposed", caught.exception.reason)
+
+    def test_write_handler_is_explicitly_unavailable(self):
+        with self.assertRaises(UnsupportedOperationException) as caught:
+            write_iol_parameter(
+                message(type="system/io/iol/param_write", value=43),
+                runtime(),
+                {},
+            )
+        self.assertEqual(caught.exception.operation, "io_link_isdu_parameter_access")
 
 
 if __name__ == "__main__":

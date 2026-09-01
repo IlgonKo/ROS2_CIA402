@@ -2,8 +2,12 @@
 
 ## 사용자 가치
 
-실제 AP module과 IO-Link Device가 없어도 Motion Server의 기존 AP parameter 및 IO-Link ISDU API를
-사용하여 parameter read/write 동작을 개발하고 회귀 시험한다.
+실제 AP module과 IO-Link Device가 없어도 Motion Server의 AP parameter와 IO-Link ISDU parameter
+runtime 동작을 개발하고 회귀 시험한다.
+
+단, TD-032에서 확인한 것처럼 현재 검증된 CPX-AP-I-4IOL-M12 실장치에서는 IO-Link ISDU Access
+object가 일반 SDO dictionary에서 확인되지 않았다. 따라서 IO-Link ISDU public API end-to-end 성공
+계약은 실제 접근 경로가 확인된 뒤 재개한다.
 
 ## 책임 경계
 
@@ -13,7 +17,8 @@
 - Virtual IO-Link Device는 연결된 module/port별 ISDU parameter 공간과 장치 반응을 소유한다.
 - `VirtualCpxApDevice`는 Model_Update 시점에 gateway OD의 요청을 해석하여 대상 virtual device에
   전달하고, 처리 결과를 gateway OD의 data/status에 반영한다.
-- Motion Server는 실장치와 동일한 AP parameter 및 IO-Link ISDU command sequence를 사용하며
+- Motion Server는 실장치와 동일한 AP parameter sequence를 사용한다.
+- IO-Link ISDU sequence는 TD-032에서 실제 접근 경로가 확정된 뒤 같은 원칙으로 연결하며,
   mock 전용 API나 우회 경로를 만들지 않는다.
 
 ## 구현 범위
@@ -25,7 +30,8 @@
 - parameter의 초기값, datatype, 길이와 read/write access를 정의하고 검증한다.
 - AP parameter access gateway `0x27F0`의 read/write 요청, status와 data 응답을 virtual AP module에
   연결한다.
-- IO-Link module별 ISDU access gateway를 virtual IO-Link Device에 연결한다.
+- IO-Link module별 ISDU access gateway는 TD-032에서 실제 접근 경로가 확정된 뒤
+  virtual IO-Link Device에 연결한다.
 - 존재하지 않는 module/port/parameter, 잘못된 길이·access와 장치 처리 실패를 실장치 API와 같은
   Failure 계약으로 반환한다.
 - device reset과 재생성 시 초기값·runtime value의 유지 또는 초기화 정책을 명시하고 구현한다.
@@ -50,8 +56,9 @@
 
 - AP module 및 IO-Link module/port 조합별 독립 parameter 공간과 초기값을 검증한다.
 - 같은 module 내 instance, 서로 다른 module/port와 동일 index/subindex 사이의 값 격리를 검증한다.
-- 기존 Motion Server AP parameter 및 IO-Link ISDU API로 gateway OD부터 virtual parameter
-  device까지 end-to-end read/write를 검증한다.
+- Motion Server AP parameter API로 gateway OD부터 virtual parameter device까지 end-to-end
+  read/write를 검증한다.
+- IO-Link ISDU API는 TD-032에서 실제 접근 경로가 확정된 뒤 동일한 검증을 추가한다.
 - unknown target, access 위반, 길이 오류, reset과 재생성 경로를 자동 테스트한다.
 
 ## 완료 증거

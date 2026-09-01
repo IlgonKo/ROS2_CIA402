@@ -453,8 +453,8 @@ system/io/ethercat/param_catalog
 system/io/iol/param_catalog
 system/io/ap/param_read
 system/io/ap/param_write
-system/io/iol/param_read
-system/io/iol/param_write
+system/io/iol/param_read   # 현재 UNSUPPORTED_OPERATION
+system/io/iol/param_write  # 현재 UNSUPPORTED_OPERATION
 ```
 
 ### IO-Link Input Decoding (RF-015)
@@ -666,19 +666,23 @@ Motion Server는 이 번호를 장치의 `0x27F0:02 Module` 필드에 맞게
 
 ### IO-Link Parameters
 
-IO-Link device parameter는 `system/io/iol/*` namespace를 사용한다.
-내부 구현은 CPX-AP-I-EC의 IO-Link ISDU access object를 사용하지만, 공개 API에서는
-`param_read`와 `param_write` 명령으로 표현한다.
+IO-Link device catalog와 process-data decoding은 `system/io/iol/*` namespace를 사용한다.
 
 ```text
-system/io/iol/param_read
-system/io/iol/param_write
+system/io/iol/param_catalog
 ```
 
-`module`은 IOL module 번호, `port`는 해당 module 안의 IO-Link port 번호다.
-`port`는 0부터 시작한다.
-CPX-AP-I-EC 내부 ISDU access object는 module 1 기준 `0x2001`을 사용하며,
-다음 IOL module부터 `0x10`씩 증가한다.
+`system/io/iol/param_read`와 `system/io/iol/param_write` API 이름은 보존하지만,
+현재 검증된 CPX-AP-I-4IOL-M12 실장치에서는 `UNSUPPORTED_OPERATION`을 반환한다.
+IO-Link process data와 CPX module parameter는 정상적으로 사용할 수 있지만, ESI에 정의된
+ISDU Access object가 실제 SDO dictionary에서 확인되지 않았기 때문이다.
+
+따라서 현재는 다음 경로를 사용한다.
+
+- IO-Link process data: `system/io/status`, `system/io/input_read`, feedback의 decoded process data
+- CPX module parameter: `system/io/param_read/write`, `system/io/ap/param_read/write`
+- IO-Link ISDU read/write: Festo Automation Suite, TwinCAT 또는 제조사 문서로 실제 접근 경로를
+  확인한 뒤 재개
 
 ## Server and Bus Management
 

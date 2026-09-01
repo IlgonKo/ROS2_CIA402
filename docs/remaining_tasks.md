@@ -37,7 +37,9 @@ Tech Debt 상태 값은 `open`, `in_progress`, `complete`를 사용한다.
     설정대로 구성된다.
   - metadata 기반 공통 Virtual AP Module이 output process image와 독립 input state를
     Model_Update 시점에 처리한다.
-  - station SDO와 AP parameter/IO-Link ISDU gateway OD의 request/response 전달 경계가 동작한다.
+  - station SDO와 AP parameter request/response 전달 경계가 동작한다.
+  - IO-Link ISDU gateway는 TD-032에서 실장치 접근 경로가 확정된 뒤 public API 성공 계약으로
+    재개한다.
   - Motion Server와 IO Control Panel의 virtual I/O 회귀 테스트가 통과한다.
   - 실장치 profile과 virtual profile의 지원 범위 및 차이가 문서화된다.
 - 상세: [RF-001 기능 명세](tasks/rf/RF-001-cpx-virtual-io.md)
@@ -222,7 +224,7 @@ Tech Debt 상태 값은 `open`, `in_progress`, `complete`를 사용한다.
 - 완료 조건:
   - `MOTION_SERVER_EXPERT_MODE` 단일 숨김 설정이 추가되고 기본값은 off다.
   - 공개 README, 공개 API 문서, `.env.example`, Control Panel과 Node-RED Dashboard에는 일반 사용자 기능으로 노출하지 않는다.
-  - normal mode에서는 CPX ISDU gateway OD 등 Motion Server가 보호하던 raw access 차단을 유지한다.
+  - normal mode에서는 CPX 내부 조사 후보 OD 등 Motion Server가 보호하던 raw access 차단을 유지한다.
   - expert mode에서는 command authority, runtime 상태 확인, transport 연결 확인, 장치 reject와 fault 처리는 유지한 채 API abstraction guard만 선택적으로 우회한다.
   - expert mode raw write는 로그에 명확히 남기고, read/write 실패는 기존 Success/Fail 및 typed Exception 계약으로 반환한다.
   - TD-032 같은 실장치 IO-Link ISDU 조사 절차에서 임시 probe script 없이 필요한 raw SDO 접근을 수행할 수 있다.
@@ -592,11 +594,32 @@ Tech Debt 상태 값은 `open`, `in_progress`, `complete`를 사용한다.
 
 - 상태: `open`
 - 우선순위: 높음
-- 요약: 실장치 CPX-AP-I-4IOL-M12에서 IO-Link parameter read/write가 ISDU gateway의 port 선택 단계에서 거부되는 원인을 확정하고 request sequence를 수정한다.
+- 요약: 실장치 CPX-AP-I-4IOL-M12에서 IO-Link process data와 module parameter는 정상이나,
+  ESI에 정의된 ISDU Access object가 실제 SDO dictionary에서 확인되지 않아 공개 IO-Link parameter
+  read/write를 지원 보류한다. 제조사/FAS/TwinCAT 기준으로 실제 접근 경로를 확정한 뒤 재개한다.
 - 완료 조건:
-  - CPX-AP-I-EC ESI와 공개 Festo/IO-Link master 문서 근거로 `0x2001` ISDU access object의 module/port/index/subindex/direction 계약을 확정한다.
-  - 실장치 기준 `system/io/iol/param_read`와 `system/io/iol/param_write`가 설정된 IO-Link port에서 성공한다.
-  - 실패 시 어느 ISDU 단계, SDO index/subindex/value, device abort/status에서 거부되었는지 API Fail details에 남긴다.
+  - 현재 공개 `system/io/iol/param_read`와 `system/io/iol/param_write`는 `UNSUPPORTED_OPERATION`으로
+    명확히 보류된다.
+  - IO-Link process data decoding과 CPX module parameter read/write는 계속 사용할 수 있다.
   - process data가 유효한 port와 acyclic ISDU 접근 가능 상태를 혼동하지 않도록 문서와 테스트를 보완한다.
-  - Mock/Virtual CPX gateway 회귀 테스트가 실장치 sequence 변경과 같은 계약을 검증한다.
+  - 후속 재개 시 Festo Automation Suite, TwinCAT 또는 제조사 문서로 실제 ISDU Access 경로를
+    확정하고, 그 경로에 맞춰 real/virtual 계약을 다시 구현한다.
 - 상세: [TD-032 기술 명세](tasks/td/TD-032-cpx-iol-isdu-parameter-access.md)
+
+### TD-033 EC Parameter Catalog Station/Object 범위 확장
+
+- 상태: `open`
+- 우선순위: 보통
+- 요약: CPX EC Parameter catalog가 현재 module object 중심이라 EtherCAT general object,
+  identity, diagnosis history, sync/PDO assignment 같은 station-level OD가 catalog에 표시되지 않는다.
+- 완료 조건:
+  - `system/io/ethercat/param_catalog`가 설정된 CPX station의 station-level object와 module-level
+    object를 함께 반환한다.
+  - catalog 응답에서 `station`, `module`, `identity`, `diagnosis`, `sync` 등 사용자가 구분할 수 있는
+    scope/group 정보를 제공한다.
+  - `ro p`는 `access: "ro"`로 표시하며 PDO mapping 구성용 `pdo_mapping` 필드는 추가하지 않는다.
+  - `0x1000`, `0x1001`, `0x1018`, `0x10F1`, `0x10F3`, `0x10F8`, `0x1600...`,
+    `0x1A00...`, `0x1C12...`, `0x1C13`, `0x1C32...` 계열 대표 object가 catalog에 노출된다.
+  - IO Control Panel EC Parameter 탭에서 일반 parameter와 diagnosis/sync object가 혼동되지 않도록
+    표시 그룹을 분리한다.
+- 상세: [TD-033 기술 명세](tasks/td/TD-033-ec-parameter-catalog-scope.md)

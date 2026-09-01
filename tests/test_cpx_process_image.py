@@ -1,9 +1,13 @@
 from types import SimpleNamespace
 import unittest
-from unittest.mock import Mock, patch
+from unittest.mock import Mock, call, patch
 
 from configuration.models import IoLinkPortConfig
 
+from device.cpx_ap_i_ec.ap_module_idents import (
+    CONFIGURED_MODULE_LIST_INDEX,
+    write_configured_module_idents,
+)
 from device.cpx_ap_i_ec.profile import CPXApIEcDeviceProfile
 from device.virtual_cpx_ap_i_ec import VirtualCpxApDevice
 from ethercat.mock_master import MockMaster
@@ -50,6 +54,30 @@ def profile_for(modules=((1, "iol:4:in128:out128"),), ports=()):
 
 
 class CpxProcessImageTest(unittest.TestCase):
+    def test_configured_module_ident_entries_are_written_before_count(self):
+        sdo = Mock()
+        master = SimpleNamespace(sdo=sdo)
+
+        write_configured_module_idents(master, 1, [0x2084, 0x200A, 0x2014])
+
+        self.assertEqual(
+            sdo.method_calls,
+            [
+                call.write_uint32(
+                    1, CONFIGURED_MODULE_LIST_INDEX, 1, 0x2084,
+                ),
+                call.write_uint32(
+                    1, CONFIGURED_MODULE_LIST_INDEX, 2, 0x200A,
+                ),
+                call.write_uint32(
+                    1, CONFIGURED_MODULE_LIST_INDEX, 3, 0x2014,
+                ),
+                call.write_uint8(
+                    1, CONFIGURED_MODULE_LIST_INDEX, 0, 3,
+                ),
+            ],
+        )
+
     def test_variant32_layout_has_no_extra_station_byte(self):
         profile = profile_for()
         self.assertEqual(profile.config.layout.station_output_bytes, 0)

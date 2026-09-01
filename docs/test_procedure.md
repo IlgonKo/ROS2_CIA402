@@ -263,11 +263,13 @@ namespace, feedback 형식, 단위 정책을 변경한 경우에는 이후 ROS B
 
 8. IO-Link ISDU 확인
 
-   - IODD binding이 있는 포트에서 catalog load가 동작하는지 확인한다.
-   - port 입력은 필수다.
-   - binding이 없는 포트는 명확한 오류를 반환한다.
-   - 지원되는 ISDU read가 성공한다.
-   - 지원되지 않는 index/subindex는 서버에서 거부된다.
+   - IODD binding이 있는 포트에서 catalog load와 process-data decoding이 동작하는지 확인한다.
+   - IO-Link process data와 CPX module parameter read/write가 정상이어도 acyclic ISDU access가
+     가능하다고 판단하지 않는다.
+   - 현재 공개 `system/io/iol/param_read`와 `system/io/iol/param_write`는 실장치 접근 경로가
+     확정될 때까지 `UNSUPPORTED_OPERATION`을 반환하는 것이 정상이다.
+   - Festo Automation Suite, TwinCAT 또는 제조사 문서로 실제 ISDU Access 경로가 확인되면
+     이 절차를 재개한다.
 
 ## Windows Package Test
 

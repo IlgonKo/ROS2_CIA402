@@ -273,7 +273,13 @@ def assign_process_image_offsets(modules):
 
 
 def split_module_list(raw_modules):
-    return split_indexed_config_list(raw_modules, default_start=1)
+    items = split_indexed_config_list(raw_modules, default_start=1)
+    seen = set()
+    for slot, _raw_module in items:
+        if slot in seen:
+            raise ValueError(f"Duplicate CPX AP module slot {slot}")
+        seen.add(slot)
+    return sorted(items, key=lambda item: item[0])
 
 
 def parse_cpx_ap_module(

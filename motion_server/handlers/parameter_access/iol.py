@@ -11,6 +11,7 @@ from motion_server.failure import (
     OperationTimeoutException,
     PermissionDeniedException,
     ResourceNotFoundException,
+    UnsupportedOperationException,
 )
 
 
@@ -34,11 +35,19 @@ ISDU_DATA_FORMATS = {
 
 
 def read_iol_parameter(message, runtime, client):
-    return _read_iol_parameter(message, runtime)
+    raise_iol_isdu_access_unavailable()
 
 
 def write_iol_parameter(message, runtime, client):
-    return _write_iol_parameter(message, runtime)
+    raise_iol_isdu_access_unavailable()
+
+
+def raise_iol_isdu_access_unavailable():
+    raise UnsupportedOperationException(
+        "io_link_isdu_parameter_access",
+        "CPX IO-Link ISDU Access OD is not exposed on the verified real device; "
+        "use IO-Link process-data decoding and CPX module parameters instead.",
+    )
 
 
 def _read_iol_parameter(message, runtime):

@@ -63,12 +63,6 @@ def read_module_idents(master, slave_index, index):
 
 def write_configured_module_idents(master, slave_index, idents):
     idents = [int(ident) for ident in idents]
-    master.sdo.write_uint8(
-        slave_index,
-        CONFIGURED_MODULE_LIST_INDEX,
-        0,
-        len(idents),
-    )
     for subindex, ident in enumerate(idents, start=1):
         master.sdo.write_uint32(
             slave_index,
@@ -76,6 +70,12 @@ def write_configured_module_idents(master, slave_index, idents):
             subindex,
             ident,
         )
+    master.sdo.write_uint8(
+        slave_index,
+        CONFIGURED_MODULE_LIST_INDEX,
+        0,
+        len(idents),
+    )
 
 
 def validate_module_idents(label, io_id, expected, actual):

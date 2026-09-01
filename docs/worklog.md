@@ -6,6 +6,47 @@
 
 ## 2026-09-01
 
+### TD-032 IO-Link ISDU 접근 계약 보류 정리
+
+- 실장치 CPX-AP-I-4IOL-M12에서 IO-Link process data와 module parameter object는 정상으로
+  확인했지만, ESI에 보이는 ISDU Access object는 실제 SDO dictionary에서 확인하지 못했다.
+- `0x2001`은 추가 확인 결과 ISDU gateway가 아니라 IOL module parameter object로 판단한다.
+  `0x2001:00=57`이며 port 1의 Port Mode, Port Status, Actual VendorID/DeviceID,
+  Input/OutputDataLength가 정상으로 읽혔다.
+- `0x2002`, `0x2011`, `0x2012`, `0x2021`, `0x2022` 후보 object는 object-not-found로
+  확인했다.
+- 이에 따라 공개 `system/io/iol/param_read/write`는 실장치 접근 경로가 확정될 때까지
+  `UNSUPPORTED_OPERATION`으로 명확히 보류하고, process data decoding과 CPX module parameter
+  접근은 계속 유지하기로 했다.
+- TD-032, RF-013, API 문서와 test procedure에 process data 유효성과 acyclic ISDU 접근 가능성을
+  분리해 기록했다.
+- 관련 parameter handler 테스트와 전체 unittest 386개 통과.
+
+### TD-033 EC Parameter Catalog Station/Object 범위 확장 등록
+
+- CPX 진단 중 사용한 EtherCAT general object, identity, diagnosis history, sync/PDO assignment
+  object가 현재 EC Parameter catalog에 충분히 표시되지 않는 문제를 TD-033으로 등록했다.
+- EC Parameter catalog는 SDO read/write 후보 표시 기능으로 유지하고, PDO mapping 구성 기능은
+  제공하지 않기로 했다.
+- 문서의 `ro p`는 catalog 응답에서 `access: "ro"`로 표시하며, 별도 `pdo_mapping` 필드는
+  추가하지 않기로 했다.
+- 대신 station/module/identity/diagnosis/sync 같은 scope 또는 group 정보를 추가해 IO Control Panel에서
+  일반 parameter와 진단/sync object가 섞여 보이지 않도록 한다.
+
+### CPX AP module slot 정렬 버그 수정
+
+- `MOTION_SERVER_IO_<io>_MODULES`에서 `2:...`, `1:...`처럼 slot 번호를 역순으로 선언하면
+  선언 순서가 물리 slot 순서처럼 사용되어 CPX AP module ident mismatch가 발생하던 문제를 수정했다.
+- CPX AP module 선언은 작성 순서가 아니라 slot 번호 기준으로 정렬하며, 같은 slot 번호가 중복되면
+  configuration 오류로 즉시 거부한다.
+- IO-Link module selector(`iol0`, `iol1`)도 slot 번호 기준 module 순서를 따르도록 맞췄다.
+- 실장치에서 process data는 정상인데 CPX station diagnosis `0x6102:04=0x06000189`가
+  계속 남는 현상을 조사했다. ESI상 해당 code는 `Ident check failed for configured module at slot`
+  이며, 기존 `0xF030` configured module list write가 count를 먼저 쓰고 entries를 나중에 써서
+  CPX가 중간 상태를 검사할 수 있었다. 따라서 `0xF030:01..` entries를 먼저 쓰고 `0xF030:00`
+  count를 마지막에 쓰도록 변경했다.
+- 관련 CPX/IOL unittest와 전체 unittest 384개 통과.
+
 ### RF-016 Hidden Expert Mode 등록
 
 - 개발자 전용 숨김 `MOTION_SERVER_EXPERT_MODE`를 RF-016으로 등록했다.
@@ -14,16 +55,16 @@
 - 설정은 하나만 사용하고 기본값은 off로 둔다. README, 공개 API 문서, `.env.example`, Control Panel,
   Node-RED Dashboard에는 일반 사용자 기능으로 노출하지 않는다.
 - command authority, runtime 상태 확인, transport 연결 확인, device reject와 fault 처리는 우회하지
-  않으며, TD-032 같은 CPX IO-Link ISDU gateway 실장치 조사에서 임시 probe script 없이 raw SDO
-  접근을 수행하는 용도로 사용한다.
+  않으며, TD-032 같은 CPX 내부 object 실장치 조사에서 임시 probe script 없이 raw SDO 접근을
+  수행하는 용도로 사용한다.
 
 ### RF-016 Hidden Expert Mode 1차 구현 완료
 
 - `ServerConfig.expert_mode`와 숨김 환경변수 `MOTION_SERVER_EXPERT_MODE`를 추가했다. 기본값은 off이며
   `.env.example`, README, 공개 API 문서, Control Panel과 Node-RED Dashboard에는 노출하지 않았다.
-- 1차 구현 범위는 `system/io/param_read/write`의 CPX IO-Link ISDU gateway OD 직접 접근 guard 우회로
+- 1차 구현 범위는 `system/io/param_read/write`의 CPX 내부 조사 후보 OD 직접 접근 guard 우회로
   제한했다. 장기적으로는 같은 설정으로 모든 parameter access safeguard 우회 구조로 확장한다.
-- normal mode에서는 기존 차단을 유지하고, expert mode에서는 `0x2001`, `0x2011`, ... gateway OD의
+- normal mode에서는 기존 차단을 유지하고, expert mode에서는 개발자가 지정한 CPX 내부 후보 OD의
   raw SDO read/write를 허용한다. write는 기존 command authority 계약을 그대로 따른다.
 - expert mode raw write는 `Expert raw SDO write` console log로 식별 가능하게 했다.
 - `tests.test_ethercat_parameter_handlers`, `tests.test_typed_configuration` 및 전체 unittest 382개 통과.

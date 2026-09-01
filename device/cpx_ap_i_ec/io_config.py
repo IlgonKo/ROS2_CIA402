@@ -196,7 +196,10 @@ def parse_io_link_selector(selector_text, item, io_link_modules):
 
 def io_link_module_refs(raw_modules):
     refs = []
-    for slot, raw_module in split_indexed_config_list(raw_modules, default_start=1):
+    for slot, raw_module in sorted(
+        split_indexed_config_list(raw_modules, default_start=1),
+        key=lambda item: item[0],
+    ):
         explicit = parse_explicit_cpx_ap_module(slot, raw_module)
         if explicit is not None:
             if explicit.module_type == "iol":
