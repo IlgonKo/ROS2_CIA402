@@ -2,6 +2,7 @@ import unittest
 from types import SimpleNamespace
 
 from device.cmmt.profile import CMMTASDeviceProfile
+from device.exceptions import DeviceIdentityMismatchException
 from device.virtual_servo_drive.servo_model import VirtualCiA402Servo
 from ethercat.mock_master import MockMaster
 from ethercat.mock_slave import MockSlave
@@ -103,7 +104,7 @@ class MockMasterSdoTest(unittest.TestCase):
             "revision": 0,
         }
 
-        with self.assertRaisesRegex(RuntimeError, "profile mismatch"):
+        with self.assertRaisesRegex(DeviceIdentityMismatchException, "profile mismatch"):
             master.connect(target_state="preop")
 
         self.assertFalse(master.transport_available())

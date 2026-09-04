@@ -6,5 +6,9 @@ class DeviceLayoutInvalidException(DeviceModelException):
     pass
 
 
+class DeviceIdentityMismatchException(DeviceModelException):
+    pass
+
+
 class PdoCatalogMismatchException(DeviceModelException):
     pass

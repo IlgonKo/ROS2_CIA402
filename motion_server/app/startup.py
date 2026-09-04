@@ -2,10 +2,7 @@ import time
 import logging
 
 from device.capabilities import DeviceCapability
-from device.exceptions import (
-    DeviceLayoutInvalidException,
-    PdoCatalogMismatchException,
-)
+from device.exceptions import DeviceLayoutInvalidException, PdoCatalogMismatchException
 
 from motion_server.control.pdo_contract import (
     require_pdo_fields_for_mode,

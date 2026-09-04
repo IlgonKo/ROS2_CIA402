@@ -6,6 +6,7 @@ from device.cpx_ap_i_ec.pdo import CPXRxPDO, CPXTxPDO
 from device.cpx_ap_i_ec.pdo_codec import CPXPdoCodec
 from device.cpx_ap_i_ec.pdo_configuration import cpx_pdo_configuration
 from device.exceptions import (
+    DeviceIdentityMismatchException,
     DeviceLayoutInvalidException,
     PdoCatalogMismatchException,
 )
@@ -68,6 +69,7 @@ class CPXApIEcDeviceProfile:
         master,
         slave_index,
     ):
+        self.validate_identity(master, slave_index)
         rxpdo = master.slaves[slave_index].rxpdo
         txpdo = master.slaves[slave_index].txpdo
         configure_io_link_variants(master, slave_index, self.config)
@@ -100,6 +102,35 @@ class CPXApIEcDeviceProfile:
             f"DO={self.config.digital_outputs} AO={self.config.analog_outputs}",
             flush=True,
         )
+
+    def validate_identity(self, master, slave_index):
+        identity = master.read_slave_identity(slave_index)
+        actual_vendor_id = identity.get("vendor_id")
+        actual_product_code = identity.get("product_code")
+        expected_vendor_id = int(self.esi_catalog.vendor_id)
+        expected_product_code = int(self.esi_catalog.product_code)
+        if actual_vendor_id is None or actual_product_code is None:
+            raise DeviceIdentityMismatchException(
+                "CPX-AP-I-EC identity read failed on slave "
+                f"{slave_index}. Could not read vendor/product code from "
+                "EtherCAT identity object."
+            )
+        if (
+            int(actual_vendor_id) != expected_vendor_id
+            or int(actual_product_code) != expected_product_code
+        ):
+            raise DeviceIdentityMismatchException(
+                f"CPX-AP-I-EC profile mismatch on slave {slave_index}. "
+                f"Configured={self.name} "
+                f"(vendor_id={expected_vendor_id}/0x{expected_vendor_id:08X}, "
+                f"product_code={expected_product_code}/"
+                f"0x{expected_product_code:08X}) "
+                f"Actual vendor_id={int(actual_vendor_id)}/"
+                f"0x{int(actual_vendor_id):08X}, "
+                f"product_code={int(actual_product_code)}/"
+                f"0x{int(actual_product_code):08X}. "
+                "Check MOTION_SERVER_BUS and the connected EtherCAT slave."
+            )
 
     def configure_sync_parameters(
         self,

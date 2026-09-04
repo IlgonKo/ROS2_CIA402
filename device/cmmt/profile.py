@@ -9,6 +9,7 @@ from device.cmmt.required_non_pdo_od import (
 from device.cmmt.rxpdo import RxPDO
 from device.cmmt.txpdo import TxPDO
 from device.capabilities import DeviceCapability
+from device.exceptions import DeviceIdentityMismatchException
 
 
 class CMMTDeviceProfile:
@@ -195,14 +196,14 @@ class CMMTDeviceProfile:
         identity = master.read_slave_identity(slave_index)
         actual_product_code = identity.get("product_code")
         if actual_product_code is None:
-            raise RuntimeError(
+            raise DeviceIdentityMismatchException(
                 f"{self.name.upper()} identity read failed on slave {slave_index}. "
                 "Could not read product code from EtherCAT identity object."
             )
 
         expected_product_code = int(self.esi_catalog.product_code)
         if int(actual_product_code) != expected_product_code:
-            raise RuntimeError(
+            raise DeviceIdentityMismatchException(
                 f"CMMT profile mismatch on slave {slave_index}. "
                 f"Configured={self.name} "
                 f"({self.esi_catalog.type_name}, "

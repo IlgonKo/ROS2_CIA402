@@ -28,7 +28,11 @@ class MockSlave:
         catalog = self.virtual_device.device_profile.esi_catalog
         if catalog is None:
             return {}
-        return {
+        identity = {
             "product_code": int(catalog.product_code),
             "revision": int(catalog.revision),
         }
+        vendor_id = getattr(catalog, "vendor_id", None)
+        if vendor_id is not None:
+            identity["vendor_id"] = int(vendor_id)
+        return identity

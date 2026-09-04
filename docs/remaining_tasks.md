@@ -503,15 +503,16 @@ Tech Debt 상태 값은 `open`, `in_progress`, `complete`를 사용한다.
 
 ### TD-026 실장치 Identity 불일치의 초기화 오류 경계 정리
 
-- 상태: `open`
+- 상태: `complete`
 - 우선순위: 보통
-- 요약: 실제 slave identity와 설정 profile의 예상 가능한 불일치를 typed initialization failure로 분류하고 일반 traceback 노출을 제거한다.
+- 요약: 실제 EtherCAT slave identity와 설정 DeviceProfile의 예상 가능한 불일치를 typed initialization failure로 분류하고 일반 traceback 노출을 제거한다.
 - 완료 조건:
-  - adapter 연결, topology/layout과 device identity 불일치의 안정적인 cause 경계가 결정된다.
+  - adapter 연결, topology/layout, CPX AP module layout, device identity와 PDO mapping 불일치의 안정적인 cause 경계가 결정된다.
+  - CMMT-AS/ST와 CPX-AP-I-EC station identity mismatch가 `DEVICE_IDENTITY_MISMATCH`로 분류된다.
   - 예상된 identity mismatch는 구조화된 초기화 실패로 보고되고 Python traceback을 출력하지 않는다.
   - 예상하지 못한 내부 exception만 최상위 초기화 경계에서 traceback을 한 번 기록한다.
   - 실패 후 불완전 runtime이나 가상축 없이 degraded server 상태·Diagnostic·복구 계약이 유지된다.
-  - CMMT-AS/CMMT-ST mismatch와 정상 startup/reconnect 회귀 테스트가 통과한다.
+  - CMMT-AS/CMMT-ST mismatch, CPX station mismatch와 정상 startup/reconnect 회귀 테스트가 통과한다.
 - 상세: [TD-026 기술 명세](tasks/td/TD-026-device-identity-initialization-boundary.md)
 
 ### TD-027 Control Panel의 Motion Server 상태 및 Axis 오류 표시 보완
@@ -593,7 +594,7 @@ Tech Debt 상태 값은 `open`, `in_progress`, `complete`를 사용한다.
 
 ### TD-032 CPX IO-Link ISDU Parameter Read/Write 실패
 
-- 상태: `open`
+- 상태: `complete`
 - 우선순위: 높음
 - 요약: CPX-AP-I-EC 펌웨어 업데이트 이후 IO-Link ISDU Access object가
   `0x2001 + module_slot * module_index_stride` 규칙으로 접근 가능함을 확인했다. 예:

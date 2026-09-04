@@ -1,6 +1,7 @@
 import unittest
 from datetime import datetime, timezone
 
+from device.exceptions import DeviceIdentityMismatchException
 from motion_server.app.initialization import (
     INITIALIZATION_CAUSE_DEFINITIONS,
     INITIALIZATION_RECOVERY_SCOPE,
@@ -10,6 +11,7 @@ from motion_server.app.initialization import (
     InitializationRecoveryScope,
     InitializationStage,
     InitializationStatus,
+    initialization_cause_from_exception,
     recovery_action_allowed,
     validate_initialization_catalog,
 )
@@ -46,6 +48,18 @@ class InitializationCatalogTest(unittest.TestCase):
 
         self.assertIs(definition.stage, InitializationStage.DEVICE_MODEL_BUILD)
         self.assertNotIn("DEVICE_PROFILE_FAILED", InitializationCause.__members__)
+
+    def test_device_identity_mismatch_is_stable_bus_connection_cause(self):
+        cause = initialization_cause_from_exception(
+            InitializationStage.BUS_CONNECTION,
+            DeviceIdentityMismatchException("identity mismatch"),
+        )
+
+        self.assertIs(cause, InitializationCause.DEVICE_IDENTITY_MISMATCH)
+        self.assertIs(
+            INITIALIZATION_CAUSE_DEFINITIONS[cause].stage,
+            InitializationStage.BUS_CONNECTION,
+        )
 
 
 class InitializationStatusTest(unittest.TestCase):

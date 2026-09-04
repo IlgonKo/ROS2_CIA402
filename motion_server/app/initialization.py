@@ -3,7 +3,7 @@ from datetime import datetime, timezone
 from enum import Enum, IntEnum
 import traceback
 
-from device.exceptions import DeviceModelException
+from device.exceptions import DeviceIdentityMismatchException, DeviceModelException
 from motion_server.failure import ConfigurationException
 
 
@@ -20,6 +20,7 @@ class InitializationCause(str, Enum):
     CONFIGURATION_FAILED = "configuration_failed"
     DEVICE_PROFILE_INVALID = "device_profile_invalid"
     DEVICE_LAYOUT_INVALID = "device_layout_invalid"
+    DEVICE_IDENTITY_MISMATCH = "device_identity_mismatch"
     PDO_CATALOG_MISMATCH = "pdo_catalog_mismatch"
     DEVICE_MODEL_BUILD_FAILED = "device_model_build_failed"
     RUNTIME_CREATION_FAILED = "runtime_creation_failed"
@@ -66,6 +67,12 @@ INITIALIZATION_CAUSE_DEFINITIONS = {
     InitializationCause.DEVICE_LAYOUT_INVALID: InitializationCauseDefinition(
         stage=InitializationStage.DEVICE_MODEL_BUILD,
         message="The configured device layout is invalid.",
+    ),
+    InitializationCause.DEVICE_IDENTITY_MISMATCH: InitializationCauseDefinition(
+        stage=InitializationStage.BUS_CONNECTION,
+        message=(
+            "Configured device profile does not match the connected EtherCAT slave."
+        ),
     ),
     InitializationCause.PDO_CATALOG_MISMATCH: InitializationCauseDefinition(
         stage=InitializationStage.DEVICE_MODEL_BUILD,
@@ -198,6 +205,9 @@ def initialization_cause_from_exception(stage, exception):
                 "Initialization exception cause does not match current stage"
             )
         return exception.cause
+
+    if isinstance(exception, DeviceIdentityMismatchException):
+        return InitializationCause.DEVICE_IDENTITY_MISMATCH
 
     if stage is InitializationStage.CONFIGURATION:
         if isinstance(

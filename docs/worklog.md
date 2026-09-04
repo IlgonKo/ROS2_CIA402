@@ -6,6 +6,17 @@
 
 ## 2026-09-04
 
+### TD-026 실장치 Identity 불일치의 초기화 오류 경계 정리
+
+- CMMT-AS/CMMT-ST와 CPX-AP-I-EC station의 실제 EtherCAT slave identity mismatch를
+  `DeviceIdentityMismatchException`과 `DEVICE_IDENTITY_MISMATCH` initialization cause로
+  분류하도록 정리했다.
+- CMMT profile mismatch는 일반 `RuntimeError` 대신 typed exception으로 보고한다.
+- CPX-AP-I-EC는 AP module ident/layout 검증 전에 station vendor/product identity를 먼저 확인한다.
+- AP module ident mismatch는 `DEVICE_LAYOUT_INVALID`, PDO mapping mismatch는
+  `PDO_CATALOG_MISMATCH`로 유지해 세 cause의 경계를 분리했다.
+- 관련 초기화, mock transport, CPX process image 테스트와 전체 unittest 397개 통과.
+
 ### TD-033 CPX EtherCAT Parameter Catalog 응답 일관화
 
 - `system/io/ethercat/param_catalog`가 AP module object 중심으로 응답하던 동작을 제거하고,

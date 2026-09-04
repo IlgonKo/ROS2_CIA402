@@ -9,7 +9,7 @@ from device.cpx_ap_i_ec.ap_module_idents import (
     write_configured_module_idents,
 )
 from device.cpx_ap_i_ec.profile import CPXApIEcDeviceProfile
-from device.exceptions import PdoCatalogMismatchException
+from device.exceptions import DeviceIdentityMismatchException, PdoCatalogMismatchException
 from device.virtual_cpx_ap_i_ec import VirtualCpxApDevice
 from ethercat.mock_master import MockMaster
 from ethercat.mock_slave import MockSlave
@@ -241,6 +241,11 @@ class CpxProcessImageTest(unittest.TestCase):
         rxpdo, txpdo = profile.create_rxpdo(), profile.create_txpdo()
         master = SimpleNamespace(
             slaves=[SimpleNamespace(rxpdo=rxpdo, txpdo=txpdo)],
+            read_slave_identity=Mock(return_value={
+                "vendor_id": profile.esi_catalog.vendor_id,
+                "product_code": profile.esi_catalog.product_code,
+                "revision": profile.esi_catalog.revision,
+            }),
             read_assigned_pdo_mapping_entries=Mock(
                 side_effect=[VARIANT32_OUTPUT, VARIANT32_INPUT],
             ),
@@ -263,6 +268,11 @@ class CpxProcessImageTest(unittest.TestCase):
         rxpdo, txpdo = profile.create_rxpdo(), profile.create_txpdo()
         master = SimpleNamespace(
             slaves=[SimpleNamespace(rxpdo=rxpdo, txpdo=txpdo)],
+            read_slave_identity=Mock(return_value={
+                "vendor_id": profile.esi_catalog.vendor_id,
+                "product_code": profile.esi_catalog.product_code,
+                "revision": profile.esi_catalog.revision,
+            }),
             read_assigned_pdo_mapping_entries=Mock(
                 side_effect=[VARIANT32_OUTPUT, VARIANT32_INPUT[:-1]],
             ),
@@ -275,6 +285,27 @@ class CpxProcessImageTest(unittest.TestCase):
             profile.prepare_process_image(master, 0)
         self.assertEqual(rxpdo.mapping_size(), 128)
         self.assertEqual(txpdo.mapping_size(), 256)
+
+    def test_prepare_rejects_cpx_station_identity_mismatch(self):
+        profile = profile_for()
+        rxpdo, txpdo = profile.create_rxpdo(), profile.create_txpdo()
+        master = SimpleNamespace(
+            slaves=[SimpleNamespace(rxpdo=rxpdo, txpdo=txpdo)],
+            read_slave_identity=Mock(return_value={
+                "vendor_id": profile.esi_catalog.vendor_id,
+                "product_code": 0xDEADBEEF,
+                "revision": profile.esi_catalog.revision,
+            }),
+            read_assigned_pdo_mapping_entries=Mock(),
+        )
+
+        with self.assertRaisesRegex(
+            DeviceIdentityMismatchException,
+            "CPX-AP-I-EC profile mismatch",
+        ):
+            profile.prepare_process_image(master, 0)
+
+        master.read_assigned_pdo_mapping_entries.assert_not_called()
 
     def test_variant32_virtual_transport_still_uses_esi_fixed_blocks(self):
         profile = profile_for()
