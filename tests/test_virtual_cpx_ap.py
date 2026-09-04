@@ -58,6 +58,7 @@ def cpx_profile(*modules):
             for slot, module_type in modules
         ),
         io_link_ports=(),
+        module_pdo_index_stride=0x10,
     )
     return CPXApIEcDeviceProfile(device_config=config)
 
@@ -254,7 +255,7 @@ class VirtualCpxGatewayTest(unittest.TestCase):
         profile = cpx_profile((1, "iol:4:in8:out8"))
         master, device = virtual_cpx_master(profile, isdu_gateway=gateway)
         master.connect(target_state="preop")
-        index = 0x2001
+        index = 0x2011
 
         master.sdo.write_uint8(0, index, 2, 3)
         master.sdo.write_uint16(0, index, 3, 0x20)

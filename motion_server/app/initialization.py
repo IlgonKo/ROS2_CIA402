@@ -3,6 +3,7 @@ from datetime import datetime, timezone
 from enum import Enum, IntEnum
 import traceback
 
+from device.exceptions import DeviceModelException
 from motion_server.failure import ConfigurationException
 
 
@@ -267,7 +268,40 @@ def log_initialization_failure(failure, exception):
         f"message={failure.message}",
         flush=True,
     )
-    traceback.print_exception(exception)
+    if should_log_initialization_detail(exception):
+        print(f"Initialization failure detail:\n{exception}", flush=True)
+    elif should_log_initialization_traceback(exception):
+        traceback.print_exception(exception)
+
+
+def should_log_initialization_detail(exception):
+    if not isinstance(exception, Exception):
+        raise TypeError("Initialization log policy requires source Exception")
+    detailed_expected_exceptions = (
+        InitializationException,
+        ConfigurationException,
+        DeviceModelException,
+        ValueError,
+        TypeError,
+        OverflowError,
+    )
+    return isinstance(exception, detailed_expected_exceptions) and bool(
+        str(exception).strip()
+    )
+
+
+def should_log_initialization_traceback(exception):
+    if not isinstance(exception, Exception):
+        raise TypeError("Initialization log policy requires source Exception")
+    expected_exceptions = (
+        InitializationException,
+        ConfigurationException,
+        DeviceModelException,
+        ValueError,
+        TypeError,
+        OverflowError,
+    )
+    return not isinstance(exception, expected_exceptions)
 
 
 def validate_initialization_catalog():

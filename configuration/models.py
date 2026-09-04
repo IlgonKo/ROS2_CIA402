@@ -212,6 +212,7 @@ class CpxApIEcDeviceConfig:
     logical_id: str
     modules: tuple[IoModuleConfig, ...]
     io_link_ports: tuple[IoLinkPortConfig, ...]
+    module_pdo_index_stride: int = 1
 
 
 DeviceConfig = CmmtDeviceConfig | CpxApIEcDeviceConfig

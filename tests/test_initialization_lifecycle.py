@@ -262,6 +262,38 @@ class InitializationLifecycleTest(unittest.TestCase):
         self.assertNotIn("secret detail", line)
         traceback_output.assert_called_once()
 
+    def test_expected_initialization_failure_logs_detail_without_traceback(self):
+        session = ServerSession(InitializationStatus.ready())
+        with (
+            patch(
+                "motion_server.server.build_device_models",
+                side_effect=InitializationException(
+                    InitializationCause.PDO_CATALOG_MISMATCH
+                ),
+            ),
+            patch("motion_server.server.log_initialization_failure"),
+        ):
+            self.initialize(session)
+        failure = session.initialization_status.failure
+
+        with (
+            patch("builtins.print") as output,
+            patch("traceback.print_exception") as traceback_output,
+        ):
+            log_initialization_failure(
+                failure,
+                PdoCatalogMismatchException("PDO mismatch detail"),
+            )
+
+        self.assertEqual(output.call_count, 2)
+        line = output.call_args_list[0].args[0]
+        detail = output.call_args_list[1].args[0]
+        self.assertIn("cause=pdo_catalog_mismatch", line)
+        self.assertNotIn("PDO mismatch detail", line)
+        self.assertIn("Initialization failure detail:\n", detail)
+        self.assertIn("PDO mismatch detail", detail)
+        traceback_output.assert_not_called()
+
     def test_cpx_layout_and_catalog_failures_remain_distinct(self):
         invalid_layout = CpxApIEcDeviceConfig(
             profile_name="cpx_ap_i_ec",

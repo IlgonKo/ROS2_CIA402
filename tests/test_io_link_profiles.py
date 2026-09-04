@@ -1,6 +1,7 @@
 from dataclasses import replace
 from pathlib import Path
 from types import SimpleNamespace
+import tempfile
 import unittest
 from unittest.mock import patch
 import xml.etree.ElementTree as ET
@@ -11,7 +12,7 @@ from device.cpx_ap_i_ec.io_config import build_cpx_io_config
 from device.cpx_ap_i_ec.profile import CPXApIEcDeviceProfile
 from device.exceptions import DeviceLayoutInvalidException
 from device.io_link.iodd_catalog import (
-    IoddDeviceInfo, iodd_device_info, parse_process_data_profiles,
+    IoddDeviceInfo, find_iodd_file, iodd_device_info, parse_process_data_profiles,
 )
 from motion_server.handlers.status.io_iol_parameter_catalog import iodd_device_to_dict
 
@@ -33,6 +34,32 @@ def sample_device():
 
 
 class IoLinkProfileTest(unittest.TestCase):
+    def test_external_iodd_directory_takes_priority_over_bundled_directory(self):
+        with tempfile.TemporaryDirectory() as first, tempfile.TemporaryDirectory() as second:
+            first_path = Path(first)
+            second_path = Path(second)
+            external = first_path / "Sample_Device.xml"
+            bundled = second_path / "Sample_Device.xml"
+            external.write_text("<external />", encoding="utf-8")
+            bundled.write_text("<bundled />", encoding="utf-8")
+
+            self.assertEqual(
+                find_iodd_file("sample_device", directories=(first_path, second_path)),
+                external,
+            )
+
+    def test_iodd_file_search_falls_back_to_bundled_directory(self):
+        with tempfile.TemporaryDirectory() as first, tempfile.TemporaryDirectory() as second:
+            first_path = Path(first)
+            second_path = Path(second)
+            bundled = second_path / "Sample_Device.xml"
+            bundled.write_text("<bundled />", encoding="utf-8")
+
+            self.assertEqual(
+                find_iodd_file("sample_device", directories=(first_path, second_path)),
+                bundled,
+            )
+
     def test_two_and_three_field_declarations_round_trip(self):
         for text, expected in (
             ("0:sample", IoLinkPortConfig("0", "sample")),

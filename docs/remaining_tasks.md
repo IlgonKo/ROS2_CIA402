@@ -38,8 +38,7 @@ Tech Debt 상태 값은 `open`, `in_progress`, `complete`를 사용한다.
   - metadata 기반 공통 Virtual AP Module이 output process image와 독립 input state를
     Model_Update 시점에 처리한다.
   - station SDO와 AP parameter request/response 전달 경계가 동작한다.
-  - IO-Link ISDU gateway는 TD-032에서 실장치 접근 경로가 확정된 뒤 public API 성공 계약으로
-    재개한다.
+  - IO-Link ISDU gateway는 TD-032에서 확정한 module slot/index stride 규칙으로 dispatch된다.
   - Motion Server와 IO Control Panel의 virtual I/O 회귀 테스트가 통과한다.
   - 실장치 profile과 virtual profile의 지원 범위 및 차이가 문서화된다.
 - 상세: [RF-001 기능 명세](tasks/rf/RF-001-cpx-virtual-io.md)
@@ -101,6 +100,8 @@ Tech Debt 상태 값은 `open`, `in_progress`, `complete`를 사용한다.
 - 요약: Windows package와 Linux Docker 배포 구성을 clean system에서 최종 검증한다.
 - 완료 조건:
   - Windows package의 server, panel, tools, manual과 catalog 구성이 정의대로 포함된다.
+  - 사용자 IODD 저장 및 검색 폴더 `device/io_link/iodd`와 Node-RED reference client/sample flow가
+    Windows package에 포함된다.
   - Linux `.env`와 Windows `config.txt`의 지원 설정 및 기본값 차이가 문서화된다.
   - ESI/IODD 포함, 검색과 version 선택 규칙이 두 환경에서 검증된다.
   - 새 Windows/Linux PC에서 Basic mode 설치 및 smoke-test 절차가 그대로 재현된다.
@@ -297,7 +298,7 @@ Tech Debt 상태 값은 `open`, `in_progress`, `complete`를 사용한다.
 
 ### TD-008 Device 및 Runtime 책임이 큰 모듈
 
-- 상태: `open`
+- 상태: `complete`
 - 우선순위: 보통
 - 요약: device와 runtime 대형 모듈을 lifecycle 책임별 컴포넌트로 분리한다.
 - 완료 조건:
@@ -594,32 +595,32 @@ Tech Debt 상태 값은 `open`, `in_progress`, `complete`를 사용한다.
 
 - 상태: `open`
 - 우선순위: 높음
-- 요약: 실장치 CPX-AP-I-4IOL-M12에서 IO-Link process data와 module parameter는 정상이나,
-  ESI에 정의된 ISDU Access object가 실제 SDO dictionary에서 확인되지 않아 공개 IO-Link parameter
-  read/write를 지원 보류한다. 제조사/FAS/TwinCAT 기준으로 실제 접근 경로를 확정한 뒤 재개한다.
+- 요약: CPX-AP-I-EC 펌웨어 업데이트 이후 IO-Link ISDU Access object가
+  `0x2001 + module_slot * module_index_stride` 규칙으로 접근 가능함을 확인했다. 예:
+  `MOTION_SERVER_IO_io0_MODULE_PDO_INDEX_STRIDE=0x0010`이고 IOL module이 slot 1이면
+  `0x2011`.
 - 완료 조건:
-  - 현재 공개 `system/io/iol/param_read`와 `system/io/iol/param_write`는 `UNSUPPORTED_OPERATION`으로
-    명확히 보류된다.
+  - 공개 `system/io/iol/param_read`와 `system/io/iol/param_write`가 configured module stride를
+    반영한 ISDU Access object를 사용한다.
+  - `system/io/iol/param_catalog`가 같은 object index를 표시한다.
   - IO-Link process data decoding과 CPX module parameter read/write는 계속 사용할 수 있다.
-  - process data가 유효한 port와 acyclic ISDU 접근 가능 상태를 혼동하지 않도록 문서와 테스트를 보완한다.
-  - 후속 재개 시 Festo Automation Suite, TwinCAT 또는 제조사 문서로 실제 ISDU Access 경로를
-    확정하고, 그 경로에 맞춰 real/virtual 계약을 다시 구현한다.
+  - 대표 실장치 port에서 read smoke test가 성공하고, write 가능한 parameter 또는 read-only write
+    rejection이 확인된다.
 - 상세: [TD-032 기술 명세](tasks/td/TD-032-cpx-iol-isdu-parameter-access.md)
 
-### TD-033 EC Parameter Catalog Station/Object 범위 확장
+### TD-033 CPX EtherCAT Parameter Catalog 응답 일관화
 
-- 상태: `open`
+- 상태: `complete`
 - 우선순위: 보통
-- 요약: CPX EC Parameter catalog가 현재 module object 중심이라 EtherCAT general object,
-  identity, diagnosis history, sync/PDO assignment 같은 station-level OD가 catalog에 표시되지 않는다.
+- 요약: CPX EC Parameter catalog가 AP module object 중심으로 응답하여 EtherCAT general object,
+  identity, diagnosis history, sync/PDO assignment 같은 CPX-AP-I-EC 본체 OD가 catalog에 표시되지 않는다.
 - 완료 조건:
-  - `system/io/ethercat/param_catalog`가 설정된 CPX station의 station-level object와 module-level
-    object를 함께 반환한다.
-  - catalog 응답에서 `station`, `module`, `identity`, `diagnosis`, `sync` 등 사용자가 구분할 수 있는
-    scope/group 정보를 제공한다.
+  - `system/io/ethercat/param_catalog`가 설정된 CPX station의 station-level object를 반환한다.
+  - `module` 또는 `slot` selector가 들어오면 `INVALID_ARGUMENT`로 거부한다.
+  - catalog 응답에서 `station`, `identity`, `diagnosis`, `sync`, `pdo_mapping` 등 사용자가 구분할 수 있는
+    `scope`/`group` 정보를 제공한다.
   - `ro p`는 `access: "ro"`로 표시하며 PDO mapping 구성용 `pdo_mapping` 필드는 추가하지 않는다.
   - `0x1000`, `0x1001`, `0x1018`, `0x10F1`, `0x10F3`, `0x10F8`, `0x1600...`,
     `0x1A00...`, `0x1C12...`, `0x1C13`, `0x1C32...` 계열 대표 object가 catalog에 노출된다.
-  - IO Control Panel EC Parameter 탭에서 일반 parameter와 diagnosis/sync object가 혼동되지 않도록
-    표시 그룹을 분리한다.
+  - IO Control Panel EC Parameter 탭에서 CPX 본체 EtherCAT parameter와 AP module parameter가 섞이지 않는다.
 - 상세: [TD-033 기술 명세](tasks/td/TD-033-ec-parameter-catalog-scope.md)

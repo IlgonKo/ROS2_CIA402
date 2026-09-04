@@ -9,8 +9,7 @@
 - `MOTION_SERVER_IO_<io>_MODULES`와 `MOTION_SERVER_IO_<io>_IOL_PORTS` 설정을 사용한다.
 - DI/DO/AI/AO/IO-Link process image와 AP module layout을 모사한다.
 - EtherCAT SDO와 AP parameter gateway OD의 request/response 전달 기반을 제공한다.
-- IO-Link ISDU gateway OD는 TD-032에서 실장치 접근 경로가 확정된 뒤 public API 성공 계약으로
-  재개한다.
+- IO-Link ISDU gateway OD는 TD-032에서 확정한 module slot/index stride 규칙을 사용한다.
 - gateway 뒤의 실제 AP module parameter 및 IO-Link ISDU runtime 공간은
   [RF-013](RF-013-virtual-ap-iol-parameter-devices.md)에서 구현한다.
 - Motion Server와 IO Control Panel에서 실장치와 가상 장치를 같은 API로 처리한다.
@@ -96,7 +95,7 @@ Virtual module input state
 - MockSlave는 장치 의미를 해석하지 않고 raw PDO/SDO endpoint만 담당한다.
 - Gateway request dispatch 경계는 `VirtualCpxApDevice`가 제공하지만 AP module과 IO-Link Device의
   실제 parameter 저장 및 반응은 RF-013의 하위 virtual device가 담당한다. IO-Link ISDU dispatch는
-  TD-032에서 실장치 접근 경로가 확정된 뒤 public API 성공 계약으로 연결한다.
+  TD-032에서 확정한 `0x2001 + module_slot * module_index_stride` 규칙으로 연결한다.
 - Virtual input은 module state에 별도로 보관하고 Model_Update 시점에 TxPDO OD로 반영한다.
   RF-001은 내부 input injection 계약까지만 제공하며 Control Panel과 외부 simulator용 공개 API는
   [RF-014](RF-014-virtual-device-simulation-api.md)에서 구현한다.
@@ -120,7 +119,7 @@ Virtual module input state
 - DI/AI input injection, DO/AO output 반영, IO-Link raw process data와 자동 loopback 부재를
   테스트한다.
 - feedback, output write, station SDO와 AP gateway request/response 경계를 end-to-end 테스트한다.
-- IO-Link ISDU gateway request/response는 TD-032에서 실장치 접근 경로가 확정된 뒤 테스트한다.
+- IO-Link ISDU gateway request/response는 TD-032에서 확정한 slot/stride index 규칙으로 테스트한다.
 - 동일 client scenario를 virtual 및 실제 CPX profile에 적용한다.
 
 ## 완료 증거
@@ -137,7 +136,7 @@ Virtual module input state
 | DO/AO | RxPDO process image를 `Model_Update`에서 반영 | 실제 출력 |
 | IO-Link process data | 고정 크기 raw input/output buffer | 실제 IO-Link Device data |
 | AP parameter | gateway OD request/response dispatch 경계 제공 | 실제 parameter 처리 |
-| IO-Link ISDU parameter | TD-032에서 실장치 접근 경로 확정 전까지 public API 성공 계약 보류 | 접근 경로 확인 필요 |
+| IO-Link ISDU parameter | gateway OD request/response dispatch 경계 제공 | 실제 parameter 처리 |
 | Diagnostic 및 reset | 정상 초기값만 제공, RF-003/RF-012 후속 | 실제 장치 동작 |
 | 외부 input 조작 | 내부 injection 계약만 제공, RF-014 후속 | 실제 입력으로 조작 |
 

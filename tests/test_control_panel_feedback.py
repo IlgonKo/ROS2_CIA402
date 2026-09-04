@@ -243,6 +243,50 @@ class ServerHealthFeedbackTest(unittest.TestCase):
 
 
 class IoSimulationFeedbackTest(unittest.TestCase):
+    def test_iol_catalog_entries_accept_top_level_devices_payload(self):
+        panel = object.__new__(IOControlPanel)
+        response = {
+            "module": 1,
+            "devices": [{
+                "port": 1,
+                "device_name": "Balluff BCM",
+                "variables": [{
+                    "index": 81,
+                    "index_hex": "0x0051",
+                    "access": "rw",
+                    "data_type": "UIntegerT",
+                    "bit_length": 8,
+                    "name": "Switch point",
+                    "subindices": [],
+                }],
+            }],
+        }
+
+        entries = panel.iol_catalog_entries(response)
+
+        self.assertEqual(len(entries), 1)
+        entry = next(iter(entries.values()))
+        self.assertEqual(entry["module"], 1)
+        self.assertEqual(entry["port"], 1)
+        self.assertEqual(entry["index"], "0x0051")
+
+    def test_failure_message_includes_public_failure_details(self):
+        response = {
+            "ok": False,
+            "message": "The requested resource does not exist.",
+            "failure": {
+                "details": {
+                    "resource_type": "io_link_port_binding",
+                    "resource_id": {"io": "io0", "module": 1, "port": 1},
+                },
+            },
+        }
+
+        message = IOControlPanel.failure_message(response)
+
+        self.assertIn("io_link_port_binding", message)
+        self.assertIn("io0", message)
+
     def test_panel_filters_simulation_modules_by_input_kind(self):
         panel = object.__new__(IOControlPanel)
         panel.simulation_device_var = SimpleNamespace(get=lambda: "io0")

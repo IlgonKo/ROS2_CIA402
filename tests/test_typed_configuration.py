@@ -84,6 +84,7 @@ class TypedConfigurationTest(unittest.TestCase):
             "MOTION_SERVER_BACKEND=mock\n"
             "MOTION_SERVER_BUS=0:axis:cmmt-as,1:io:cpx-ap-i-ec:io0,2:axis:cmmt-st\n"
             "MOTION_SERVER_IO_io0_MODULES=1:do:8,2:di:8\n"
+            "MOTION_SERVER_IO_io0_MODULE_PDO_INDEX_STRIDE=0x0010\n"
             "MOTION_SERVER_CMMT_AXIS_PDO_CONFIGURATIONS=0:csp_basic,1:profile_position_basic\n"
             "MOTION_SERVER_CSP_INTERPOLATION_MODE=4\n"
             "MOTION_SERVER_PRE_LOGGING_ENABLED=1\n"
@@ -163,6 +164,7 @@ class TypedConfigurationTest(unittest.TestCase):
             [module.module_type for module in cpx_profile.config.layout.modules],
             ["do", "di"],
         )
+        self.assertEqual(cpx_profile.config.module_pdo_index_stride, 0x0010)
 
     def test_non_pdo_configuration_is_typed_and_selected_by_slave(self):
         with tempfile.TemporaryDirectory() as temp_dir:

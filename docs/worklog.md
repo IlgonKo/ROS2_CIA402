@@ -4,7 +4,65 @@
 날짜는 기본적으로 Git commit 날짜를 기준으로 정리했고, 아직 commit되지 않은 작업은 현재 작업일 기준으로 별도 기록한다.
 미완료 기능과 기술 부채는 [Remaining Tasks](remaining_tasks.md)에서 별도로 관리한다.
 
+## 2026-09-04
+
+### TD-033 CPX EtherCAT Parameter Catalog 응답 일관화
+
+- `system/io/ethercat/param_catalog`가 AP module object 중심으로 응답하던 동작을 제거하고,
+  CPX-AP-I-EC 본체 EtherCAT OD catalog만 반환하도록 정리했다.
+- AP module별 parameter catalog는 `system/io/ap/param_catalog`에서 별도로 다루는 것으로
+  API 경계를 명확히 했다.
+- `system/io/ethercat/param_catalog` 요청에 `module` 또는 `slot` selector가 들어오면
+  `INVALID_ARGUMENT`로 거부하도록 했다.
+- catalog 응답에 `scope: "station"`과 object별 `group` 값을 추가해 `station`, `identity`,
+  `diagnosis`, `sync`, `pdo_mapping` 계열을 구분할 수 있게 했다.
+- IO Control Panel의 EC Parameter catalog가 CPX 본체 EtherCAT parameter와 AP module parameter를
+  섞어 표시하지 않도록 서버 응답 경계를 맞췄다.
+- 관련 catalog handler 테스트와 전체 unittest 395개 통과.
+
 ## 2026-09-01
+
+### CPX firmware별 module PDO index stride 설정 추가
+
+- CPX-AP-I-EC 펌웨어 변경 후 slot 1 module PDO index가 기존 `0x7001/0x6001`에서
+  `0x7010/0x6010`으로 보이고, 여러 module 구성에서는 slot 2/3/4가
+  `0x7020/0x6020`, `0x7030/0x6030`, `0x7040/0x6040`으로 보이는 실장치 구성을
+  확인했다.
+- `MOTION_SERVER_IO_<io>_MODULE_PDO_INDEX_STRIDE` 설정을 추가하여 slot-dependent module
+  PDO index 계산 간격을 선택할 수 있게 했다. 기본값은 기존 호환을 위해 `1`이며, 이번
+  실장치 구성은 `0x0010`을 사용한다.
+- 새 펌웨어 구성에서 RxPDO module entries 뒤에 붙는 `0x7101:00` 8-bit station output tail은
+  알려진 CPX station output byte로 허용한다.
+- 이 설정은 CPX PDO mapping을 새로 쓰는 기능이 아니라, 실제 장치에서 읽은 PDO mapping을
+  검증할 때 사용하는 기대값 계산 규칙이다.
+- 같은 펌웨어 업데이트 이후 IO-Link ISDU Access도 module slot/index stride 규칙으로 접근 가능함을
+  확인했다. `module_pdo_index_stride=0x0010`이고 IOL module이 첫 번째 AP module이면 내부
+  ISDU Access object는 `0x2011`이다.
+- 공개 `system/io/iol/param_read/write`를 보류 상태에서 다시 실제 handler로 연결하고,
+  `system/io/iol/param_catalog`도 같은 object index를 표시하도록 했다.
+
+### Windows Package Reference Client 포함 규칙 추가
+
+- Windows package 생성 시 사용자 IODD 파일 저장 및 검색용 `device/io_link/iodd` 폴더를 생성하도록
+  `scripts/windows/build_exe.ps1`을 수정했다.
+- Node-RED reference client package와 sample flow를
+  `Reference Clients/node_red/node-red-contrib-motion-server` 아래에 포함하도록 했다.
+- `node_modules`는 패키지에 포함하지 않고 대상 PC에서 npm install로 재구성하는 정책으로 정리했다.
+- frozen Windows package에서는 외부 `device/io_link/iodd`를 bundled `_internal` IODD보다 먼저
+  검색하도록 IODD catalog loader를 보강했다.
+- PyInstaller 중간 산출물은 시스템 임시 폴더에서 만들고 packaging 후 삭제하여 프로젝트에는 최종
+  `dist/Motion Server` package만 남기도록 정리했다.
+- Windows package 문서, test procedure와 RF-006 완료 조건에 포함 규칙을 반영했다.
+
+### CPX PDO mapping mismatch 예외 타입 정리
+
+- CPX 실제 PDO mapping readback이 기대 mapping과 다를 때 내부 `RuntimeError`가 그대로 발생하던
+  경계를 `PdoCatalogMismatchException`으로 변경했다.
+- mismatch 자체는 초기화 실패 사유로 유지하지만, 사용자에게 내부 runtime error처럼 보이지 않도록
+  device PDO catalog/layout 불일치 도메인 오류로 분류한다.
+- 예상 가능한 initialization/domain failure는 구조화된 초기화 실패 로그와 원인 상세 메시지를 남기되
+  Python traceback은 출력하지 않도록 로그 정책을 보강했다. 예상하지 못한 내부 exception은 기존처럼
+  조사용 traceback을 남긴다.
 
 ### TD-032 IO-Link ISDU 접근 계약 보류 정리
 

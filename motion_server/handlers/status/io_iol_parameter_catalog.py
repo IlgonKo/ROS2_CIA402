@@ -74,6 +74,10 @@ def iol_catalog_payload(device, module_number, port_number):
             "io_link_port_binding",
             {"io": device["id"], "module": module_number, "port": port_number},
         )
+    object_index = isdu_access_object_index(
+        module_number,
+        index_stride=getattr(config, "module_pdo_index_stride", 0x10),
+    )
 
     return {
         "io": device["id"],
@@ -85,7 +89,7 @@ def iol_catalog_payload(device, module_number, port_number):
         "isdu_access": True,
         "catalog_source": "iodd",
         "validation": "server_rejects_parameters_not_declared_in_iodd",
-        "object_index": f"0x{isdu_access_object_index(module_number):04X}",
+        "object_index": f"0x{object_index:04X}",
         "max_data_bytes": 238,
         "direction_values": {
             "read": 0,

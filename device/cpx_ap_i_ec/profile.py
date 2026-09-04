@@ -35,7 +35,14 @@ class CPXApIEcDeviceProfile:
             for port in device_config.io_link_ports
         )
         try:
-            self.config = build_cpx_io_config(io_id, raw_modules, raw_ports)
+            self.config = build_cpx_io_config(
+                io_id,
+                raw_modules,
+                raw_ports,
+                module_pdo_index_stride=(
+                    getattr(device_config, "module_pdo_index_stride", 1)
+                ),
+            )
         except (TypeError, ValueError) as exc:
             raise DeviceLayoutInvalidException() from exc
         self.pdo_configuration = cpx_pdo_configuration(self.config)

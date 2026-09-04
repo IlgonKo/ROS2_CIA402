@@ -9,6 +9,7 @@ from device.cpx_ap_i_ec.ap_module_idents import (
     write_configured_module_idents,
 )
 from device.cpx_ap_i_ec.profile import CPXApIEcDeviceProfile
+from device.exceptions import PdoCatalogMismatchException
 from device.virtual_cpx_ap_i_ec import VirtualCpxApDevice
 from ethercat.mock_master import MockMaster
 from ethercat.mock_slave import MockSlave
@@ -28,6 +29,36 @@ VARIANT32_INPUT = [
     0x600104F0, 0x00000010,
     0x60010508, 0x60010608, 0x60010708, 0x60010808,
 ]
+VARIANT32_OFFSET_0F_OUTPUT = [
+    0x701001F0, 0x00000010,
+    0x701002F0, 0x00000010,
+    0x701003F0, 0x00000010,
+    0x701004F0, 0x00000010,
+]
+VARIANT32_OFFSET_0F_INPUT = [
+    0x601001F0, 0x00000010,
+    0x601002F0, 0x00000010,
+    0x601003F0, 0x00000010,
+    0x601004F0, 0x00000010,
+    0x60100508, 0x60100608, 0x60100708, 0x60100808,
+]
+STRIDE10_MIXED_OUTPUT = [
+    0x70100101, 0x70100201, 0x70100301, 0x70100401,
+    0x70100501, 0x70100601, 0x70100701, 0x70100801,
+    0x70300101, 0x70300201, 0x70300301, 0x70300401,
+    0x00000004,
+    0x70400110, 0x70400210, 0x70400310, 0x70400410,
+    0x70400501, 0x70400601, 0x70400701, 0x70400801,
+    0x00000004,
+    0x71010008,
+]
+STRIDE10_MIXED_INPUT = [
+    0x60200101, 0x60200201, 0x60200301, 0x60200401,
+    0x60200501, 0x60200601, 0x60200701, 0x60200801,
+    0x60300101, 0x60300201, 0x60300301, 0x60300401,
+    0x00000004,
+    0x60400110, 0x60400210, 0x60400310, 0x60400410,
+]
 FIXED_OUTPUT128 = [
     0x6F000180, 0x6F000280, 0x6F000380, 0x6F000480,
     0x6F000580, 0x6F000680, 0x6F000780, 0x6F000880,
@@ -40,7 +71,11 @@ FIXED_INPUT256 = [
 ]
 
 
-def profile_for(modules=((1, "iol:4:in128:out128"),), ports=()):
+def profile_for(
+    modules=((1, "iol:4:in128:out128"),),
+    ports=(),
+    module_pdo_index_stride=1,
+):
     return CPXApIEcDeviceProfile(device_config=SimpleNamespace(
         logical_id="io0",
         modules=tuple(
@@ -50,6 +85,7 @@ def profile_for(modules=((1, "iol:4:in128:out128"),), ports=()):
             IoLinkPortConfig(selector=selector, device_name=name)
             for selector, name in ports
         ),
+        module_pdo_index_stride=module_pdo_index_stride,
     ))
 
 
@@ -109,6 +145,32 @@ class CpxProcessImageTest(unittest.TestCase):
             (128, 132),
         )
 
+    def test_accepts_configured_module_pdo_index_stride(self):
+        self.assertEqual(
+            profile_for(
+                module_pdo_index_stride=0x0010,
+            ).pdo_configuration.validate_actual_process_image(
+                1, VARIANT32_OFFSET_0F_OUTPUT, VARIANT32_OFFSET_0F_INPUT,
+            ),
+            (128, 132),
+        )
+
+    def test_accepts_stride10_mixed_module_mapping_with_station_output_tail(self):
+        self.assertEqual(
+            profile_for(
+                modules=(
+                    (1, "do:8"),
+                    (2, "di:8"),
+                    (3, "dio:4:4"),
+                    (4, "aio:4:4"),
+                ),
+                module_pdo_index_stride=0x0010,
+            ).pdo_configuration.validate_actual_process_image(
+                4, STRIDE10_MIXED_OUTPUT, STRIDE10_MIXED_INPUT,
+            ),
+            (12, 10),
+        )
+
     def test_accepts_independent_fixed_mapping(self):
         self.assertEqual(
             profile_for().pdo_configuration.validate_actual_process_image(
@@ -131,7 +193,7 @@ class CpxProcessImageTest(unittest.TestCase):
             reordered,
         ):
             with self.subTest(entries=entries), self.assertRaisesRegex(
-                RuntimeError, "RxPDO/output mapping mismatch",
+                PdoCatalogMismatchException, "RxPDO/output mapping mismatch",
             ):
                 profile_for().pdo_configuration.validate_actual_process_image(
                     1, entries, VARIANT32_INPUT,
@@ -146,7 +208,7 @@ class CpxProcessImageTest(unittest.TestCase):
             wrong_slot,
         ):
             with self.subTest(entries=entries), self.assertRaisesRegex(
-                RuntimeError, "TxPDO/input mapping mismatch",
+                PdoCatalogMismatchException, "TxPDO/input mapping mismatch",
             ):
                 profile_for().pdo_configuration.validate_actual_process_image(
                     1, VARIANT32_OUTPUT, entries,
@@ -167,7 +229,9 @@ class CpxProcessImageTest(unittest.TestCase):
             (0, 2),
         )
         inputs[-1] = 0x60020801
-        with self.assertRaisesRegex(RuntimeError, "TxPDO/input mapping mismatch"):
+        with self.assertRaisesRegex(
+            PdoCatalogMismatchException, "TxPDO/input mapping mismatch",
+        ):
             profile.pdo_configuration.validate_actual_process_image(
                 1, [], inputs,
             )
@@ -205,7 +269,9 @@ class CpxProcessImageTest(unittest.TestCase):
         )
         with patch("device.cpx_ap_i_ec.profile.configure_io_link_variants"), patch(
             "device.cpx_ap_i_ec.profile.configure_ap_module_idents",
-        ), self.assertRaisesRegex(RuntimeError, "TxPDO/input mapping mismatch"):
+        ), self.assertRaisesRegex(
+            PdoCatalogMismatchException, "TxPDO/input mapping mismatch",
+        ):
             profile.prepare_process_image(master, 0)
         self.assertEqual(rxpdo.mapping_size(), 128)
         self.assertEqual(txpdo.mapping_size(), 256)

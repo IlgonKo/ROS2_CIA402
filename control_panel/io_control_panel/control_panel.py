@@ -1161,7 +1161,7 @@ class IOControlPanel:
 
     def show_iol_parameter_response(self, response):
         if response.get("type") == "command_rejected" or not response.get("ok", False):
-            message = response.get("message", response.get("error", "command failed"))
+            message = self.failure_message(response)
             self.iol_result_var.set(f"Error: {message}")
             return
         text = (
@@ -1216,7 +1216,7 @@ class IOControlPanel:
 
     def iol_catalog_entries(self, response):
         entries = {}
-        for module in response.get("modules", []):
+        for module in self.iol_catalog_modules(response):
             module_number = int(module.get("module", 0))
             for device in module.get("devices", []):
                 port = int(device.get("port", 0))
@@ -1250,6 +1250,34 @@ class IOControlPanel:
                     label = self.iol_catalog_label(entry, variable, device_name)
                     entries[label] = entry
         return entries
+
+    @staticmethod
+    def iol_catalog_modules(response):
+        modules = response.get("modules")
+        if modules:
+            return modules
+        devices = response.get("devices")
+        if devices is None:
+            return []
+        return [{
+            "module": response.get("module", 0),
+            "devices": devices,
+        }]
+
+    @staticmethod
+    def failure_message(response):
+        message = response.get("message", response.get("error", "command failed"))
+        failure = response.get("failure")
+        if not isinstance(failure, dict):
+            return message
+        details = failure.get("details")
+        if not isinstance(details, dict) or not details:
+            return message
+        detail_text = ", ".join(
+            f"{key}={value}"
+            for key, value in details.items()
+        )
+        return f"{message} ({detail_text})"
 
     def iol_catalog_entry(self, module_number, port, variable, subindex, device_name):
         bit_length = int(variable.get("bit_length") or 0)

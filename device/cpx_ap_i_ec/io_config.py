@@ -59,6 +59,7 @@ class CPXIoConfig:
     io_id: str
     layout: CPXApLayout
     io_link_devices: tuple[IoLinkDeviceBinding, ...] = ()
+    module_pdo_index_stride: int = 1
 
     @property
     def digital_inputs(self):
@@ -93,7 +94,12 @@ class CPXIoConfig:
         return self.layout.output_bytes
 
 
-def build_cpx_io_config(io_id, raw_modules, raw_ports=""):
+def build_cpx_io_config(
+    io_id,
+    raw_modules,
+    raw_ports="",
+    module_pdo_index_stride=1,
+):
     io_id = normalized_io_id(io_id)
     layout_key = f"MOTION_SERVER_IO_{io_id}_MODULES"
     if not raw_modules.strip():
@@ -122,6 +128,7 @@ def build_cpx_io_config(io_id, raw_modules, raw_ports=""):
             io_link_devices,
             key=lambda binding: (binding.module, binding.port),
         )),
+        module_pdo_index_stride=int(module_pdo_index_stride),
     )
     validate_config(config, layout_key)
     validate_io_link_bindings(config)

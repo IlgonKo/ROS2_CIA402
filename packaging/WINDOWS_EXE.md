@@ -17,6 +17,10 @@ The package is created at:
 dist\Motion Server
 ```
 
+PyInstaller intermediate files are created in a temporary folder and removed
+after packaging. The project `dist` folder should contain only the final
+`Motion Server` package.
+
 ## Package Layout
 
 ```text
@@ -27,12 +31,18 @@ dist\Motion Server
   device\cmmt\config.txt
   device\cmmt\config.example.txt
   device\cpx_ap_i_ec\config.example.txt
+  device\io_link\iodd\
   Manual\Motion_Server_Installation_Manual_*.*
   Manual\Motion_Server_User_Manual_*.*
   Reference\cmmt_error_catalog.json
+  Reference Clients\node_red\node-red-contrib-motion-server\package.json
+  Reference Clients\node_red\node-red-contrib-motion-server\examples\flows\*.json
   Tools\axis_control_panel\axis_control_panel.exe
   Tools\axis_control_panel\config.txt
   Tools\axis_control_panel\config.example.txt
+  Tools\io_control_panel\io_control_panel.exe
+  Tools\io_control_panel\config.txt
+  Tools\io_control_panel\config.example.txt
   Tools\list_ethercat_nics.ps1
   Tools\npcap-1.88.exe
 ```
@@ -46,12 +56,18 @@ dist\Motion Server\config.txt
 dist\Motion Server\device\cmmt\config.txt
 dist\Motion Server\device\cpx_ap_i_ec\config.txt
 dist\Motion Server\Tools\axis_control_panel\config.txt
+dist\Motion Server\Tools\io_control_panel\config.txt
 ```
 
 Mock and real devices use the same profile configuration files. Virtual CMMT
 axes use `device/cmmt/config.txt`; there is no separate virtual servo config.
 ESI, IODD and the CMMT error catalog are bundled under `_internal` for runtime
 loading, including when the package is launched outside the source checkout.
+User-provided IODD files can be copied to `device\io_link\iodd`. In frozen
+Windows packages, this external folder is searched before the bundled `_internal`
+IODD files. The Node-RED reference client package and sample flows are copied
+under `Reference Clients\node_red`; install dependencies with npm on the target
+PC before importing the flows.
 
 ## Run With Mock Axes
 

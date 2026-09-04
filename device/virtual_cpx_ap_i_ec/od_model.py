@@ -44,6 +44,9 @@ class VirtualCpxOdModel(VirtualOdModel):
                     obj.index,
                     module.slot,
                     obj.depend_on_slot,
+                    module_pdo_index_stride=(
+                        self.device_profile.config.module_pdo_index_stride
+                    ),
                 )
                 if obj.subitems:
                     for subitem in obj.subitems:
@@ -205,11 +208,21 @@ class VirtualCpxOdModel(VirtualOdModel):
                 self.write_internal(index, 0, 5)
 
 
-def resolved_module_index(index, slot, depend_on_slot):
+def resolved_module_index(
+    index,
+    slot,
+    depend_on_slot,
+    *,
+    module_pdo_index_stride=0x10,
+):
     if not depend_on_slot:
         return int(index)
     if int(index) == ISDU_ACCESS_BASE_INDEX:
-        return resolved_isdu_access_index(index, slot)
+        return resolved_isdu_access_index(
+            index,
+            slot,
+            index_stride=module_pdo_index_stride,
+        )
     return int(index) + int(slot) * 0x10
 
 

@@ -87,7 +87,12 @@ class VirtualCpxApDevice:
         for slot, module in self.modules.items():
             if module.module.module_type != "iol":
                 continue
-            index = isdu_access_object_index(slot)
+            index = isdu_access_object_index(
+                slot,
+                index_stride=(
+                    self.device_profile.config.module_pdo_index_stride
+                ),
+            )
             if key == (index, 1):
                 self._dispatch_isdu_request(slot, index)
                 return

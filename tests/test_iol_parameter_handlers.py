@@ -9,7 +9,6 @@ from motion_server.failure import (
     PermissionDeniedException,
     OperationTimeoutException,
     ResourceNotFoundException,
-    UnsupportedOperationException,
 )
 from motion_server.failure.mapping import map_exception
 from motion_server.handlers.parameter_access.iol import (
@@ -65,7 +64,13 @@ class FakeMaster:
 
 
 class FakeIoGroup:
-    def __init__(self, access="rw", variable_index=0x10, subindices=()):
+    def __init__(
+        self,
+        access="rw",
+        variable_index=0x10,
+        subindices=(),
+        module_pdo_index_stride=0x10,
+    ):
         variable = SimpleNamespace(
             index=variable_index,
             access=access,
@@ -77,7 +82,10 @@ class FakeIoGroup:
             port=1,
             device=SimpleNamespace(device_name="Fake", variables=[variable]),
         )
-        config = SimpleNamespace(io_link_devices=[binding])
+        config = SimpleNamespace(
+            io_link_devices=[binding],
+            module_pdo_index_stride=module_pdo_index_stride,
+        )
         slave = SimpleNamespace(device_profile=SimpleNamespace(config=config))
         self.device = {"id": "io0", "slave_index": 1, "slave": slave}
 
@@ -113,25 +121,29 @@ def message(**updates):
 
 
 class IolParameterHandlerTest(unittest.TestCase):
-    def test_isdu_access_object_index_uses_first_module_base_object(self):
-        self.assertEqual(isdu_access_object_index(1), 0x2001)
-        self.assertEqual(isdu_access_object_index(2), 0x2011)
+    def test_isdu_access_object_index_uses_configured_slot_stride(self):
+        self.assertEqual(isdu_access_object_index(1), 0x2011)
+        self.assertEqual(isdu_access_object_index(2), 0x2021)
+        self.assertEqual(
+            isdu_access_object_index(1, index_stride=1),
+            0x2002,
+        )
 
     def test_isdu_read_returns_structured_data(self):
         active = runtime()
         data = _read_iol_parameter(message(), active)
         self.assertEqual(data["value"], 42)
-        self.assertEqual(data["object_index"], "0x2001")
+        self.assertEqual(data["object_index"], "0x2011")
         used_indices = [call[1][1] for call in active.ethercat_master.sdo.calls]
         self.assertTrue(used_indices)
-        self.assertEqual(set(used_indices), {0x2001})
+        self.assertEqual(set(used_indices), {0x2011})
 
     def test_isdu_write_returns_payload_metadata(self):
         active = runtime()
         data = _write_iol_parameter(
             message(type="system/io/iol/param_write", value=43), active,
         )
-        self.assertEqual(data["object_index"], "0x2001")
+        self.assertEqual(data["object_index"], "0x2011")
         self.assertEqual(data["data"], "2b00")
         self.assertEqual(len(active.ethercat_master.raw_writes[0]), 238)
 
@@ -174,7 +186,7 @@ class IolParameterHandlerTest(unittest.TestCase):
         self.assertEqual(failure.details["operation"], "sdo_write")
         self.assertEqual(failure.details["device_code"], 0x06090030)
         self.assertEqual(failure.details["isdu_step"], "write port")
-        self.assertEqual(failure.details["sdo_index"], "0x2001")
+        self.assertEqual(failure.details["sdo_index"], "0x2011")
         self.assertEqual(failure.details["sdo_subindex"], 2)
         self.assertEqual(failure.details["sdo_value"], 1)
 
@@ -185,19 +197,20 @@ class IolParameterHandlerTest(unittest.TestCase):
         self.assertIs(caught.exception, expected)
 
     def test_handler_returns_operation_data(self):
-        with self.assertRaises(UnsupportedOperationException) as caught:
-            read_iol_parameter(message(), runtime(), {})
-        self.assertEqual(caught.exception.operation, "io_link_isdu_parameter_access")
-        self.assertIn("not exposed", caught.exception.reason)
+        self.assertEqual(
+            read_iol_parameter(message(), runtime(), {})["object_index"],
+            "0x2011",
+        )
 
-    def test_write_handler_is_explicitly_unavailable(self):
-        with self.assertRaises(UnsupportedOperationException) as caught:
+    def test_write_handler_returns_operation_data(self):
+        self.assertEqual(
             write_iol_parameter(
                 message(type="system/io/iol/param_write", value=43),
                 runtime(),
                 {},
-            )
-        self.assertEqual(caught.exception.operation, "io_link_isdu_parameter_access")
+            )["object_index"],
+            "0x2011",
+        )
 
 
 if __name__ == "__main__":

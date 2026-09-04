@@ -325,11 +325,21 @@ def build_cpx_config(values, bus_device):
     ports = []
     for declaration in split_config_list(raw_ports):
         ports.append(IoLinkPortConfig.from_declaration(declaration))
+    module_pdo_index_stride = integer(
+        values,
+        f"MOTION_SERVER_IO_{logical_id}_MODULE_PDO_INDEX_STRIDE",
+        1,
+    )
+    if module_pdo_index_stride < 1:
+        raise ValueError(
+            f"MOTION_SERVER_IO_{logical_id}_MODULE_PDO_INDEX_STRIDE must be >= 1"
+        )
     return CpxApIEcDeviceConfig(
         profile_name=bus_device.profile,
         logical_id=logical_id,
         modules=modules,
         io_link_ports=tuple(ports),
+        module_pdo_index_stride=module_pdo_index_stride,
     )
 
 

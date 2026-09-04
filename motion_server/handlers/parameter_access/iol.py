@@ -11,7 +11,6 @@ from motion_server.failure import (
     OperationTimeoutException,
     PermissionDeniedException,
     ResourceNotFoundException,
-    UnsupportedOperationException,
 )
 
 
@@ -35,24 +34,17 @@ ISDU_DATA_FORMATS = {
 
 
 def read_iol_parameter(message, runtime, client):
-    raise_iol_isdu_access_unavailable()
+    return _read_iol_parameter(message, runtime)
 
 
 def write_iol_parameter(message, runtime, client):
-    raise_iol_isdu_access_unavailable()
-
-
-def raise_iol_isdu_access_unavailable():
-    raise UnsupportedOperationException(
-        "io_link_isdu_parameter_access",
-        "CPX IO-Link ISDU Access OD is not exposed on the verified real device; "
-        "use IO-Link process-data decoding and CPX module parameters instead.",
-    )
+    return _write_iol_parameter(message, runtime)
 
 
 def _read_iol_parameter(message, runtime):
     request = parse_isdu_request(message, require_value=False)
     validate_isdu_request_against_iodd(runtime, request, access="read")
+    request = resolve_isdu_access_object(runtime, request)
     slave_index = validate_isdu_target(runtime, request)
     write_isdu_header(
         runtime, slave_index, request, direction=ISDU_DIRECTION_READ,
@@ -77,6 +69,7 @@ def _read_iol_parameter(message, runtime):
 def _write_iol_parameter(message, runtime):
     request = parse_isdu_request(message, require_value=True)
     validate_isdu_request_against_iodd(runtime, request, access="write")
+    request = resolve_isdu_access_object(runtime, request)
     slave_index = validate_isdu_target(runtime, request)
     payload = encode_isdu_payload(message["value"], request["data_type"])
     if len(payload) > ISDU_MAX_DATA_BYTES:
@@ -208,7 +201,6 @@ def parse_isdu_request(message, require_value):
     index = parse_isdu_int(message, "index")
     subindex = parse_isdu_int(message, "subindex", default=0)
     length = parse_isdu_length(message, data_type)
-    object_index = isdu_access_object_index(module)
 
     if module < 1 or module > 0xFF:
         raise InvalidArgumentException("module", "must be in range 1..255")
@@ -231,7 +223,6 @@ def parse_isdu_request(message, require_value):
         "subindex": subindex,
         "length": length,
         "data_type": data_type,
-        "object_index": object_index,
     }
 
 
@@ -255,14 +246,17 @@ def validate_isdu_target(runtime, request):
         raise ResourceNotFoundException("io", request["io"]) from exception
 
 
-def validate_isdu_request_against_iodd(runtime, request, access):
-    binding = iodd_binding_for_request(runtime, request)
-    variable = iodd_variable_for_index(binding, request["index"])
-    validate_iodd_variable_access(variable, access, request)
-    validate_iodd_subindex(variable, request)
+def resolve_isdu_access_object(runtime, request):
+    config = io_config_for_request(runtime, request)
+    resolved = dict(request)
+    resolved["object_index"] = isdu_access_object_index(
+        request["module"],
+        index_stride=getattr(config, "module_pdo_index_stride", 0x10),
+    )
+    return resolved
 
 
-def iodd_binding_for_request(runtime, request):
+def io_config_for_request(runtime, request):
     try:
         device = runtime.device_manager.io.selected_device(io_id=request["io"])
     except (TypeError, ValueError) as exception:
@@ -271,6 +265,18 @@ def iodd_binding_for_request(runtime, request):
     config = getattr(profile, "config", None)
     if config is None:
         raise ResourceNotFoundException("io_configuration", request["io"])
+    return config
+
+
+def validate_isdu_request_against_iodd(runtime, request, access):
+    binding = iodd_binding_for_request(runtime, request)
+    variable = iodd_variable_for_index(binding, request["index"])
+    validate_iodd_variable_access(variable, access, request)
+    validate_iodd_subindex(variable, request)
+
+
+def iodd_binding_for_request(runtime, request):
+    config = io_config_for_request(runtime, request)
 
     for binding in config.io_link_devices:
         if (

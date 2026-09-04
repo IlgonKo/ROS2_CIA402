@@ -1,6 +1,7 @@
 from dataclasses import dataclass
 from functools import lru_cache
 from pathlib import Path
+import sys
 import xml.etree.ElementTree as ET
 
 from device.io_link.iodd_process_data import IoddProcessDataCompiler
@@ -82,8 +83,30 @@ def iodd_device_info(device_key):
 
 @lru_cache(maxsize=None)
 def _iodd_device_info(device_key):
-    path = find_unique_xml_file(IODD_DIR, device_key, "IO-Link IODD")
+    path = find_iodd_file(device_key)
     return parse_iodd_file(path, device_key)
+
+
+def find_iodd_file(device_key, directories=None):
+    for directory in directories or iodd_search_directories():
+        try:
+            return find_unique_xml_file(directory, device_key, "IO-Link IODD")
+        except FileNotFoundError:
+            continue
+    searched = ", ".join(str(path) for path in (directories or iodd_search_directories()))
+    raise FileNotFoundError(
+        f"No IO-Link IODD XML file matching {device_key!r} in search path: {searched}"
+    )
+
+
+def iodd_search_directories():
+    directories = []
+    if getattr(sys, "frozen", False):
+        directories.append(
+            Path(sys.executable).resolve().parent / "device" / "io_link" / "iodd"
+        )
+    directories.append(IODD_DIR)
+    return tuple(dict.fromkeys(directories))
 
 
 def parse_iodd_file(path, device_key):

@@ -453,9 +453,15 @@ system/io/ethercat/param_catalog
 system/io/iol/param_catalog
 system/io/ap/param_read
 system/io/ap/param_write
-system/io/iol/param_read   # 현재 UNSUPPORTED_OPERATION
-system/io/iol/param_write  # 현재 UNSUPPORTED_OPERATION
+system/io/iol/param_read
+system/io/iol/param_write
 ```
+
+`system/io/ethercat/param_catalog`는 CPX-AP-I-EC 본체 EtherCAT OD catalog를 반환한다.
+AP module별 parameter catalog는 이 API에 섞지 않고 `system/io/ap/param_catalog`에서 별도로
+다룬다. 따라서 `system/io/ethercat/param_catalog`는 `module` 또는 `slot` 입력을 사용하지 않는다.
+응답의 `scope`는 `station`이고, 각 object에는 `station`, `identity`, `diagnosis`, `sync`,
+`pdo_mapping` 같은 `group`이 포함된다.
 
 ### IO-Link Input Decoding (RF-015)
 
@@ -670,19 +676,55 @@ IO-Link device catalog와 process-data decoding은 `system/io/iol/*` namespace�
 
 ```text
 system/io/iol/param_catalog
+system/io/iol/param_read
+system/io/iol/param_write
 ```
 
-`system/io/iol/param_read`와 `system/io/iol/param_write` API 이름은 보존하지만,
-현재 검증된 CPX-AP-I-4IOL-M12 실장치에서는 `UNSUPPORTED_OPERATION`을 반환한다.
-IO-Link process data와 CPX module parameter는 정상적으로 사용할 수 있지만, ESI에 정의된
-ISDU Access object가 실제 SDO dictionary에서 확인되지 않았기 때문이다.
+`system/io/iol/param_catalog`는 설정된 IODD binding과 해당 IO-Link port의 parameter catalog를
+반환한다. 응답의 `object_index`는 CPX-AP-I-EC firmware별 module index stride를 반영한 내부
+ISDU Access object다. 예를 들어 `MOTION_SERVER_IO_io0_MODULE_PDO_INDEX_STRIDE=0x0010`이고
+IOL module이 slot 1이면 `object_index`는 `0x2011`이다.
 
-따라서 현재는 다음 경로를 사용한다.
+`system/io/iol/param_read`와 `system/io/iol/param_write`는 이 ISDU Access object를 통해 실행된다.
+사용자는 EtherCAT OD subindex를 직접 다루지 않고 `module`, `port`, IO-Link `index/subindex`,
+`data_type`, `length/value`를 지정한다.
 
-- IO-Link process data: `system/io/status`, `system/io/input_read`, feedback의 decoded process data
-- CPX module parameter: `system/io/param_read/write`, `system/io/ap/param_read/write`
-- IO-Link ISDU read/write: Festo Automation Suite, TwinCAT 또는 제조사 문서로 실제 접근 경로를
-  확인한 뒤 재개
+```json
+{
+  "cmd": "system/io/iol/param_read",
+  "io": "io0",
+  "module": 1,
+  "port": 1,
+  "index": 81,
+  "subindex": 0,
+  "length": 1,
+  "data_type": "uint8"
+}
+```
+
+대표 응답:
+
+```json
+{
+  "type": "system/io/iol/param_read",
+  "ok": true,
+  "io": "io0",
+  "object_index": "0x2011",
+  "module": 1,
+  "port": 1,
+  "index": 81,
+  "index_hex": "0x0051",
+  "subindex": 0,
+  "subindex_hex": "0x00",
+  "data_type": "uint8",
+  "status": 0,
+  "length": 1,
+  "data": "01",
+  "value": 1
+}
+```
+
+ISDU parameter는 IODD catalog에 선언된 access 권한과 subindex 범위 안에서만 허용한다.
 
 ## Server and Bus Management
 

@@ -211,6 +211,10 @@ namespace, feedback 형식, 단위 정책을 변경한 경우에는 이후 ROS B
 
    - `MOTION_SERVER_BUS`에 `io:cpx_ap_i_ec:<io_id>`가 실제 slave 순서와 일치하게 선언되어 있는지 확인한다.
    - `MOTION_SERVER_IO_<io>_MODULES`가 실제 AP module 구성과 일치하는지 확인한다.
+   - CPX firmware에 따라 slot-dependent module PDO index 간격이 다르면
+     `MOTION_SERVER_IO_<io>_MODULE_PDO_INDEX_STRIDE`를 설정한다.
+     예: module slot PDO가 `0x7001/0x6001`, `0x7002/0x6002`가 아니라
+     `0x7010/0x6010`, `0x7020/0x6020`으로 보이면 `0x0010`.
    - IO-Link 장치가 있으면 `MOTION_SERVER_IO_<io>_IOL_PORTS`가 실제 포트 구성과 일치하는지 확인한다.
    - ESI와 IODD 파일이 device folder 규칙에 맞게 배치되어 있는지 확인한다.
 
@@ -264,12 +268,14 @@ namespace, feedback 형식, 단위 정책을 변경한 경우에는 이후 ROS B
 8. IO-Link ISDU 확인
 
    - IODD binding이 있는 포트에서 catalog load와 process-data decoding이 동작하는지 확인한다.
-   - IO-Link process data와 CPX module parameter read/write가 정상이어도 acyclic ISDU access가
-     가능하다고 판단하지 않는다.
-   - 현재 공개 `system/io/iol/param_read`와 `system/io/iol/param_write`는 실장치 접근 경로가
-     확정될 때까지 `UNSUPPORTED_OPERATION`을 반환하는 것이 정상이다.
-   - Festo Automation Suite, TwinCAT 또는 제조사 문서로 실제 ISDU Access 경로가 확인되면
-     이 절차를 재개한다.
+   - `system/io/iol/param_catalog`의 `object_index`가 실제 firmware/module stride와 일치하는지
+     확인한다. 예: `MOTION_SERVER_IO_io0_MODULE_PDO_INDEX_STRIDE=0x0010`이고 IOL module이
+     slot 1이면 `0x2011`.
+   - `system/io/iol/param_read`로 대표 read 가능한 ISDU parameter를 읽는다.
+   - `system/io/iol/param_write`는 쓰기 가능한 parameter에서만 수행하거나, read-only parameter에
+     대해 정확한 device reject/permission failure가 반환되는지 확인한다.
+   - 실패 시 Fail detail에 `isdu_step`, `sdo_index`, `sdo_subindex`, `sdo_value`,
+     device code/status가 포함되는지 확인한다.
 
 ## Windows Package Test
 
@@ -284,13 +290,21 @@ namespace, feedback 형식, 단위 정책을 변경한 경우에는 이후 ROS B
      motion_server.exe
      config.txt
      device\
+       io_link\
+         iodd\
      Tools\
        axis_control_panel\
        io_control_panel\
        list_ethercat_nics.ps1
        Npcap installer
      Manual\
+     Reference Clients\
+       node_red\
+         node-red-contrib-motion-server\
    ```
+
+   - package build 후 프로젝트 `dist` 아래에는 최종 `Motion Server` 폴더만 남아야 한다.
+   - `dist\pyinstaller`와 `build\pyinstaller` 같은 중간 산출물 폴더가 남지 않아야 한다.
 
 2. 사전 준비 확인
 
@@ -309,6 +323,17 @@ namespace, feedback 형식, 단위 정책을 변경한 경우에는 이후 ROS B
 
    - `docs`의 User Manual과 Installation Manual이 package의 `Manual` 폴더에 포함되는지 확인한다.
    - 파일명 suffix가 `_KR`, version, English 등으로 바뀌어도 지정된 prefix 규칙으로 포함되는지 확인한다.
+
+5. Reference client와 IODD 폴더 포함 확인
+
+   - 사용자 IODD 파일 저장용 `device\io_link\iodd` 폴더가 생성되는지 확인한다.
+   - frozen Windows package에서 `device\io_link\iodd`가 bundled `_internal` IODD보다 먼저 검색되는지
+     확인한다.
+   - Node-RED reference client package가 `Reference Clients\node_red\node-red-contrib-motion-server`에
+     포함되는지 확인한다.
+   - sample flow `01_connection_and_authority.json`부터 `05_sample_motion_sequence.json`까지
+     `examples\flows` 아래에 포함되는지 확인한다.
+   - `node_modules`는 package에 포함하지 않고 대상 PC에서 npm install로 재구성한다.
 
 ## Linux Docker Test
 

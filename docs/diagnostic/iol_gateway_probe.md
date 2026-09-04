@@ -37,4 +37,7 @@
   object로 판단한다. `0x2001:00=57`이며 port mode/status와 actual vendor/device/length 정보가
   이 object에서 정상으로 읽혔다. 따라서 위 probe의 `0x2001:02` 성공은 ISDU access object 존재
   증거로 사용하지 않는다.
+- 2026-09-04 CPX-AP-I-EC 펌웨어 업데이트 이후 사용자가 IO-Link parameter 접근 가능을 확인했다.
+  새 펌웨어와 `MOTION_SERVER_IO_io0_MODULE_PDO_INDEX_STRIDE=0x0010` 구성에서는 IOL module이
+  첫 번째 AP module일 때 ISDU Access object가 `0x2011`로 접근된다.
 - 최초 사전 조건의 Disable 요청은 사용자의 후속 '축은 지금 상태로 진행해도 됨' 승인으로 대체되었다.
