@@ -104,13 +104,20 @@ def _selected_axis_indices(message):
 
 
 def command_allowed_by_runtime_state(spec, state, message):
-    if not spec.is_command:
-        return True
     session = state.get("server_session")
     if session is None:
         return True
 
     from motion_server.app.session import ServerRuntimeState
+
+    if (
+        spec.transport_required
+        and session.runtime_state is ServerRuntimeState.BUS_DISCONNECTED
+    ):
+        return False
+
+    if not spec.is_command:
+        return True
 
     if (
         spec.name == "system/bus/reconnect"

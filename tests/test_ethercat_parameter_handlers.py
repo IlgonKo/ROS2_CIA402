@@ -5,6 +5,7 @@ from unittest.mock import Mock
 from unittest.mock import patch
 
 from motion_server.api.router import request_response
+from motion_server.app.runtime_parameters import RuntimeParameterCache
 from motion_server.failure import (
     CommunicationTimeoutException,
     FailureCode,
@@ -61,7 +62,13 @@ class FakeIoGroup:
         return 1
 
 
-def runtime(axis_sdo=None, io_sdo=None, io_selectors=("io0",), expert_mode=False):
+def runtime(
+    axis_sdo=None,
+    io_sdo=None,
+    io_selectors=("io0",),
+    expert_mode=False,
+    parameter_cache=None,
+):
     axis_sdo = axis_sdo or FakeSdo()
     io_sdo = io_sdo or FakeSdo()
     axis_sdo.io = io_sdo
@@ -70,6 +77,7 @@ def runtime(axis_sdo=None, io_sdo=None, io_selectors=("io0",), expert_mode=False
         sdo=axis_sdo,
         device_manager=SimpleNamespace(io=FakeIoGroup(io_selectors)),
         expert_mode=expert_mode,
+        parameter_cache=parameter_cache,
     )
 
 
@@ -83,6 +91,7 @@ def failure_code(operation):
 
 class EthercatParameterHandlerTest(unittest.TestCase):
     def test_axis_read_operation_returns_parameter_data(self):
+        cache = RuntimeParameterCache()
         data = _read_axis_parameter(
             {
                 "type": "system/axis/param_read",
@@ -91,13 +100,16 @@ class EthercatParameterHandlerTest(unittest.TestCase):
                 "subindex": 2,
                 "data_type": "uint16",
             },
-            runtime(),
+            runtime(parameter_cache=cache),
         )
 
         self.assertEqual(data["axis"], 0)
         self.assertEqual(data["index"], 0x1234)
         self.assertEqual(data["value"], 42)
         self.assertIsNone(data["length"])
+        cached = cache.get("axis.0.ethercat_od.0x1234.0x02")
+        self.assertEqual(cached.value, 42)
+        self.assertTrue(cached.valid)
 
     def test_axis_write_operation_returns_written_value(self):
         active_runtime = runtime()
@@ -117,7 +129,8 @@ class EthercatParameterHandlerTest(unittest.TestCase):
         self.assertEqual(active_runtime.sdo.value, 43)
 
     def test_io_read_and_write_operations_use_validated_selector(self):
-        active_runtime = runtime()
+        cache = RuntimeParameterCache()
+        active_runtime = runtime(parameter_cache=cache)
         read_message = {
             "type": "system/io/param_read",
             "io": "io0",
@@ -132,6 +145,9 @@ class EthercatParameterHandlerTest(unittest.TestCase):
 
         self.assertEqual(_read_io_parameter(read_message, active_runtime)["value"], 42)
         self.assertEqual(_write_io_parameter(write_message, active_runtime)["value"], 44)
+        cached = cache.get("io.0.ethercat_od.0x1234.0x00")
+        self.assertEqual(cached.value, 44)
+        self.assertEqual(cached.source, "device_write")
 
     def test_missing_index_is_invalid_argument(self):
         code = failure_code(lambda: _read_axis_parameter(

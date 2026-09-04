@@ -1,4 +1,5 @@
 import unittest
+import json
 from unittest.mock import patch
 
 from motion_server.api.encoder import (
@@ -25,6 +26,16 @@ class _BufferedSendSocket:
         count = min(3, len(payload))
         self.sent.extend(payload[:count])
         return count
+
+
+class _LineSocket:
+    def __init__(self, payload):
+        self.payload = payload
+
+    def recv(self, _size):
+        payload = self.payload
+        self.payload = b""
+        return payload
 
 
 class ClientTransportTests(unittest.TestCase):
@@ -69,6 +80,56 @@ class ClientTransportTests(unittest.TestCase):
 
         with self.assertRaisesRegex(ConnectionError, "output buffer limit"):
             send_client_message(client, {"result": "success"})
+
+    @patch("motion_server.app.client_transport.select.select")
+    def test_malformed_json_is_failed_without_closing_client(self, select_mock):
+        connection = _LineSocket(
+            b"{bad json}\n{\"cmd\":\"system/server/status\"}\n"
+        )
+        select_mock.return_value = ([connection], [], [])
+        client = {
+            "conn": connection,
+            "buffer": "",
+            "output_buffer": bytearray(),
+        }
+        dispatched = []
+
+        result = service_client(
+            client,
+            None,
+            {},
+            lambda message, *_: dispatched.append(message),
+        )
+
+        self.assertTrue(result)
+        self.assertEqual(dispatched, [{"cmd": "system/server/status"}])
+        response = json.loads(bytes(client["output_buffer"]).splitlines()[0])
+        self.assertEqual(response["type"], "invalid_request")
+        self.assertEqual(response["result"], "fail")
+        self.assertEqual(response["failure"]["code"], "INVALID_REQUEST")
+
+    @patch("motion_server.app.client_transport.select.select")
+    def test_non_object_json_is_failed_without_dispatch(self, select_mock):
+        connection = _LineSocket(b"[1, 2, 3]\n")
+        select_mock.return_value = ([connection], [], [])
+        client = {
+            "conn": connection,
+            "buffer": "",
+            "output_buffer": bytearray(),
+        }
+        dispatched = []
+
+        result = service_client(
+            client,
+            None,
+            {},
+            lambda message, *_: dispatched.append(message),
+        )
+
+        self.assertTrue(result)
+        self.assertEqual(dispatched, [])
+        response = json.loads(bytes(client["output_buffer"]).splitlines()[0])
+        self.assertEqual(response["failure"]["code"], "INVALID_REQUEST")
 
 
 if __name__ == "__main__":

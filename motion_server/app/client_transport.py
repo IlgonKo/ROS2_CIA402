@@ -1,8 +1,14 @@
 import json
 import select
 import time
+from collections.abc import Mapping
 
-from motion_server.api.encoder import send_client_message
+from motion_server.api.encoder import (
+    ResponseContext,
+    fail_response,
+    send_client_message,
+)
+from motion_server.failure import InvalidRequestException, map_exception
 from motion_server.handlers.status import system_feedback_message
 
 
@@ -23,9 +29,27 @@ def service_client(client, runtime, state, dispatch_message):
     while "\n" in client["buffer"]:
         line, client["buffer"] = client["buffer"].split("\n", 1)
         if line.strip():
-            dispatch_message(json.loads(line), runtime, state, client)
+            try:
+                message = json.loads(line)
+            except json.JSONDecodeError:
+                _send_invalid_request(client, "malformed_json")
+                continue
+            if not isinstance(message, Mapping):
+                _send_invalid_request(client, "request must be a JSON object")
+                continue
+            dispatch_message(message, runtime, state, client)
 
     return True
+
+
+def _send_invalid_request(client, reason):
+    send_client_message(
+        client,
+        fail_response(
+            ResponseContext("invalid_request"),
+            map_exception(InvalidRequestException(reason)),
+        ),
+    )
 
 
 def flush_client_output(client):

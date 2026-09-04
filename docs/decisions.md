@@ -908,6 +908,74 @@ Device Profile + ESI
   보내는 계약을 선택하며 payload/처리 시간은 회귀 검사한다. 상세 타입·유효성·단위 계약은
   [RF-015](tasks/rf/RF-015-io-link-feedback-decoding.md)에 기록한다.
 
+## DEC-039 Runtime Parameter Cache와 Persistent Parameter Store 분리
+
+- 상태: `accepted`
+- 결정일: 2026-09-04
+- 결정:
+  - Runtime Parameter Cache는 실행 중 서버 제어, status/API projection과 recovery 후 정합성을 위한
+    현재값/validity 모델로 둔다. CMMT Axis뿐 아니라 CPX station/module parameter와 IO-Link ISDU
+    parameter까지 표현할 수 있는 device-wide 구조를 사용한다.
+  - Persistent Parameter Store는 별도 기능으로 분리한다. 사용자가 명시적으로 `parameter_save`를
+    수행했을 때만 현재 parameter snapshot과 변경 이력을 저장한다.
+  - parameter write는 Device OD/AP/ISDU 값과 Runtime Cache만 갱신 또는 invalid 처리하며 영구 저장을
+    수행하지 않는다.
+  - 서버 재시작 시 virtual device는 기본 OD를 먼저 초기화한 뒤 Persistent Store 값을 적용하고,
+    Runtime Cache는 적용된 device state readback으로 다시 구성한다.
+  - Virtual Device runtime reset, store reset과 factory restore는 공개 Motion Server TCP API가
+    아니라 별도 maintenance/commissioning tool에서 제공한다.
+  - 저장된 virtual commissioning profile을 실장비에 적용하는 기능은 명시적 apply/verify 명령으로만
+    제공하며 자동 적용하지 않는다.
+  - 실장비 내부 non-volatile save와 서버 Persistent Store 저장은 별도 동작과 별도 결과로 보고한다.
+- 이유: 실행 중 제어용 cache와 변경 이력/재시작 복원/실장비 이전용 저장소를 섞으면 주기 제어 경로가
+  영구 저장 정책에 의존하고, 단순 parameter write가 의도치 않은 commissioning commit이 될 수 있다.
+  반대로 둘을 분리하면 cache는 빠른 현재값 projection에 집중하고, 저장소는 사용자가 명시적으로
+  확정한 commissioning snapshot만 관리할 수 있다.
+- 검토한 대안:
+  - parameter write마다 자동 저장하는 방식은 시험 중 임시 변경까지 영구 이력에 commit하므로 채택하지
+    않는다.
+  - Persistent Store 값을 주기 제어에 직접 사용하는 방식은 실제 장치 readback과 cache validity 경계를
+    흐리므로 채택하지 않는다.
+  - 서버 시작 시 실장비에 저장값을 자동 적용하는 방식은 장치 commissioning 변경 위험이 크므로
+    채택하지 않는다.
+  - Virtual Device 초기화를 공개 runtime API로 제공하는 방식은 운전 중 reset/restart/fault_reset과
+    의미가 섞이고 store 삭제 같은 파괴적 작업이 일반 client에 노출되므로 채택하지 않는다.
+- 영향: TD-025는 device-wide Runtime Parameter Cache와 refresh/validity/Diagnostic을 구현한다.
+  Persistent Store, 변경 이력, virtual restart restore와 실장비 commissioning transfer는
+  [RF-017](tasks/rf/RF-017-persistent-parameter-store.md)에서 구현한다.
+
+## DEC-040 Gamepad는 외부 Multi-Axis Velocity Reference Client로 구현
+
+- 상태: `accepted`
+- 결정일: 2026-09-04
+- 결정:
+  - DualSense 같은 gamepad 제어는 Motion Server core가 아니라 `reference_clients/gamepad`의 외부
+    reference client로 구현한다.
+  - 주 목적은 X/Y/Z/Rotation 4개 role을 동시에 움직이는 multi-axis manual velocity control이며,
+    장비 setup과 축별 확인을 위한 single-axis mode도 함께 제공한다.
+  - 1차 구현은 신규 gamepad 전용 API를 만들지 않고 기존 `system/axes/move_vel`을 사용한다.
+  - Left Stick X/Y는 X/Y, Right Stick Y/X는 Z/Rotation velocity로 매핑한다.
+  - Single-axis mode에서는 D-pad left/right로 선택 축을 바꾸고 stick Y축으로 선택 축 velocity를
+    제어한다.
+  - L1은 deadman/armed 입력이며, deadman이 눌린 상태에서만 velocity command를 보낸다.
+  - axis role-to-index, axis별 max velocity, deadzone, update period와 speed scale은 client 설정으로
+    관리한다.
+  - gamepad disconnect, server disconnect, input timeout 또는 deadman release 시 mapped axes stop을
+    우선 수행한다.
+  - command authority, enabled/fault 상태, motion limit, software limit와 timeout safety는 기존
+    Motion Server API 계약을 따른다.
+- 이유: Motion Server core에 OS별 HID/gamepad dependency를 넣으면 core 배포와 실시간 제어 경계가
+  불필요하게 오염된다. 반면 외부 reference client로 두면 기존 TCP API와 safety 계약을 재사용하면서
+  게임패드 입력 장치만 독립적으로 교체할 수 있다.
+- 검토한 대안:
+  - Motion Server 내부에 gamepad driver를 넣는 방식은 OS별 의존성과 입력 장치 lifecycle을 서버 core에
+    끌어들이므로 채택하지 않는다.
+  - 단축 jog만 제공하는 방식은 주 사용 목적이 3축 + rotation 동시 수동 조작이므로 채택하지 않는다.
+  - 신규 `system/axes/jog` API를 바로 추가하는 방식은 현재 `system/axes/move_vel`로 충분히 표현 가능하므로
+    1차 범위에서는 채택하지 않는다.
+- 영향: RF-018에서 gamepad reference client를 구현한다. 기존 velocity command가 linear axis에서 막히는
+  부분은 [TD-034](tasks/td/TD-034-linear-rotary-velocity-command.md)에서 먼저 정리한다.
+
 ## 새 결정 작성 양식
 
 ```text

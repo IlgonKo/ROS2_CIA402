@@ -6,6 +6,106 @@
 
 ## 2026-09-04
 
+### Axis Control Panel profile setting 즉시 갱신 수정
+
+- Profile/Motion/Software limit 설정 적용 직후 서버 refresh 응답이 들어와도 입력 필드가 dirty 상태로 남아
+  최신 값 표시를 건너뛰던 문제를 수정했다.
+- 설정 명령 전송 전에 해당 입력 필드의 dirty 상태를 해제하여, 명령 직후 수신되는 `system/axes/status`
+  결과가 현재 탭에도 바로 반영되도록 했다.
+- 관련 Axis Control Panel 단위 테스트를 추가했고 전체 unittest 413개가 통과했다.
+- 실장치/Axis Control Panel 확인에서 Profile Velocity 변경 후 현재 탭에 즉시 갱신되는 것을 확인했다.
+
+### CPX Identity readback vendor_id=0 fallback 수정
+
+- 실장치 CPX-AP-I-EC에서 product code는 일치하지만 pysoem slave attribute의 vendor id가
+  `0x00000000`으로 읽혀 `DEVICE_IDENTITY_MISMATCH`로 잘못 분류되는 현상을 확인했다.
+- `read_slave_identity()`에서 vendor/product/revision attribute가 `0`이면 불완전한 identity
+  attribute로 보고 EtherCAT identity object `0x1018` SDO readback으로 fallback하도록 수정했다.
+- serial number `0`은 유효할 수 있으므로 기존처럼 fallback 대상으로 보지 않는다.
+- 관련 pysoem identity fallback 테스트를 추가했고 전체 unittest 410개가 통과했다.
+
+### `0x6081 Profile velocity` PDO-mapped 설정 계약 정리
+
+- `0x6081 Profile velocity`가 RxPDO에 포함된 configuration에서는 SDO write 값과 cyclic PDO command
+  value가 서로 달라질 수 있으므로, profile velocity 변경 시 SDO write와 RxPDO command value 갱신을
+  함께 수행하기로 정리했다.
+- PDO-mapped 구성의 `profile_settings[0]`은 단순 SDO readback이 아니라 Motion Server가 앞으로
+  cyclic PDO로 송신할 effective profile velocity default로 표시한다.
+- 직전 실험적 보정으로 넣었던 profile 설정 중 강제 PDO exchange 방식은 제거하고, command value/cache
+  동기화 기준으로 구현을 정리했다.
+- 관련 회귀 테스트를 갱신했고 전체 unittest 411개가 통과했다.
+
+### TD-025 Runtime Parameter Cache 1차 구현
+
+- 공통 `RuntimeParameterAddress`, `RuntimeParameterDefinition`, `RuntimeParameterValue`,
+  `RuntimeParameterCache` 모델을 추가했다.
+- 기존 `AxisParameterRuntimeCache`는 유지하되, 축별 parameter projection을 공통
+  Runtime Parameter Cache에도 등록·갱신하도록 했다.
+- Axis recovery refresh 실패 시 대상 axis cache value를 invalid 처리하고
+  `PARAMETER_REFRESH_FAILED` Diagnostic을 발생시키도록 했다.
+- 이후 recovery refresh가 성공하면 기존 `PARAMETER_REFRESH_FAILED` Diagnostic을 resolve한다.
+- Axis/IO EtherCAT OD, CPX AP parameter와 IO-Link ISDU parameter read/write 성공 결과를 공통 cache에
+  반영하도록 했다.
+- 공개 refresh API는 추가하지 않고 startup/recovery/parameter access 내부 경계에서 cache를
+  갱신하기로 정리했다.
+- RF-017 Persistent Store의 실제 파일 저장 포맷, 변경 이력, virtual restart restore와 실장비 이전은
+  RF-017 범위로 유지했다.
+- 관련 신규 테스트와 전체 unittest 408개가 통과했다.
+
+### RF-018 Gamepad Manual Multi-Axis Velocity Control 등록
+
+- DualSense 같은 gamepad를 `reference_clients/gamepad`의 외부 reference client로 구현하기로 했다.
+- 목적은 단축 jog가 아니라 Left Stick X/Y와 Right Stick Y/X로 X/Y/Z/Rotation을 동시에 움직이는
+  manual velocity control이다.
+- 장비 setup과 축별 방향 확인을 위해 selected axis 하나만 velocity 제어하는 single-axis mode도
+  RF-018 범위에 추가했다.
+- 신규 gamepad 전용 Motion Server API는 만들지 않고 기존 `system/axes/move_vel`을 사용한다.
+- L1 deadman, axis role mapping, speed scale, deadzone, disconnect/input-timeout stop 정책을 RF-018과
+  DEC-040에 기록했다.
+- linear axis velocity command 허용 범위 정리는 RF-018 선행 TD-034로 분리했다. 기존 authority,
+  enabled/fault 상태, motion/software limit와 timeout safety는 유지한다.
+
+### TD-025 Runtime Parameter Cache 현재 구조 정리
+
+- TD-025 문서에 현재 구현 상태를 추가했다.
+- 현재는 CMMT 축 전용 `AxisParameterRuntimeCache`만 있으며 user unit, exponent, software limit,
+  profile setting, motion limit와 axis metadata를 축별 projection field로 보관한다.
+- CPX station EtherCAT parameter, AP module parameter와 IO-Link ISDU parameter는 요청 시마다
+  직접 device access를 수행하고 공통 runtime cache에 남기지 않는다는 점을 명시했다.
+- 현재 구조에는 address/definition/value/cache 분리, validity, updated_at, last_error와
+  RF-017 Persistent Store로 넘길 공통 snapshot 형식이 없다는 한계를 기록했다.
+
+### RF-017 Persistent Device Parameter Store 등록
+
+- 가상장치 parameter가 서버 재시작 시 초기화되는 문제와, 가상장치에서 조정한 commissioning
+  parameter를 실장비로 이전하려는 장기 목표를 RF-017로 분리했다.
+- parameter write는 runtime/cache만 갱신하고 영구 저장하지 않으며, `parameter_save` 명령이
+  Persistent Store snapshot commit과 변경 이력 기록을 수행하는 계약으로 정리했다.
+- 서버 재시작 시 Virtual Device는 기본 OD 초기화 후 Persistent Store 값을 적용하고, Runtime Cache는
+  적용된 device state readback으로 다시 구성한다.
+- Virtual Device runtime reset, store reset과 factory restore는 공개 TCP API가 아니라 별도
+  maintenance/commissioning tool로 제공하는 범위로 RF-017에 추가했다.
+- 실장비에는 저장 profile을 자동 적용하지 않고 명시적 apply/verify 명령으로만 이전한다.
+- TD-025는 CMMT/CPX 전체를 커버하는 Device-wide Runtime Parameter Cache로 유지하되,
+  Persistent Store, 변경 이력, restart restore와 실장비 transfer는 RF-017 범위로 제외했다.
+
+### TD-031 Bus 단절 중 장치 조회 차단 및 요청 오류 격리 구현
+
+- API spec에 `transport_required` 속성을 추가하여 status/command 분류와 실제 장치 통신 필요 여부를
+  분리했다.
+- BUS_DISCONNECTED 상태에서 `system/axis/param_read`, `system/io/param_read`,
+  `system/io/ap/param_read`, `system/io/iol/param_read`가 SDO 접근 전에 `INVALID_STATE` Fail로
+  거부되도록 했다.
+- 닫힌 PySOEM transport 접근은 일반 `RuntimeError`가 아니라
+  `CommunicationException("bus_transport_disconnected")`로 분류하여 `COMMUNICATION_FAILED` 응답으로
+  처리되도록 했다.
+- malformed JSON과 JSON object가 아닌 요청은 client 단위 `INVALID_REQUEST` Fail로 응답하고,
+  같은 client의 후속 정상 요청은 계속 처리하도록 client parser 경계를 정리했다.
+- 관련 회귀 테스트를 추가했고 전체 unittest 402개가 통과했다.
+- 실장치 BUS 단절 상태에서 서버 재시작 후 기존 RuntimeError 노출 증상이 해소됨을 확인했고,
+  TD-031을 완료 처리했다. 재시작 전 같은 증상이 재현된 것은 실행 중인 이전 서버 프로세스가
+  기존 코드를 계속 사용했기 때문으로 정리했다.
+
 ### TD-026 실장치 Identity 불일치의 초기화 오류 경계 정리
 
 - CMMT-AS/CMMT-ST와 CPX-AP-I-EC station의 실제 EtherCAT slave identity mismatch를

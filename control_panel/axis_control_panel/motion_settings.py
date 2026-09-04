@@ -9,26 +9,22 @@ class MotionSettingsMixin:
         if profile_settings is None:
             return
         axis_index = self.selected_axis()
+        for var in self._selected_profile_dirty_vars(axis_index, profile_settings):
+            self.dirty_vars.discard(id(var))
         self.try_send(
             lambda: self.client.send_profile_settings(axis_index, profile_settings)
         )
-        if self.latest_motion_modes[axis_index] == "pv":
-            dirty_vars = self.profile_vars[1:3]
-        else:
-            dirty_vars = self.profile_vars[:len(profile_settings)]
-        for var in dirty_vars:
-            self.dirty_vars.discard(id(var))
 
     def apply_motion_limits(self):
         axis_limits = self.read_selected_limit_values()
         if axis_limits is None:
             return
         axis_index = self.selected_axis()
+        for var in self.limit_vars:
+            self.dirty_vars.discard(id(var))
         self.try_send(
             lambda: self.client.send_axis_motion_limits(axis_index, axis_limits)
         )
-        for var in self.limit_vars:
-            self.dirty_vars.discard(id(var))
 
     def apply_software_limits(self):
         software_limits_mm = self.read_selected_software_limit_values()
@@ -36,6 +32,8 @@ class MotionSettingsMixin:
             return
 
         axis_index = self.selected_axis()
+        for var in self.software_limit_vars:
+            self.dirty_vars.discard(id(var))
         self.try_send(
             lambda: self.client.send_axis_software_position_limits(
                 axis_index,
@@ -43,8 +41,11 @@ class MotionSettingsMixin:
                 software_limits_mm[1],
             )
         )
-        for var in self.software_limit_vars:
-            self.dirty_vars.discard(id(var))
+
+    def _selected_profile_dirty_vars(self, axis_index, profile_settings):
+        if self.latest_motion_modes[axis_index] == "pv":
+            return self.profile_vars[1:3]
+        return self.profile_vars[:len(profile_settings)]
 
     def read_selected_profile_values(self):
         is_pv = self.latest_motion_modes[self.selected_axis()] == "pv"

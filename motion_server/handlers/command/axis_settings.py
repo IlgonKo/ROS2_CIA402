@@ -293,6 +293,9 @@ def update_axis_profile_settings(
     is_pv_axis = state["motion_modes"][axis_index] == "pv"
     profile = axis_device_profile(runtime, axis_index)
     write_error = None
+    profile_velocity_pdo_mapped = (
+        not is_pv_axis and profile_velocity_is_pdo_mapped(runtime, axis_index)
+    )
     try:
         if is_pv_axis:
             runtime.sdo.write_uint32(
@@ -308,13 +311,23 @@ def update_axis_profile_settings(
                 max(0, int(profile_deceleration)),
             )
         else:
-            profile.write_profile_settings(
-                runtime,
-                axis_index,
-                profile_velocity,
-                profile_acceleration,
-                profile_deceleration,
-            )
+            if profile_velocity_pdo_mapped:
+                write_profile_settings_with_pdo_velocity(
+                    runtime,
+                    axis_index,
+                    profile,
+                    profile_velocity,
+                    profile_acceleration,
+                    profile_deceleration,
+                )
+            else:
+                profile.write_profile_settings(
+                    runtime,
+                    axis_index,
+                    profile_velocity,
+                    profile_acceleration,
+                    profile_deceleration,
+                )
         if profile_jerk is not None:
             profile.write_profile_jerk(runtime, axis_index, profile_jerk)
     except PROFILE_ACCESS_ERRORS as exc:
@@ -327,14 +340,57 @@ def update_axis_profile_settings(
             raise write_error from readback_error
         raise
 
+    if profile_velocity_pdo_mapped:
+        readback = list(readback)
+        readback[0] = profile_velocity
     runtime.axis_parameters.update_axis(axis_index, profile_settings=readback)
-    if not is_pv_axis and runtime.slaves[axis_index].rxpdo.has_field("profile_velocity"):
-        runtime.slaves[axis_index].rxpdo.profile_velocity = require_uint32(
-            readback[0],
-            f"axis {axis_index} profile_velocity",
-        )
+    if not is_pv_axis:
+        synchronize_profile_velocity_command(runtime, axis_index, readback[0])
     if write_error is not None:
         raise write_error
+
+
+def synchronize_profile_velocity_command(runtime, axis_index, profile_velocity):
+    rxpdo = runtime.slaves[axis_index].rxpdo
+    if not profile_velocity_is_pdo_mapped(runtime, axis_index):
+        return
+    rxpdo.profile_velocity = require_uint32(
+        profile_velocity,
+        f"axis {axis_index} profile_velocity",
+    )
+
+
+def profile_velocity_is_pdo_mapped(runtime, axis_index):
+    return runtime.slaves[axis_index].rxpdo.has_field("profile_velocity")
+
+
+def write_profile_settings_with_pdo_velocity(
+    runtime,
+    axis_index,
+    profile,
+    profile_velocity,
+    profile_acceleration,
+    profile_deceleration,
+):
+    runtime.sdo.write_uint32(
+        axis_index,
+        profile.PROFILE_VELOCITY_INDEX,
+        0,
+        max(0, int(profile_velocity)),
+    )
+    synchronize_profile_velocity_command(runtime, axis_index, profile_velocity)
+    runtime.sdo.write_uint32(
+        axis_index,
+        profile.PROFILE_ACCELERATION_INDEX,
+        0,
+        max(0, int(profile_acceleration)),
+    )
+    runtime.sdo.write_uint32(
+        axis_index,
+        profile.PROFILE_DECELERATION_INDEX,
+        0,
+        max(0, int(profile_deceleration)),
+    )
 
 
 def set_software_position_limits(message, runtime, state, client):

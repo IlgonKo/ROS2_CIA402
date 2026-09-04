@@ -2,6 +2,11 @@ import struct
 import time
 
 from motion_server.api.validator import parse_int
+from motion_server.app.runtime_parameters import (
+    READ_WRITE_ACCESS,
+    RuntimeParameterAddress,
+    update_runtime_parameter_cache,
+)
 from motion_server.failure import (
     DeviceAccessException,
     DeviceRejectedException,
@@ -57,6 +62,14 @@ def _read_ap_parameter(message, runtime):
     read_length = min(request["length"], max(0, int(data_length)), AP_MAX_DATA_BYTES)
     payload = read_ap_data_payload(runtime, slave_index, request, read_length)
     value = decode_ap_payload(payload, request["data_type"])
+    update_runtime_parameter_cache(
+        runtime,
+        ap_runtime_parameter_address(runtime, request, slave_index),
+        value,
+        data_type=request["data_type"],
+        access=READ_WRITE_ACCESS,
+        raw_value=bytes(payload).hex(),
+    )
     return ap_parameter_data(
         request, status=status, length=data_length,
         data=bytes(payload).hex(), value=value,
@@ -83,6 +96,15 @@ def _write_ap_parameter(message, runtime):
     )
     status = poll_ap_status(runtime, slave_index, request)
     require_ap_success(status, request)
+    update_runtime_parameter_cache(
+        runtime,
+        ap_runtime_parameter_address(runtime, request, slave_index),
+        message["value"],
+        data_type=request["data_type"],
+        access=READ_WRITE_ACCESS,
+        raw_value=bytes(payload).hex(),
+        source="device_write",
+    )
     return ap_parameter_data(
         request, status=status, length=request["length"],
         data=bytes(payload).hex(),
@@ -249,6 +271,36 @@ def validate_ap_target(runtime, request):
             f"{request['io']}:{module}",
         )
     return slave_index
+
+
+def ap_runtime_parameter_address(runtime, request, slave_index):
+    return RuntimeParameterAddress(
+        "io",
+        io_source_index(runtime, request["io"], slave_index),
+        "ap_parameter",
+        module=request["module"],
+        parameter_id=request["parameter_id"],
+        instance=request["instance"],
+    )
+
+
+def io_source_index(runtime, io_selector, slave_index=None):
+    try:
+        for io_index, device in enumerate(runtime.device_manager.io.devices):
+            if str(device["id"]) == str(io_selector):
+                return io_index
+            if slave_index is not None and int(device["slave_index"]) == int(slave_index):
+                return io_index
+    except (AttributeError, TypeError, ValueError):
+        pass
+    text = str(io_selector).strip().lower()
+    if text.startswith("io") and text[2:].isdigit():
+        return int(text[2:])
+    if text.isdigit():
+        return int(text)
+    if slave_index is not None:
+        return int(slave_index)
+    return 0
 
 
 def ap_sdo_step(step, request, operation, *args, **kwargs):

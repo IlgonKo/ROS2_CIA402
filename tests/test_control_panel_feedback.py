@@ -5,6 +5,7 @@ from types import SimpleNamespace
 from control_panel.axis_control_panel.client import AxisServerClient
 from control_panel.axis_control_panel.control_panel import AxisServerControlPanel
 from control_panel.axis_control_panel.diagnosis import DiagnosisMixin
+from control_panel.axis_control_panel.motion_settings import MotionSettingsMixin
 from control_panel.io_control_panel.client import MotionServerClient
 from control_panel.io_control_panel.control_panel import IOControlPanel
 from control_panel.axis_control_panel.panel_update_data import (
@@ -23,6 +24,89 @@ from motion_server.app.initialization import (
 )
 from motion_server.app.session import ServerRuntimeState, ServerSession
 from motion_server.handlers.status.feedback import system_feedback_message
+
+
+class _PanelVar:
+    def __init__(self, value):
+        self.value = value
+
+    def get(self):
+        return self.value
+
+
+class AxisMotionSettingsTest(unittest.TestCase):
+    def test_profile_settings_clear_dirty_before_refresh_request(self):
+        events = []
+
+        class Client:
+            def send_profile_settings(self, axis_index, profile_settings):
+                events.append(
+                    (
+                        "send",
+                        axis_index,
+                        list(profile_settings),
+                        set(panel.dirty_vars),
+                    )
+                )
+
+        class Panel(MotionSettingsMixin):
+            def selected_axis(self):
+                return 0
+
+            def try_send(self, send_func):
+                events.append(("before_send", set(self.dirty_vars)))
+                return send_func()
+
+        panel = Panel()
+        panel.profile_vars = [
+            _PanelVar("100"),
+            _PanelVar("200"),
+            _PanelVar("300"),
+            _PanelVar("400"),
+        ]
+        panel.latest_motion_modes = ["pp"]
+        panel.dirty_vars = {id(var) for var in panel.profile_vars}
+        panel.client = Client()
+
+        panel.apply_profile_settings()
+
+        self.assertEqual(events[0], ("before_send", set()))
+        self.assertEqual(
+            events[1],
+            ("send", 0, [100.0, 200.0, 300.0, 400.0], set()),
+        )
+
+    def test_pv_profile_settings_keep_unused_fields_dirty(self):
+        class Client:
+            def send_profile_settings(self, axis_index, profile_settings):
+                sent.append((axis_index, list(profile_settings)))
+
+        class Panel(MotionSettingsMixin):
+            def selected_axis(self):
+                return 0
+
+            def try_send(self, send_func):
+                return send_func()
+
+        sent = []
+        panel = Panel()
+        panel.profile_vars = [
+            _PanelVar("100"),
+            _PanelVar("200"),
+            _PanelVar("300"),
+            _PanelVar("400"),
+        ]
+        panel.latest_motion_modes = ["pv"]
+        panel.dirty_vars = {id(var) for var in panel.profile_vars}
+        panel.client = Client()
+
+        panel.apply_profile_settings()
+
+        self.assertEqual(sent, [(0, [200.0, 300.0])])
+        self.assertIn(id(panel.profile_vars[0]), panel.dirty_vars)
+        self.assertNotIn(id(panel.profile_vars[1]), panel.dirty_vars)
+        self.assertNotIn(id(panel.profile_vars[2]), panel.dirty_vars)
+        self.assertIn(id(panel.profile_vars[3]), panel.dirty_vars)
 
 
 class AxisFeedbackBootstrapTest(unittest.TestCase):

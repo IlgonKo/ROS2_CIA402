@@ -4,6 +4,7 @@ from types import SimpleNamespace
 from unittest.mock import Mock, patch
 
 from device.cpx_ap_i_ec.ap_parameter_access import write_ap_uint32_parameter
+from motion_server.app.runtime_parameters import RuntimeParameterCache
 from motion_server.failure import (
     CommunicationTimeoutException,
     DeviceRejectedException,
@@ -95,11 +96,12 @@ class RecordingConnection:
         self.messages.append(json.loads(payload.decode("utf-8")))
 
 
-def runtime(status=0, exception=None, modules=(1,)):
+def runtime(status=0, exception=None, modules=(1,), parameter_cache=None):
     master = FakeApMaster(status=status, exception=exception)
     return SimpleNamespace(
         ethercat_master=master,
         device_manager=SimpleNamespace(io=FakeIoGroup(modules=modules)),
+        parameter_cache=parameter_cache,
     )
 
 
@@ -117,15 +119,20 @@ def read_message(**updates):
 
 class ApParameterHandlerTest(unittest.TestCase):
     def test_ap_read_returns_structured_data(self):
-        data = _read_ap_parameter(read_message(), runtime())
+        cache = RuntimeParameterCache()
+        data = _read_ap_parameter(read_message(), runtime(parameter_cache=cache))
 
         self.assertEqual(data["module"], 1)
         self.assertEqual(data["parameter_id"], 0x1234)
         self.assertEqual(data["value"], 42)
         self.assertEqual(data["status"], 0)
+        cached = cache.get("io.0.ap_parameter.module1.parameter0x00001234.instance0")
+        self.assertEqual(cached.value, 42)
+        self.assertEqual(cached.raw_value, "2a000000")
 
     def test_ap_write_returns_payload_metadata(self):
-        active_runtime = runtime()
+        cache = RuntimeParameterCache()
+        active_runtime = runtime(parameter_cache=cache)
         message = read_message(
             type="system/io/ap/param_write",
             value=43,
@@ -136,6 +143,9 @@ class ApParameterHandlerTest(unittest.TestCase):
         self.assertEqual(data["length"], 4)
         self.assertEqual(data["data"], "2b000000")
         self.assertEqual(len(active_runtime.ethercat_master.raw_writes[0]), 512)
+        cached = cache.get("io.0.ap_parameter.module1.parameter0x00001234.instance0")
+        self.assertEqual(cached.value, 43)
+        self.assertEqual(cached.source, "device_write")
 
     def test_unknown_io_is_resource_not_found(self):
         with self.assertRaises(ResourceNotFoundException):

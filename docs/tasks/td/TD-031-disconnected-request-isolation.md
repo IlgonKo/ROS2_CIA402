@@ -98,6 +98,36 @@ parameter 20071 자체의 지원 여부나 AP parameter 오류를 판단할 수 
 3. client 오류 격리를 정합화하고 loop 생존/reconnect/다중 client 회귀를 검증.
 4. 실장치의 최초 단절 원인과 실제 종료 여부를 별도 기록하고 완료 근거를 업데이트.
 
+## 2026-09-04 구현 결과
+
+- `CommandSpec.transport_required`를 추가하여 status/command 여부와 실제 장치 transport 필요 여부를
+  분리했다.
+- `system/axis/param_read`, `system/io/param_read`, `system/io/ap/param_read`,
+  `system/io/iol/param_read`는 transport 의존 조회로 표시했다.
+- BUS_DISCONNECTED 상태에서는 transport 의존 조회를 handler 진입 전 `INVALID_STATE` Fail로 거부한다.
+  `system/server/status`, `system/bus/status`, `system/axes/status`, `system/io/status`,
+  catalog 조회와 feedback은 유지한다.
+- PySOEM transport가 검증 이후 닫히는 race에서는 `_require_connected()`가 일반 `RuntimeError` 대신
+  `CommunicationException("bus_transport_disconnected")`를 발생시켜 중앙 failure mapper가
+  `COMMUNICATION_FAILED`로 응답한다.
+- MockMaster의 process-data 연결 체크도 같은 typed communication failure를 사용하도록 맞췄다.
+  단, Mock SDO read/write의 연결 전 OD 접근 허용 여부는 기존 가상 OD 단위 테스트 계약을 보존했다.
+- client line parser가 malformed JSON 또는 JSON object가 아닌 요청을 router 밖으로 전파하지 않고
+  해당 client에 `INVALID_REQUEST` Fail을 반환한다. 같은 client의 후속 정상 요청은 계속 dispatch된다.
+- 자동 회귀 테스트:
+  - `tests.test_runtime_fault_reset`
+  - `tests.test_client_transport`
+  - `tests.test_sdo_exception_parity`
+  - 전체 `python -m unittest discover tests -q`: 402개 통과
+
+실장치 확인:
+
+- 수정 후 서버를 재시작하지 않은 상태에서는 이전 프로세스가 기존 bytecode를 계속 실행하여
+  `RuntimeError("PySOEMMaster is not connected...")`가 다시 보였다.
+- 서버 재시작 후 BUS_DISCONNECTED 상태에서 동일 증상이 해소됨을 확인했다.
+- 따라서 남은 이슈는 코드 변경 미반영이 아니라 실행 중이던 이전 서버 프로세스의 재시작 누락으로
+  판정했다.
+
 ## 완료 조건
 
 - BUS_DISCONNECTED에서 AP/IOL/EtherCAT의 실제 장치 접근 조회가 SDO 호출 전에 기존 Fail로 거부된다.

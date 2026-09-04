@@ -140,6 +140,52 @@ class RuntimeFaultResetTest(unittest.TestCase):
         self.assertEqual(normal_result, "runtime_fault")
         self.assertIsNone(disconnected_result)
 
+    def test_bus_disconnected_blocks_transport_dependent_status_requests(self):
+        _runtime, session, state = runtime_state()
+        session.set_runtime_state(ServerRuntimeState.BUS_DISCONNECTED)
+
+        for message_type in (
+            "system/axis/param_read",
+            "system/io/param_read",
+            "system/io/ap/param_read",
+            "system/io/iol/param_read",
+        ):
+            with self.subTest(message_type=message_type):
+                self.assertEqual(
+                    validate_command(
+                        command_spec(message_type),
+                        {},
+                        state,
+                        True,
+                        message={"type": message_type},
+                    ),
+                    "runtime_fault",
+                )
+
+    def test_bus_disconnected_allows_snapshot_and_catalog_status_requests(self):
+        _runtime, session, state = runtime_state()
+        session.set_runtime_state(ServerRuntimeState.BUS_DISCONNECTED)
+
+        for message_type in (
+            "system/server/status",
+            "system/bus/status",
+            "system/axes/status",
+            "system/io/status",
+            "system/axis/param_catalog",
+            "system/io/ethercat/param_catalog",
+            "system/io/iol/param_catalog",
+        ):
+            with self.subTest(message_type=message_type):
+                self.assertIsNone(
+                    validate_command(
+                        command_spec(message_type),
+                        {},
+                        state,
+                        True,
+                        message={"type": message_type},
+                    )
+                )
+
     def test_axis_fault_only_blocks_commands_for_faulted_axis(self):
         runtime, session, state = runtime_state()
         runtime.slaves.append(SimpleNamespace())

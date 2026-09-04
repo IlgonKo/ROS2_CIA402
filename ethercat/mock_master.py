@@ -229,9 +229,7 @@ class MockMaster:
 
     def _require_connected(self):
         if not self._connected:
-            raise RuntimeError(
-                "MockMaster is not connected. Call connect() first."
-            )
+            raise CommunicationException("bus_transport_disconnected")
 
     def _reset_processdata_state(self):
         self._outputs_sent = False

@@ -3,6 +3,7 @@ import unittest
 from types import SimpleNamespace
 from unittest.mock import patch
 
+from motion_server.app.runtime_parameters import RuntimeParameterCache
 from motion_server.failure import (
     CommunicationTimeoutException,
     DeviceRejectedException,
@@ -103,10 +104,11 @@ class Connection:
     def sendall(self, payload): self.messages.append(json.loads(payload.decode()))
 
 
-def runtime(status=0, exception=None, **io_options):
+def runtime(status=0, exception=None, parameter_cache=None, **io_options):
     return SimpleNamespace(
         ethercat_master=FakeMaster(status, exception),
         device_manager=SimpleNamespace(io=FakeIoGroup(**io_options)),
+        parameter_cache=parameter_cache,
     )
 
 
@@ -130,22 +132,30 @@ class IolParameterHandlerTest(unittest.TestCase):
         )
 
     def test_isdu_read_returns_structured_data(self):
-        active = runtime()
+        cache = RuntimeParameterCache()
+        active = runtime(parameter_cache=cache)
         data = _read_iol_parameter(message(), active)
         self.assertEqual(data["value"], 42)
         self.assertEqual(data["object_index"], "0x2011")
         used_indices = [call[1][1] for call in active.ethercat_master.sdo.calls]
         self.assertTrue(used_indices)
         self.assertEqual(set(used_indices), {0x2011})
+        cached = cache.get("io.0.iol_isdu.module1.port1.parameter0x0010.subindex0x00")
+        self.assertEqual(cached.value, 42)
+        self.assertEqual(cached.raw_value, "2a00")
 
     def test_isdu_write_returns_payload_metadata(self):
-        active = runtime()
+        cache = RuntimeParameterCache()
+        active = runtime(parameter_cache=cache)
         data = _write_iol_parameter(
             message(type="system/io/iol/param_write", value=43), active,
         )
         self.assertEqual(data["object_index"], "0x2011")
         self.assertEqual(data["data"], "2b00")
         self.assertEqual(len(active.ethercat_master.raw_writes[0]), 238)
+        cached = cache.get("io.0.iol_isdu.module1.port1.parameter0x0010.subindex0x00")
+        self.assertEqual(cached.value, 43)
+        self.assertEqual(cached.source, "device_write")
 
     def test_missing_port_binding_is_resource_not_found(self):
         with self.assertRaises(ResourceNotFoundException):

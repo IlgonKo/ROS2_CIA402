@@ -63,6 +63,17 @@ AXIS_RESTART_FAILED = DiagnosticDefinition(
     latching=True,
 )
 
+PARAMETER_REFRESH_FAILED = DiagnosticDefinition(
+    code="PARAMETER_REFRESH_FAILED",
+    level=DiagnosticLevel.FAULT,
+    title="Runtime parameter refresh failed",
+    description=(
+        "Motion Server could not refresh required runtime parameter cache "
+        "values from the device."
+    ),
+    latching=True,
+)
+
 AXIS_DRIVE_WARNING = DiagnosticDefinition(
     code="AXIS_DRIVE_WARNING",
     level=DiagnosticLevel.ALARM,

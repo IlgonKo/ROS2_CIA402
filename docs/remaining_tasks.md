@@ -231,6 +231,46 @@ Tech Debt 상태 값은 `open`, `in_progress`, `complete`를 사용한다.
   - TD-032 같은 실장치 IO-Link ISDU 조사 절차에서 임시 probe script 없이 필요한 raw SDO 접근을 수행할 수 있다.
 - 상세: [RF-016 기능 명세](tasks/rf/RF-016-hidden-expert-mode.md)
 
+### RF-017 Persistent Device Parameter Store and Commissioning Transfer
+
+- 상태: `planned`
+- 우선순위: 보통
+- 요약: 가상장치와 실장치의 parameter snapshot을 영구 저장하고 변경 이력을 관리하여,
+  가상장치에서 조정한 commissioning parameter를 명시적으로 실장비로 이전할 수 있게 한다.
+- 완료 조건:
+  - CMMT Axis, CPX station/module parameter와 IO-Link ISDU parameter를 공통 address model로
+    식별하는 persistent parameter record가 정의된다.
+  - `parameter_save` 명령 시 현재 runtime/cache 또는 device readback snapshot을 Persistent Store에
+    저장하고 변경 이력을 남긴다.
+  - 서버 재시작 시 Virtual Device는 기본 OD 초기화 후 Persistent Store 값을 읽어 OD에 적용하고,
+    Runtime Cache는 적용된 OD readback으로 다시 구성된다.
+  - Virtual Device runtime reset, store reset과 factory restore는 공개 TCP API가 아니라 별도
+    maintenance/commissioning tool로 제공된다.
+  - 단순 parameter write는 영구 저장을 수행하지 않고, save 명령만 저장 commit 의미를 가진다.
+  - 실장비 내부 non-volatile parameter save와 서버 Persistent Store 저장 결과 및 실패가 분리되어
+    보고된다.
+  - 저장된 virtual commissioning profile을 실장비에 적용하는 export/apply/verify 경계가 명시적
+    사용자 명령으로 제공되며 자동 적용은 하지 않는다.
+  - 변경 이력, source, revision, timestamp와 실패/부분 적용 결과가 자동 테스트와 수동 검증으로 확인된다.
+- 상세: [RF-017 기능 명세](tasks/rf/RF-017-persistent-parameter-store.md)
+
+### RF-018 Gamepad Manual Multi-Axis Velocity Control
+
+- 상태: `planned`
+- 우선순위: 보통
+- 요약: DualSense 같은 gamepad를 외부 reference client로 사용하여 3축 + rotation 수동 velocity 제어를 제공한다.
+- 선행 작업: `TD-034`
+- 완료 조건:
+  - Motion Server core에는 gamepad/HID dependency를 추가하지 않고 `reference_clients/gamepad`에 구현된다.
+  - Multi-axis mode는 기존 `system/axes/move_vel` API를 사용하여 X/Y/Z/Rotation role을 동시에 속도 지령한다.
+  - Single-axis mode는 선택 축 하나를 stick으로 velocity 제어하고 D-pad left/right로 선택 축을 변경한다.
+  - Multi-axis mode에서 Left Stick X/Y는 X/Y, Right Stick Y/X는 Z/Rotation velocity로 매핑된다.
+  - L1 deadman이 눌린 상태에서만 velocity command를 보내고, deadman release/input timeout/gamepad disconnect/server disconnect 시 mapped axes stop을 우선 수행한다.
+  - axis role-to-index, axis별 max velocity, deadzone, update period와 speed scale은 client 설정으로 관리된다.
+  - command authority, runtime state, fault state, motion limit와 software limit는 기존 Motion Server API 계약을 따른다.
+  - absolute/relative move, homing, sequence, parameter write, safety bypass와 신규 Motion Server gamepad API는 포함하지 않는다.
+- 상세: [RF-018 기능 명세](tasks/rf/RF-018-gamepad-manual-velocity-control.md)
+
 ## Tech Debt
 
 ### TD-003 Axis Server 과거 명칭 잔존
@@ -490,15 +530,30 @@ Tech Debt 상태 값은 `open`, `in_progress`, `complete`를 사용한다.
 
 ### TD-025 Runtime Parameter Cache 관리 체계 확장
 
-- 상태: `open`
+- 상태: `complete`
 - 우선순위: 보통
-- 요약: TD-023의 CMMT 축 parameter cache를 장치 공통 refresh·validity·Diagnostic 체계로 확장한다.
+- 요약: CMMT와 CPX를 포함한 장치 runtime parameter cache를 공통 refresh·validity·Diagnostic 체계로 확장한다.
+- 진행 상황:
+  - 공통 `RuntimeParameterAddress`, `RuntimeParameterDefinition`, `RuntimeParameterValue`,
+    `RuntimeParameterCache` 모델을 추가했다.
+  - 기존 CMMT `AxisParameterRuntimeCache`가 축별 projection field를 유지하면서 공통 cache에
+    definition/value를 함께 등록·갱신하도록 했다.
+  - RF-005 recovery refresh 실패 시 axis cache invalidation과 `PARAMETER_REFRESH_FAILED`
+    Diagnostic detect/resolve 경계를 추가했다.
+  - Axis/IO EtherCAT OD, CPX AP parameter, IO-Link ISDU read/write 성공 결과가 공통 cache에
+    반영되도록 했다.
+  - 공개 refresh API는 만들지 않고 startup/recovery/parameter access 내부 경계에서 cache를 갱신한다.
+  - RF-017 Persistent Store의 실제 저장 포맷, 변경 이력, restart restore와 실장비 이전은 RF-017로
+    분리했다.
 - 완료 조건:
-  - parameter definition, source, validity와 갱신 시각 모델이 확정된다.
-  - 축/항목별 명시적 refresh와 일반 parameter write 후 cache 연동이 구현된다.
-  - RF-005의 PySOEM Axis restart 완료 후 해당 축 cache refresh와 invalid 처리가 수행된다.
+  - CMMT Axis, CPX station/module parameter와 IO-Link ISDU parameter를 표현할 runtime cache
+    definition, source, validity와 갱신 시각 모델이 확정된다.
+  - 서버 제어, status/API 응답 또는 recovery 후 정합성에 필요한 parameter만 cache 대상으로 정의된다.
+  - 축/장치/항목별 명시적 refresh와 일반 parameter write 후 cache 갱신 또는 invalidation이 구현된다.
+  - RF-005의 PySOEM Axis restart 및 Bus reconnect 완료 후 해당 cache refresh와 invalid 처리가 수행된다.
   - readback 실패, 외부 commissioning 변경과 다중 항목 갱신 정책이 정의된다.
-  - CMMT 외 장치 확장 경계와 Diagnostic 연동 자동 테스트가 통과한다.
+  - Persistent Store, 변경 이력, 서버 재시작 후 virtual parameter restore와 실장비 이전은 RF-017로 분리된다.
+  - CMMT/CPX device provider 경계와 Diagnostic 연동 자동 테스트가 통과한다.
 - 상세: [TD-025 기술 명세](tasks/td/TD-025-runtime-parameter-cache.md)
 
 ### TD-026 실장치 Identity 불일치의 초기화 오류 경계 정리
@@ -582,7 +637,7 @@ Tech Debt 상태 값은 `open`, `in_progress`, `complete`를 사용한다.
 
 ### TD-031 Bus 단절 중 장치 조회 차단 및 요청 오류 격리
 
-- 상태: `open`
+- 상태: `complete`
 - 우선순위: 높음
 - 요약: Bus 단절 중 장치 통신이 필요한 조회를 차단하고 요청 오류가 서버 전체 중단으로 이어지지 않도록 예외 경계를 정리한다.
 - 완료 조건:
@@ -590,6 +645,12 @@ Tech Debt 상태 값은 `open`, `in_progress`, `complete`를 사용한다.
   - 조회 검증 이후 transport가 닫혀도 통신 Fail로 처리되며 일반 RuntimeError로 오분류하지 않는다.
   - malformed request와 client 오류가 listener/다른 client를 종료하지 않고 normal/disconnected/degraded loop 회귀가 통과한다.
   - 동일 TCP의 후속 상태 조회와 reconnect 후 파라미터 조회를 검증하고, 실제 다운 신고와 최초 단절 원인의 확인/미확인 근거를 기록한다.
+- 진행 상황:
+  - API spec에 transport 의존성 표시를 추가하고 BUS_DISCONNECTED에서 SDO 기반 조회를 사전 차단했다.
+  - 닫힌 PySOEM transport 접근은 `RuntimeError` 대신 `CommunicationException("bus_transport_disconnected")`로 분류한다.
+  - malformed/non-object JSON 요청은 client 단위 `INVALID_REQUEST` Fail로 응답하고 후속 요청 처리를 유지한다.
+  - 자동 회귀: 전체 unittest 402개 통과.
+  - 실장치 BUS 단절 상태에서 수정 코드 재시작 후 동일 증상이 해소됨을 확인했다.
 - 상세: [TD-031 기술 명세](tasks/td/TD-031-disconnected-request-isolation.md)
 
 ### TD-032 CPX IO-Link ISDU Parameter Read/Write 실패
@@ -625,3 +686,17 @@ Tech Debt 상태 값은 `open`, `in_progress`, `complete`를 사용한다.
     `0x1A00...`, `0x1C12...`, `0x1C13`, `0x1C32...` 계열 대표 object가 catalog에 노출된다.
   - IO Control Panel EC Parameter 탭에서 CPX 본체 EtherCAT parameter와 AP module parameter가 섞이지 않는다.
 - 상세: [TD-033 기술 명세](tasks/td/TD-033-ec-parameter-catalog-scope.md)
+
+### TD-034 Linear/Rotary Velocity Command 허용 범위 정리
+
+- 상태: `open`
+- 우선순위: 보통
+- 요약: RF-018의 다축 velocity control을 위해 기존 `system/axis/move_vel`과 `system/axes/move_vel`의 linear/rotary 허용 범위를 정리한다.
+- 후속 작업: `RF-018`
+- 완료 조건:
+  - 기존 command authority, enabled state, fault state, motion limit, software limit와 timeout safety 계약을 유지한다.
+  - 현재 linear axis에서 velocity command가 제한되는 원인과 의도를 확인한다.
+  - linear axis와 rotary axis 모두에서 `move_vel`을 허용하도록 필요한 제한을 제거하거나 명시 조건으로 전환한다.
+  - linear는 mm/s, rotary는 deg/s 기준의 unit conversion과 axis별 velocity limit가 검증된다.
+  - `system/axes/move_vel`이 X/Y/Z/Rotation 동시 수동 velocity command에 사용할 수 있음을 자동 테스트로 확인한다.
+- 상세: [TD-034 기술 명세](tasks/td/TD-034-linear-rotary-velocity-command.md)

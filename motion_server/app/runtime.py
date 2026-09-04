@@ -1,5 +1,6 @@
 from motion_server.diagnostic import DiagnosticManager
 from motion_server.app.axis_parameters import AxisParameterRuntimeCache
+from motion_server.app.runtime_parameters import RuntimeParameterCache
 
 
 class AxisRuntime:
@@ -18,8 +19,10 @@ class AxisRuntime:
         self.diagnostic_manager = diagnostic_manager or DiagnosticManager()
         self.logger = runtime_logger
         self.expert_mode = bool(expert_mode)
+        self.parameter_cache = RuntimeParameterCache()
         self.axis_parameters = AxisParameterRuntimeCache(
-            self.motion_controller.axis_count
+            self.motion_controller.axis_count,
+            parameter_cache=self.parameter_cache,
         )
         if len(self.device_manager.axis_devices) != self.motion_controller.axis_count:
             raise ValueError(

@@ -196,6 +196,11 @@ software_position_limits per axis:
   [negative_limit, positive_limit]
 ```
 
+`profile_velocity`는 `0x6081`이 RxPDO에 포함된 PDO configuration에서는 device SDO readback 값만을
+의미하지 않는다. 이 경우 Motion Server는 `system/axis/profile` 요청 시 `0x6081` SDO write와
+RxPDO `profile_velocity` command value 갱신을 함께 수행하며, status의 `profile_settings[0]`은
+앞으로 cyclic PDO로 송신할 effective profile velocity default를 표시한다.
+
 ### system/axis/status
 
 특정 축의 full snapshot을 요청한다.

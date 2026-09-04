@@ -3,6 +3,11 @@ import time
 
 from device.cpx_ap_i_ec.isdu_gateway import isdu_access_object_index
 from motion_server.api.validator import parse_int
+from motion_server.app.runtime_parameters import (
+    READ_WRITE_ACCESS,
+    RuntimeParameterAddress,
+    update_runtime_parameter_cache,
+)
 from motion_server.failure import (
     DeviceAccessException,
     DeviceRejectedException,
@@ -60,6 +65,14 @@ def _read_iol_parameter(message, runtime):
     read_length = min(request["length"], max(0, int(data_length)), ISDU_MAX_DATA_BYTES)
     payload = read_isdu_data_payload(runtime, slave_index, request, read_length)
     value = decode_isdu_payload(payload, request["data_type"])
+    update_runtime_parameter_cache(
+        runtime,
+        iol_runtime_parameter_address(runtime, request, slave_index),
+        value,
+        data_type=request["data_type"],
+        access=READ_WRITE_ACCESS,
+        raw_value=bytes(payload).hex(),
+    )
     return isdu_data(
         request, status=status, length=data_length,
         data=bytes(payload).hex(), value=value,
@@ -86,6 +99,15 @@ def _write_iol_parameter(message, runtime):
     )
     status = poll_isdu_status(runtime, slave_index, request)
     require_isdu_success(status, request)
+    update_runtime_parameter_cache(
+        runtime,
+        iol_runtime_parameter_address(runtime, request, slave_index),
+        message["value"],
+        data_type=request["data_type"],
+        access=READ_WRITE_ACCESS,
+        raw_value=bytes(payload).hex(),
+        source="device_write",
+    )
     return isdu_data(
         request, status=status, length=request["length"],
         data=bytes(payload).hex(),
@@ -244,6 +266,37 @@ def validate_isdu_target(runtime, request):
         return runtime.device_manager.io.slave_index(request["io"])
     except (TypeError, ValueError) as exception:
         raise ResourceNotFoundException("io", request["io"]) from exception
+
+
+def iol_runtime_parameter_address(runtime, request, slave_index):
+    return RuntimeParameterAddress(
+        "io",
+        io_source_index(runtime, request["io"], slave_index),
+        "iol_isdu",
+        module=request["module"],
+        port=request["port"],
+        parameter_id=request["index"],
+        subindex=request["subindex"],
+    )
+
+
+def io_source_index(runtime, io_selector, slave_index=None):
+    try:
+        for io_index, device in enumerate(runtime.device_manager.io.devices):
+            if str(device["id"]) == str(io_selector):
+                return io_index
+            if slave_index is not None and int(device["slave_index"]) == int(slave_index):
+                return io_index
+    except (AttributeError, TypeError, ValueError):
+        pass
+    text = str(io_selector).strip().lower()
+    if text.startswith("io") and text[2:].isdigit():
+        return int(text[2:])
+    if text.isdigit():
+        return int(text)
+    if slave_index is not None:
+        return int(slave_index)
+    return 0
 
 
 def resolve_isdu_access_object(runtime, request):

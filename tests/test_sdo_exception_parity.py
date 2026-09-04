@@ -138,6 +138,12 @@ def pysoem_master(slave):
     return master
 
 
+def disconnected_pysoem_master():
+    master = object.__new__(PySOEMMaster)
+    master._master = None
+    return master
+
+
 def mock_master(slave):
     return MockMaster([slave], device_profiles=[EmptyProfile()])
 
@@ -245,6 +251,18 @@ class SdoExceptionParityTest(unittest.TestCase):
         with self.assertRaises(CommunicationException):
             invoke_raw(master, "read")
         self.assertEqual(slave.read_attempts, 3)
+
+    def test_disconnected_pysoem_transport_is_expected_communication_failure(self):
+        master = disconnected_pysoem_master()
+
+        for operation in ("read", "write"):
+            with self.subTest(operation=operation):
+                with self.assertRaises(CommunicationException) as caught:
+                    invoke_raw(master, operation)
+                self.assertEqual(
+                    caught.exception.operation,
+                    "bus_transport_disconnected",
+                )
 
     def test_unexpected_exception_is_not_hidden(self):
         for operation in ("read", "write"):

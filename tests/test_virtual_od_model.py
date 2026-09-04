@@ -379,14 +379,16 @@ class VirtualOdModelTest(unittest.TestCase):
         runtime = self._create_linear_mock_runtime()
         refresh_axis_parameter_cache(runtime, 0)
         profile = runtime.slaves[0].device_profile
+        original_write = runtime.sdo.write_uint32
 
-        def partial_write(master, axis_index, velocity, acceleration, deceleration):
-            master.sdo.write_uint32(
-                axis_index, profile.PROFILE_VELOCITY_INDEX, 0, int(velocity)
-            )
-            raise RuntimeError("acceleration write failed")
+        def partial_write(axis_index, index, subindex, value):
+            if index == profile.PROFILE_ACCELERATION_INDEX:
+                raise RuntimeError("acceleration write failed")
+            return original_write(axis_index, index, subindex, value)
 
-        with patch.object(profile, "write_profile_settings", side_effect=partial_write):
+        with (
+            patch.object(runtime.sdo, "write_uint32", side_effect=partial_write),
+        ):
             with self.assertRaisesRegex(RuntimeError, "acceleration write failed"):
                 update_axis_profile_settings(
                     runtime,
@@ -398,6 +400,29 @@ class VirtualOdModelTest(unittest.TestCase):
                 )
 
         self.assertEqual(runtime.axis_parameters.profile_settings[0][0], 123)
+        self.assertEqual(runtime.slaves[0].rxpdo.profile_velocity, 123)
+
+    def test_pdo_mapped_profile_velocity_uses_command_value_when_readback_differs(self):
+        runtime = self._create_linear_mock_runtime()
+        refresh_axis_parameter_cache(runtime, 0)
+        profile = runtime.slaves[0].device_profile
+
+        with patch.object(
+            profile,
+            "read_profile_settings",
+            return_value=[0, 456, 789, 0],
+        ):
+            update_axis_profile_settings(
+                runtime,
+                {"motion_modes": ["pp"]},
+                0,
+                123,
+                456,
+                789,
+            )
+
+        self.assertEqual(runtime.axis_parameters.profile_settings[0][0], 123)
+        self.assertEqual(runtime.axis_parameters.profile_settings[0][1:3], [456, 789])
         self.assertEqual(runtime.slaves[0].rxpdo.profile_velocity, 123)
 
     def test_partial_limit_writes_resynchronize_cache_and_control(self):

@@ -1,6 +1,11 @@
 from motion_server.device_manager.profile_access import axis_device_profile
 from motion_server.api.decoder import public_command_name
 from motion_server.api.validator import parse_int
+from motion_server.app.runtime_parameters import (
+    READ_WRITE_ACCESS,
+    RuntimeParameterAddress,
+    update_runtime_parameter_cache,
+)
 from motion_server.failure import (
     InvalidArgumentException,
     InvalidRequestException,
@@ -111,6 +116,15 @@ def write_io_parameter(message, runtime, client):
 def _read_axis_parameter(message, runtime):
     axis, index, subindex, data_type, length = parse_sdo_request(message, runtime)
     value = read_sdo_value(runtime.sdo, axis, index, subindex, data_type, length)
+    update_runtime_parameter_cache(
+        runtime,
+        RuntimeParameterAddress(
+            "axis", axis, "ethercat_od", index=index, subindex=subindex,
+        ),
+        value,
+        data_type=data_type,
+        access=READ_WRITE_ACCESS,
+    )
     data = _parameter_data("axis", axis, index, subindex, data_type, value)
     data["length"] = length
     return data
@@ -122,15 +136,38 @@ def _write_axis_parameter(message, runtime):
     written = write_sdo_value(
         runtime.sdo, axis, index, subindex, data_type, value,
     )
+    update_runtime_parameter_cache(
+        runtime,
+        RuntimeParameterAddress(
+            "axis", axis, "ethercat_od", index=index, subindex=subindex,
+        ),
+        written,
+        data_type=data_type,
+        access=READ_WRITE_ACCESS,
+        source="device_write",
+    )
     return _parameter_data("axis", axis, index, subindex, data_type, written)
 
 
 def _read_io_parameter(message, runtime):
     io_selector, index, subindex, data_type, length = parse_io_sdo_request(message)
-    validate_io_selector(runtime, io_selector)
+    slave_index = validate_io_selector(runtime, io_selector)
     validate_io_parameter_access(index, subindex, runtime)
     value = read_sdo_value(
         runtime.sdo.io, io_selector, index, subindex, data_type, length,
+    )
+    update_runtime_parameter_cache(
+        runtime,
+        RuntimeParameterAddress(
+            "io",
+            io_source_index(runtime, io_selector, slave_index),
+            "ethercat_od",
+            index=index,
+            subindex=subindex,
+        ),
+        value,
+        data_type=data_type,
+        access=READ_WRITE_ACCESS,
     )
     data = _parameter_data(
         "io", io_selector, index, subindex, data_type, value,
@@ -141,7 +178,7 @@ def _read_io_parameter(message, runtime):
 
 def _write_io_parameter(message, runtime, client=None):
     io_selector, index, subindex, data_type, _length = parse_io_sdo_request(message)
-    validate_io_selector(runtime, io_selector)
+    slave_index = validate_io_selector(runtime, io_selector)
     validate_io_parameter_access(index, subindex, runtime)
     value = required_sdo_write_value(message)
     log_expert_raw_sdo_write(
@@ -149,6 +186,20 @@ def _write_io_parameter(message, runtime, client=None):
     )
     written = write_sdo_value(
         runtime.sdo.io, io_selector, index, subindex, data_type, value,
+    )
+    update_runtime_parameter_cache(
+        runtime,
+        RuntimeParameterAddress(
+            "io",
+            io_source_index(runtime, io_selector, slave_index),
+            "ethercat_od",
+            index=index,
+            subindex=subindex,
+        ),
+        written,
+        data_type=data_type,
+        access=READ_WRITE_ACCESS,
+        source="device_write",
     )
     return _parameter_data(
         "io", io_selector, index, subindex, data_type, written,
@@ -173,9 +224,28 @@ def required_sdo_write_value(message):
 
 def validate_io_selector(runtime, io_selector):
     try:
-        runtime.device_manager.io.slave_index(io_selector)
+        return runtime.device_manager.io.slave_index(io_selector)
     except (TypeError, ValueError) as exception:
         raise ResourceNotFoundException("io", io_selector) from exception
+
+
+def io_source_index(runtime, io_selector, slave_index=None):
+    try:
+        for io_index, device in enumerate(runtime.device_manager.io.devices):
+            if str(device["id"]) == str(io_selector):
+                return io_index
+            if slave_index is not None and int(device["slave_index"]) == int(slave_index):
+                return io_index
+    except (AttributeError, TypeError, ValueError):
+        pass
+    text = str(io_selector).strip().lower()
+    if text.startswith("io") and text[2:].isdigit():
+        return int(text[2:])
+    if text.isdigit():
+        return int(text)
+    if slave_index is not None:
+        return int(slave_index)
+    return 0
 
 
 def normalize_sdo_data_type(data_type):

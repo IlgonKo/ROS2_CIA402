@@ -589,7 +589,7 @@ class PySOEMMaster:
             ("serial_number", 0x04),
         ]
         for key, subindex in sdo_items:
-            if identity[key] is not None:
+            if not self._identity_value_requires_sdo_fallback(key, identity[key]):
                 continue
             try:
                 identity[key] = self.sdo.read_uint32(
@@ -600,6 +600,17 @@ class PySOEMMaster:
             except Exception:
                 pass
         return identity
+
+    @staticmethod
+    def _identity_value_requires_sdo_fallback(key, value):
+        if value is None:
+            return True
+        if key in {"vendor_id", "product_code", "revision"}:
+            try:
+                return int(value) == 0
+            except (TypeError, ValueError):
+                return True
+        return False
 
     @staticmethod
     def _first_slave_attr_int(slave, names):
@@ -701,9 +712,7 @@ class PySOEMMaster:
 
     def _require_connected(self):
         if self._master is None:
-            raise RuntimeError(
-                "PySOEMMaster is not connected. Call connect() first."
-            )
+            raise CommunicationException("bus_transport_disconnected")
 
     def _reset_processdata_state(self):
         self._processdata_prepared = False

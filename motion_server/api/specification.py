@@ -8,6 +8,7 @@ class CommandSpec:
     authority_required: bool = False
     advanced_only: bool = False
     degraded_allowed: bool = False
+    transport_required: bool = False
 
     @property
     def is_command(self):
@@ -27,6 +28,7 @@ def command(
     authority_required=True,
     advanced_only=False,
     degraded_allowed=False,
+    transport_required=False,
 ):
     return CommandSpec(
         name,
@@ -34,15 +36,22 @@ def command(
         authority_required=authority_required,
         advanced_only=advanced_only,
         degraded_allowed=degraded_allowed,
+        transport_required=transport_required,
     )
 
 
-def status(name, advanced_only=False, degraded_allowed=False):
+def status(
+    name,
+    advanced_only=False,
+    degraded_allowed=False,
+    transport_required=False,
+):
     return CommandSpec(
         name,
         "status",
         advanced_only=advanced_only,
         degraded_allowed=degraded_allowed,
+        transport_required=transport_required,
     )
 
 
@@ -63,14 +72,14 @@ COMMAND_SPECS = {
         status("system/io/status"),
         status("system/io/input_read"),
         status("system/simulation/io/input_read"),
-        status("system/axis/param_read"),
+        status("system/axis/param_read", transport_required=True),
         status("system/axis/param_catalog"),
-        status("system/io/param_read"),
+        status("system/io/param_read", transport_required=True),
         status("system/io/ethercat/param_catalog"),
         status("system/io/ap/param_catalog"),
         status("system/io/iol/param_catalog"),
-        status("system/io/ap/param_read"),
-        status("system/io/iol/param_read"),
+        status("system/io/ap/param_read", transport_required=True),
+        status("system/io/iol/param_read", transport_required=True),
         command("system/server/fault_reset", degraded_allowed=True),
         command("system/server/restart", degraded_allowed=True),
         command("system/bus/fault_reset", degraded_allowed=True),
@@ -92,7 +101,7 @@ COMMAND_SPECS = {
         command("system/axis/software_position_limits"),
         command("system/axis/mode"),
         command("system/axis/manualCW", advanced_only=True),
-        command("system/axis/param_write"),
+        command("system/axis/param_write", transport_required=True),
         command("system/axis/param_save"),
         command("system/axes/enable"),
         command("system/axes/disable"),
@@ -114,10 +123,10 @@ COMMAND_SPECS = {
         ),
         command("system/io/reset"),
         command("system/io/restart"),
-        command("system/io/param_write"),
+        command("system/io/param_write", transport_required=True),
         command("system/io/param_save"),
-        command("system/io/ap/param_write"),
-        command("system/io/iol/param_write"),
+        command("system/io/ap/param_write", transport_required=True),
+        command("system/io/iol/param_write", transport_required=True),
     )
 }
 
